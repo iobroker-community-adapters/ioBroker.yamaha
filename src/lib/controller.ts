@@ -4,7 +4,10 @@
  * through this shape; each transport controller (YNCA/YXC/XML) sits behind a
  * TransportConnectionAdapter and contributes its objects and writes to the unified tree.
  */
-import type { HandleCapture } from "./lifecycle/multi-transport-handle";
+import type { ObjectDef } from "./catalog/types";
+import type { HandleCapture } from "./diagnostics/types";
+import type { CommandGate } from "./lifecycle/command-gate";
+import type { ProbeMemory } from "./lifecycle/probe-memory";
 
 /** Log surface every device controller needs — one definition, not one per transport. */
 export interface ControllerLog {
@@ -14,6 +17,28 @@ export interface ControllerLog {
   info(message: string): void;
   /** Warnings. */
   warn(message: string): void;
+}
+
+/**
+ * What every transport controller is built with — declared once instead of three times (review 2026-10-05, D).
+ * The transport connection adapter intercepts `upsertObject` and `setStateAck`, so a controller never writes the
+ * tree itself.
+ */
+export interface ControllerDepsBase {
+  /** Create or update an object in the device tree. */
+  upsertObject(id: string, def: ObjectDef): Promise<void>;
+  /** Write a state value with ack (device-originated). */
+  setStateAck(id: string, value: boolean | number | string | null): void;
+  /** Adapter log. */
+  log: ControllerLog;
+  /**
+   * The device's command gate for this transport: every request is paced through it, and its signal is the
+   * connection's shutdown flag — a closed gate ends pending waits and stops state writes from a request that
+   * was already in flight.
+   */
+  gate: CommandGate;
+  /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
+  probeMemory: ProbeMemory;
 }
 
 /**

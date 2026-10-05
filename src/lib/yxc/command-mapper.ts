@@ -9,6 +9,7 @@ import { YXC_AMP_CATALOG } from "./catalog";
 import { musicCastInputName } from "../catalog/musiccast-vocabulary";
 import { isRemoteWord, YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
 import type { YxcClientLike } from "./client-contract";
+import { withAlbumArtId } from "../catalog/device-url";
 
 /**
  * A mapped YXC write. Almost every command is a ready-to-run client call (`run`) built
@@ -428,40 +429,6 @@ export function distributionSummary(info: unknown): DistributionSummary {
   };
 }
 
-/**
- * The address a device-relative path is fetched at: YXC answers the cover as a path on its own web
- * server ("If xxx/yyy/zzz.jpg is returned, the absolute path is http://{host}/xxx/yyy/zzz.jpg", YXC
- * Basic §7.2). A full URL (a service's own cover in the recently-played list) and "" stay as they
- * are; without a host nothing is invented (audit 2026-09-24, C6).
- *
- * @param url the address the device reported
- * @param host the device's address, as configured
- * @returns the address a browser or a visualisation can load
- */
-export function absoluteDeviceUrl(url: string, host: string | undefined): string {
-  if (url === "" || host === undefined || /^[a-z][a-z0-9+.-]*:\/\//i.test(url)) {
-    return url;
-  }
-  return `http://${host}/${url.replace(/^\/+/, "")}`;
-}
-
-/**
- * A cover address that changes when the cover does. Several devices serve every cover under ONE fixed
- * path (`/YamahaRemoteControl/AlbumART/AlbumART.jpg`, YXC Basic Rev 1.10 §7.2) and say "the album art
- * changed" only by a new `albumart_id` — the datapoint stayed byte-identical and a widget kept showing the
- * previous track's cover (audit 2026-09-29, C36). The id rides along as a query, so the address changes.
- *
- * @param url the cover address ("" = none)
- * @param id the reported `albumart_id`
- * @returns the address, with the id appended where there is one
- */
-export function withAlbumArtId(url: string, id: unknown): string {
-  if (url === "" || (typeof id !== "number" && typeof id !== "string") || `${id}` === "") {
-    return url;
-  }
-  return `${url}${url.includes("?") ? "&" : "?"}id=${encodeURIComponent(`${id}`)}`;
-}
-
 /** The play time YXC reports when there is none (YXC Basic §7.2: "-60000 (invalid)"). */
 const INVALID_PLAY_TIME = -60000;
 
@@ -574,25 +541,6 @@ export function parseYxcPlayInfo(
   }
   return updates;
 }
-
-/**
- * The values a zone's player block is reset to when the zone leaves its playing
- * source (v2.0.0 clear-on-switch): metadata empty, times zero, playback Stop.
- */
-export const PLAYER_CLEAR: StateValue[] = [
-  { id: "player.source", value: "" },
-  { id: "player.playback", value: MEDIA_STATE.stop },
-  { id: "player.artist", value: "" },
-  { id: "player.album", value: "" },
-  { id: "player.track", value: "" },
-  { id: "player.albumArt", value: "" },
-  { id: "player.elapsedTime", value: 0 },
-  { id: "player.elapsedTimeText", value: "" },
-  { id: "player.totalTime", value: 0 },
-  { id: "player.totalTimeText", value: "" },
-  { id: "player.repeat", value: 0 },
-  { id: "player.shuffle", value: false },
-];
 
 /**
  * The DAB block's fields → their unified state ids (aligned with the YNCA DAB ids so

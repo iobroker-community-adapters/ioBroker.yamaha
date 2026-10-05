@@ -44,7 +44,7 @@ import { copyDeviceTree, movedId, type DeviceMoveDeps } from "./lib/lifecycle/de
 import { moveAllWithEnums } from "./lib/enum-carry";
 import { StateMirror } from "./lib/lifecycle/write-mirror";
 import { coveredBy, KnownObjects } from "./lib/known-objects";
-import { DeviceBody } from "./lib/util";
+import { readDeviceResponse } from "./lib/util";
 import { errText } from "./lib/err-text";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
@@ -422,16 +422,24 @@ export class Yamaha extends utils.Adapter {
    * @param obj the message
    */
   private async onMessage(obj: ioBroker.Message): Promise<void> {
+    if (obj?.command !== "diagnostics") {
+      return;
+    }
+    let answer: Record<string, unknown>;
     try {
-      if (obj?.command !== "diagnostics") {
-        return;
-      }
-      const answer = await this.diagnostics.handle(obj.message);
-      if (obj.callback) {
-        this.sendTo(obj.from, obj.command, answer as Record<string, unknown>, obj.callback);
-      }
+      answer = (await this.diagnostics.handle(obj.message)) as Record<string, unknown>;
     } catch (e) {
       this.log.warn(`diagnostics message failed: ${errText(e)}`);
+      // Answered in every case: the Expert tab waits for this reply, and a report that failed must say so
+      // instead of leaving the card spinning (review 2026-10-05, B2).
+      answer = { error: errText(e) };
+    }
+    if (obj.callback) {
+      try {
+        this.sendTo(obj.from, obj.command, answer, obj.callback);
+      } catch (e) {
+        this.log.debug(`diagnostics reply not delivered: ${errText(e)}`);
+      }
     }
   }
 
@@ -3503,19 +3511,11 @@ export class Yamaha extends utils.Adapter {
   private fetchUrl(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const req = httpGet(url, res => {
-        // Collected as bytes and decoded once: a friendlyName ("Küche") split inside a character
-        // became "K��che" — and a second id for the same device (audit 2026-09-24, A20).
-        const body = new DeviceBody();
-        res.on("data", chunk => {
-          if (!body.add(chunk)) {
-            // A description document is a few KB — whatever streams past the cap is not one.
-            res.destroy(new Error(`description too large: ${url}`));
-          }
-        });
-        // A connection dropped mid-body emits on the RESPONSE stream, not the request —
-        // without this handler that is an unhandled error event instead of a rejection.
-        res.on("error", reject);
-        res.on("end", () => resolve(body.text()));
+        // Bytes decoded once (a friendlyName "Küche" split inside a character became "K��che" — and a
+        // second id for the same device, audit 2026-09-24 A20), capped, and the status judged: a booting
+        // receiver's 404/503 is no description, so the NOTIFY retry asks again instead of judging it
+        // "no Yamaha" for good (review 2026-10-05, A32).
+        readDeviceResponse(res, url).then(resolve, reject);
       });
       this.fetchesInFlight.add(req);
       req.on("close", () => this.fetchesInFlight.delete(req));

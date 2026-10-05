@@ -1,4 +1,6 @@
 import { MEDIA_STATE } from "../catalog/media-state";
+import { ZONES } from "../catalog/zones";
+import { HttpStatusError } from "../util";
 import { decodeXmlText } from "./entities";
 
 /**
@@ -37,27 +39,6 @@ export function assertXmlOk(xml: string, what: string): string {
 }
 
 /**
- * A transport-level refusal carrying the HTTP status. The firmware answers a request for
- * a node the model does not have with a BODYLESS HTTP 400 (captured RX-V6A behaviour) —
- * a PERMANENT verdict ("this node does not exist here"), unlike a timeout or a connection
- * error. Callers that remember answers per device need the distinction:
- * {@link isPermanentXmlRefusal}.
- */
-export class XmlHttpError extends Error {
-  /**
-   * @param message the error message
-   * @param statusCode the HTTP status the device answered with
-   */
-  public constructor(
-    message: string,
-    public readonly statusCode: number,
-  ) {
-    super(message);
-    this.name = "XmlHttpError";
-  }
-}
-
-/**
  * Whether a failed XML read is the model's permanent verdict (the node does not exist:
  * bodyless HTTP 400) rather than a transient failure (timeout, connection error, HTTP 5xx).
  * A device that was merely busy or asleep must be asked again, or a probe that is
@@ -69,7 +50,7 @@ export class XmlHttpError extends Error {
 export function isPermanentXmlRefusal(e: unknown): boolean {
   // 400 without a body: an unknown control node. 404: no device description on this model — the
   // 2020 generation answers exactly that for /YamahaRemoteControl/desc.xml (RX-V6A harvest).
-  return e instanceof XmlHttpError && (e.statusCode === 400 || e.statusCode === 404);
+  return e instanceof HttpStatusError && (e.statusCode === 400 || e.statusCode === 404);
 }
 
 /**
@@ -452,7 +433,8 @@ export interface XmlSystemConfig {
   inputNames?: Record<string, string>;
 }
 
-const ZONE_FLAGS = new Set(["Main_Zone", "Zone_2", "Zone_3", "Zone_4"]);
+/** The zone flags of `<Feature_Existence>` — the XML elements of the one zone table. */
+const ZONE_FLAGS: ReadonlySet<string> = new Set(ZONES.map(zone => zone.xml));
 
 /**
  * Parse a `<System><Config>` answer into the device's own declaration of itself.

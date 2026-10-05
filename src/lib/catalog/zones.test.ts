@@ -1,4 +1,4 @@
-import { ANY_ZONE_PREFIX, splitZone, ZONE_KEYS, ZONE_PREFIX, ZONES, zonePrefix } from "./zones";
+import { ANY_ZONE_PREFIX, splitZone, ZONE_B_PREFIX, ZONE_KEYS, ZONE_PREFIX, ZONES, zonePrefix } from "./zones";
 import { YNCA_ZONES } from "../ynca/catalog";
 import { XML_ZONES } from "../xml/zones";
 import { YXC_ZONE_IDS } from "../yxc/zones";
@@ -27,5 +27,16 @@ describe("the one zone table", () => {
     // The upgrade cleanup still recognises the flat form of the trees before v0.19.0.
     expect(ANY_ZONE_PREFIX.exec("zone2.sleep")?.[0]).toBe("zone2.");
     expect(ANY_ZONE_PREFIX.exec("multiroom.zone2.sleep")?.[0]).toBe("multiroom.zone2.");
+  });
+
+  test("Zone B is a zone folder for every rule that reads one, but no transport zone (A27)", () => {
+    expect(ZONE_PREFIX.exec("multiroom.zoneB.volume")?.[0]).toBe(ZONE_B_PREFIX);
+    expect(ZONE_PREFIX.exec("multiroom.zoneB.player.artist")?.[0]).toBe("multiroom.zoneB.");
+    // YNCA and XML address it through the main zone, so the transport split keeps it there.
+    expect(splitZone("multiroom.zoneB.power")).toEqual({ zone: "main", name: "multiroom.zoneB.power" });
+    expect(ZONE_KEYS).not.toContain("zoneB");
+    // Device-wide multiroom states are no zone folder.
+    expect(ZONE_PREFIX.test("multiroom.masterPower")).toBe(false);
+    expect(ZONE_PREFIX.test("multiroom.group.role")).toBe(false);
   });
 });

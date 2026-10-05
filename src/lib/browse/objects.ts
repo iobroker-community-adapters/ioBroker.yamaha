@@ -1,4 +1,5 @@
 import { channelCommon } from "../catalog/types";
+import { selfMap } from "../catalog/value-coerce";
 import type { ObjectDef } from "../catalog/types";
 import { tName } from "../i18n";
 
@@ -193,8 +194,7 @@ export function remoteObjectDefs(
   menuValues?: readonly string[],
   prefix = "",
 ): ObjectDef[] {
-  const states = (values: readonly string[]): Record<string, string> =>
-    Object.fromEntries(values.map(value => [value, value]));
+  const states = selfMap;
   const defs: ObjectDef[] = [];
   if (!cursorValues?.length && !menuValues?.length) {
     return defs;

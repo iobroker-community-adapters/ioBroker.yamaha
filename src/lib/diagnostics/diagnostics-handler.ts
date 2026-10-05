@@ -1,6 +1,6 @@
 import type { DeviceIdentity } from "../device-identity";
 import { errText } from "../err-text";
-import type { HandleCapture } from "../lifecycle/multi-transport-handle";
+import type { HandleCapture } from "./types";
 import type { LogRing } from "./log-ring";
 import {
   buildDiagnosticsReport,

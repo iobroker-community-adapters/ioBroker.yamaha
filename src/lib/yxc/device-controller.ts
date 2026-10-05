@@ -10,8 +10,8 @@ import {
   yxcDeclaredAbsent,
   type VolumeScale,
 } from "./object-mapper";
+import { absoluteDeviceUrl } from "../catalog/device-url";
 import {
-  absoluteDeviceUrl,
   distributionSummary,
   type DistributionSummary,
   parseYxcClock,
@@ -25,7 +25,6 @@ import {
   parseYxcStatus,
   parseYxcTunerInfo,
   parseYxcTunerPresetLists,
-  PLAYER_CLEAR,
   stateToYxc,
   CLIENT_SLOT_FIELDS,
   clientSlotEntries,
@@ -54,17 +53,15 @@ import {
 import type { ObjectDef } from "../catalog/types";
 import { tName, type I18nKey } from "../i18n";
 import type { StateValue } from "../types";
-import type { ControllerLog } from "../controller";
+import type { ControllerDepsBase } from "../controller";
 import { errText } from "../err-text";
-import { coerceBool } from "../catalog/value-coerce";
+import { coerceBool, selfMap } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import { YxcRefusalError, YxcTransportError } from "./http-client";
-import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { splitZone, zonePrefix } from "./zones";
 import { presentSystemEntries, YXC_SYSTEM_CATALOG, type YxcSystemEntry } from "./system-catalog";
 import { keyedCommon, parentChannels } from "../catalog/types";
 import { knownScenes, resolveSceneNumber, sceneListSurface } from "../catalog/scene-titles";
-import type { CommandGate } from "../lifecycle/command-gate";
 import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
@@ -198,17 +195,19 @@ export function zoneNameFrom(nameText: unknown): string | undefined {
 }
 
 import type { YxcClientLike } from "./client-contract";
+import { MEMORY_KEY } from "../lifecycle/memory-keys";
+import { PLAYER_CLEAR } from "../catalog/player-block";
 
 /** Probe-memory key: per zone, the display scale (`db`/`numeric`) its `volume` datapoint was read in on. */
-const VOLUME_MODE_KEY = "yxcVolumeMode";
+const VOLUME_MODE_KEY = MEMORY_KEY.yxcVolumeMode;
 /** Probe-memory key: the device-wide settings (getFuncStatus) this receiver has delivered — never shrunk. */
-const SYSTEM_ENTRIES_KEY = "yxcSystemEntries";
+const SYSTEM_ENTRIES_KEY = MEMORY_KEY.yxcSystemEntries;
 
 // Re-exported so existing importers (the tests' fakes) keep resolving it from here.
 export type { YxcClientLike };
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
-export interface YxcControllerDeps {
+export interface YxcControllerDeps extends ControllerDepsBase {
   /** The YXC (MusicCast) client for this device. */
   client: YxcClientLike;
   /**
@@ -247,26 +246,12 @@ export interface YxcControllerDeps {
    * addresses stay as reported.
    */
   host?: string;
-  /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
-  probeMemory: ProbeMemory;
   /** Schedule the keepalive handler; returns a function that cancels it. */
   scheduleKeepalive(handler: () => void, ms: number): () => void;
-  /** Create or update an object in the device tree. */
-  upsertObject(id: string, def: ObjectDef): Promise<void>;
-  /** Write a state value with ack (device-originated). */
-  setStateAck(id: string, value: boolean | number | string | null): void;
   /** Report the name the device carries for itself, for the device object's label. */
   reportDeviceName?(name: string): void;
   /** Report the datapoints this device's getFeatures proves absent (see {@link yxcDeclaredAbsent}). */
   reportDeclaredAbsent?(ids: string[]): void;
-  /** Adapter log. */
-  log: ControllerLog;
-  /**
-   * The device's command gate: every request is paced through it, and its signal is the
-   * connection's shutdown flag — a closed gate ends pending waits and stops state writes
-   * from a poll that was already in flight.
-   */
-  gate: CommandGate;
 }
 
 /**
@@ -303,8 +288,6 @@ export class YxcDeviceController {
   private cancelKeepalive: (() => void) | undefined;
   private cancelPush: (() => void) | undefined;
   private readonly dropDetector = new PollDropDetector();
-  /** The liveness probe in flight, so a burst of failed writes shares one instead of stacking probes. */
-  private aliveCheck: Promise<void> | undefined;
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   private lastTunerBand = "fm";
   /** Each zone's currently selected input, from its status — see {@link zoneListeningTo}. */
@@ -412,16 +395,16 @@ export class YxcDeviceController {
       const identity = `${model ?? ""}|${firmware}`;
       // An answer without a model is no identity at all (YNCA and XML guard the same way): it must not throw
       // away what this receiver declared.
-      if (model && this.deps.probeMemory.remembered("yxcIdentity") !== identity) {
+      if (model && this.deps.probeMemory.remembered(MEMORY_KEY.yxcIdentity) !== identity) {
         this.deps.probeMemory.drop(
           key =>
-            key === "features" ||
-            key === "model" ||
-            key === "yxcIdentity" ||
+            key === MEMORY_KEY.yxcFeatures ||
+            key === MEMORY_KEY.yxcModel ||
+            key === MEMORY_KEY.yxcIdentity ||
             key === VOLUME_MODE_KEY ||
             key === SYSTEM_ENTRIES_KEY,
         );
-        this.deps.probeMemory.set("yxcIdentity", identity);
+        this.deps.probeMemory.set(MEMORY_KEY.yxcIdentity, identity);
       }
       // Serial (`system_id`) and MAC (`device_id`) — the device's identity for life. Their own
       // key, NOT part of `yxcIdentity`: adding them there would drop every remembered feature
@@ -430,7 +413,7 @@ export class YxcDeviceController {
       const ids = info as { system_id?: unknown; device_id?: unknown } | null;
       this.pushDeviceId = typeof ids?.device_id === "string" && ids.device_id.length > 0 ? ids.device_id : undefined;
       if (typeof ids?.system_id === "string" || typeof ids?.device_id === "string") {
-        this.deps.probeMemory.set("yxcDeviceIds", {
+        this.deps.probeMemory.set(MEMORY_KEY.yxcDeviceIds, {
           ...(typeof ids.system_id === "string" ? { serial: ids.system_id } : {}),
           ...(typeof ids.device_id === "string" ? { mac: ids.device_id } : {}),
         });
@@ -446,7 +429,7 @@ export class YxcDeviceController {
     // it would freeze the device's shape for good (every later connect reads the memory),
     // and it would also disarm the liveness check below, which needs the zones.
     const capabilities = await this.remember(
-      "features",
+      MEMORY_KEY.yxcFeatures,
       async () => parseYxcFeatures(await this.deps.client.getFeatures()),
       features => features.zones.length > 0,
     );
@@ -492,7 +475,7 @@ export class YxcDeviceController {
     // The names the user gave the device, its inputs and its sound programs — read FRESH on every
     // connection: they are the user's, and a rename in the app froze here for good while they rode in
     // the probe memory (audit 2026-09-24, C12). The memory's old copy is dropped once.
-    this.deps.probeMemory.drop(key => key === "name");
+    this.deps.probeMemory.drop(key => key === MEMORY_KEY.yxcNames);
     const nameText = await this.readNameText();
     // getFeatures carries neither the API version nor the names; the tree depends on both.
     this.capabilities = {
@@ -643,12 +626,11 @@ export class YxcDeviceController {
       this.deps.log.debug(`${this.deviceId}: getFuncStatus failed (${errText(e)})`);
       status = undefined;
     }
-    const remembered = new Set(this.deps.probeMemory.remembered<string[]>(SYSTEM_ENTRIES_KEY) ?? []);
-    const present = new Set(presentSystemEntries(status).map(entry => entry.state));
-    this.systemEntries = YXC_SYSTEM_CATALOG.filter(entry => present.has(entry.state) || remembered.has(entry.state));
-    if ([...present].some(state => !remembered.has(state))) {
-      this.deps.probeMemory.set(SYSTEM_ENTRIES_KEY, [...new Set([...remembered, ...present])]);
-    }
+    const known = this.deps.probeMemory.union(
+      SYSTEM_ENTRIES_KEY,
+      presentSystemEntries(status).map(entry => entry.state),
+    );
+    this.systemEntries = YXC_SYSTEM_CATALOG.filter(entry => known.has(entry.state));
     if (this.systemEntries.length === 0) {
       return;
     }
@@ -681,7 +663,7 @@ export class YxcDeviceController {
           common.step = 1;
         } else {
           const slots = Array.from({ length: count }, (_, i) => entry.toValue?.(i + 1) ?? String(i + 1));
-          common.states = Object.fromEntries(slots.map(slot => [slot, slot]));
+          common.states = selfMap(slots);
         }
         declared = true;
       }
@@ -950,17 +932,7 @@ export class YxcDeviceController {
    * ones ride on the first.
    */
   public verifyAlive(): Promise<void> {
-    this.aliveCheck ??= this.probeAlive().finally(() => {
-      this.aliveCheck = undefined;
-    });
-    return this.aliveCheck;
-  }
-
-  private async probeAlive(): Promise<void> {
-    const alive = await this.refreshZone(this.zones[0] ?? "main");
-    if (!alive) {
-      this.dropDetector.report("liveness check unanswered");
-    }
+    return this.dropDetector.verify(() => this.refreshZone(this.zones[0] ?? "main"));
   }
 
   /**
@@ -1621,7 +1593,7 @@ export class YxcDeviceController {
    * @param zone the target zone
    * @param updates the flat player updates
    */
-  private emitPlayerUpdates(zone: string, updates: StateValue[]): void {
+  private emitPlayerUpdates(zone: string, updates: readonly StateValue[]): void {
     const prefix = zonePrefix(zone);
     for (const update of updates) {
       if (!update.id.startsWith("player.cd.")) {

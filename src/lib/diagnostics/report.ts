@@ -1,6 +1,5 @@
 import type { DeviceIdentity } from "../device-identity";
-import type { HandleCapture } from "../lifecycle/multi-transport-handle";
-import type { TransportCapture } from "./device-capture";
+import type { HandleCapture, TransportCapture } from "./types";
 import type { LogLine } from "./log-ring";
 import { Pseudonymiser } from "./pseudonymiser";
 

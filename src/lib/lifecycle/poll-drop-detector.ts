@@ -19,6 +19,8 @@ export class PollDropDetector {
   private handler: ((reason?: Error) => void) | undefined;
   /** A drop that fired before onDrop was registered — delivered once it is. */
   private pending: Error | undefined;
+  /** The liveness question in flight — later askers ride on it. */
+  private aliveCheck: Promise<void> | undefined;
 
   /**
    * @param maxFailures consecutive failed polls before the device counts as gone
@@ -52,6 +54,29 @@ export class PollDropDetector {
     if (++this.failures >= this.maxFailures) {
       this.report();
     }
+  }
+
+  /**
+   * Ask the device once, now, whether it is still there: no answer is a drop, reported at once instead of after
+   * the third missed poll. One question for a burst of askers (failed writes, the multi-transport handle after
+   * another transport of the device dropped) — the later ones ride on the first. MusicCast and XML carried a
+   * copy each, and the copies had already drifted apart (review 2026-10-05, E).
+   *
+   * @param ask the one question — true when the device answered; false or a rejection when it did not
+   * @returns settles once the question is answered (never rejects)
+   */
+  public verify(ask: () => Promise<boolean>): Promise<void> {
+    this.aliveCheck ??= ask()
+      .catch(() => false)
+      .then(alive => {
+        if (!alive) {
+          this.report("liveness check unanswered");
+        }
+      })
+      .finally(() => {
+        this.aliveCheck = undefined;
+      });
+    return this.aliveCheck;
   }
 
   /**

@@ -1,5 +1,5 @@
 import { keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
-import { coerceBool, textWriteProblem, writableNumber } from "../catalog/value-coerce";
+import { coerceBool, selfMap, textWriteProblem, writableNumber } from "../catalog/value-coerce";
 import { tName } from "../i18n";
 import {
   definiteXmlBody,
@@ -21,15 +21,12 @@ import {
   type XmlPresetSlot,
   type XmlTunerInfo,
   type XmlZoneForm,
-  XmlHttpError,
 } from "./protocol";
 import { parseXmlStatus, stateToXml, type XmlCommand } from "./command-mapper";
 import { XML_AMP_CATALOG } from "./catalog";
-import type { ControllerLog } from "../controller";
+import type { ControllerDepsBase } from "../controller";
 import { errText } from "../err-text";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
-import type { ProbeMemory } from "../lifecycle/probe-memory";
-import type { CommandGate } from "../lifecycle/command-gate";
 import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
@@ -38,14 +35,16 @@ import { MENU_WIRE, RETURN_CURSOR_WIRE, wireFor } from "../browse/types";
 import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
 import { splitZone } from "../catalog/zones";
 import { XML_ZONES, type XmlZone } from "./zones";
-import { MEDIA_STATE, TRANSPORT_KEYS } from "../catalog/media-state";
+import { TRANSPORT_KEYS } from "../catalog/media-state";
 import { remoteObjectDefs } from "../browse/objects";
-import { PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE } from "../catalog/player-block";
-import { absoluteDeviceUrl, withAlbumArtId } from "../yxc/command-mapper";
+import { PLAYER_CLEAR, PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE } from "../catalog/player-block";
+import { absoluteDeviceUrl, withAlbumArtId } from "../catalog/device-url";
 import { decodeXmlText, escapeXmlText } from "./entities";
+import { MEMORY_KEY, xmlInputsKey, xmlScenesKey, xmlStatusFieldsKey, xmlZoneNamesKey } from "../lifecycle/memory-keys";
+import { HttpStatusError } from "../util";
 
 /** Probe-memory key: the zones this receiver answered on — a zone stays when one Basic_Status fails. */
-const ZONES_KEY = "xmlZones";
+const ZONES_KEY = MEMORY_KEY.xmlZones;
 
 /** XML/YNC has no push channel, so the state is polled at this interval by default. */
 const DEFAULT_POLL_INTERVAL_MS = 60 * 1000;
@@ -98,25 +97,11 @@ export interface XmlClientLike {
 }
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
-export interface XmlControllerDeps {
+export interface XmlControllerDeps extends ControllerDepsBase {
   /** The XML client for this device. */
   client: XmlClientLike;
   /** Schedule the keepalive poll; returns a function that cancels it. */
   scheduleKeepalive(handler: () => void, ms: number): () => void;
-  /** Create or update an object in the device tree. */
-  upsertObject(id: string, def: ObjectDef): Promise<void>;
-  /** Write a state value with ack (device-originated). */
-  setStateAck(id: string, value: boolean | number | string | null): void;
-  /** Adapter log. */
-  log: ControllerLog;
-  /**
-   * The device's command gate: every request is paced through it, and its signal is the
-   * connection's shutdown flag — a closed gate ends pending waits and stops state writes
-   * from a poll that was already in flight.
-   */
-  gate: CommandGate;
-  /** Per-device memory for answers that do not change while the device runs (see ProbeMemory). */
-  probeMemory: ProbeMemory;
   /** The device's address, for the cover a source reports as a path on the device (D3). */
   host?: string;
 }
@@ -132,8 +117,6 @@ export class XmlDeviceController {
   private firmwareRead: string | undefined;
   private cancelKeepalive: (() => void) | undefined;
   private readonly dropDetector = new PollDropDetector();
-  /** The liveness probe in flight, so concurrent askers share one question. */
-  private aliveCheck: Promise<void> | undefined;
   private browseEngine: BrowseEngine | undefined;
   /** The scenes each zone DECLARES (`Scene_Sel_Item`), for the recall write path. */
   private readonly scenesByZone = new Map<string, XmlScene[]>();
@@ -225,19 +208,19 @@ export class XmlDeviceController {
     this.firmwareRead = config.version || undefined;
     if (config.model !== undefined) {
       const identity = `${config.model}|${config.systemId ?? ""}|${config.version ?? ""}`;
-      if (this.deps.probeMemory.remembered("xmlIdentity") !== identity) {
+      if (this.deps.probeMemory.remembered(MEMORY_KEY.xmlIdentity) !== identity) {
         // Every XML-owned memory key carries the xml prefix (xmlBrowseSources, xmlScenes:*,
         // xmlInputs:*, xmlTuner, xmlConfig, xmlIdentity).
         this.deps.probeMemory.drop(key => key.startsWith("xml"));
-        this.deps.probeMemory.set("xmlIdentity", identity);
+        this.deps.probeMemory.set(MEMORY_KEY.xmlIdentity, identity);
       }
       if (config.zones || config.features || config.inputNames) {
         // Remembered for the other transports: the YNCA input list reads the source flags and
         // the input names as evidence (a flag 0 proves a source absent, a name adds an input).
         // Laid over what this receiver declared before, never in its place: an answer that lacks a
         // block (or a name) takes nothing away (2026-10-02 — a read-in receiver keeps its tree).
-        const before = this.deps.probeMemory.remembered<typeof config>("xmlConfig");
-        this.deps.probeMemory.set("xmlConfig", {
+        const before = this.deps.probeMemory.remembered<typeof config>(MEMORY_KEY.xmlConfig);
+        this.deps.probeMemory.set(MEMORY_KEY.xmlConfig, {
           ...before,
           ...config,
           ...(before?.zones || config.zones ? { zones: { ...before?.zones, ...config.zones } } : {}),
@@ -248,7 +231,7 @@ export class XmlDeviceController {
         });
       }
     }
-    const rememberedDialect = this.deps.probeMemory.remembered("xmlDialect");
+    const rememberedDialect = this.deps.probeMemory.remembered(MEMORY_KEY.xmlDialect);
     if (rememberedDialect === "classic" || rememberedDialect === "legacy") {
       this.dialect = rememberedDialect;
     }
@@ -272,12 +255,11 @@ export class XmlDeviceController {
     }
     // A zone this receiver answered before stays, also when its Basic_Status failed this once — one
     // missed answer is no proof the zone is gone (2026-10-02). Its states keep the fields it delivered.
-    const rememberedZones = new Set(this.deps.probeMemory.remembered<string[]>(ZONES_KEY) ?? []);
-    const answeredZones = new Set(answered.map(probe => probe.zone.key));
-    this.zones = XML_ZONES.filter(zone => answeredZones.has(zone.key) || rememberedZones.has(zone.key));
-    if ([...answeredZones].some(key => !rememberedZones.has(key))) {
-      this.deps.probeMemory.set(ZONES_KEY, [...new Set([...rememberedZones, ...answeredZones])]);
-    }
+    const knownZones = this.deps.probeMemory.union(
+      ZONES_KEY,
+      answered.map(probe => probe.zone.key),
+    );
+    this.zones = XML_ZONES.filter(zone => knownZones.has(zone.key));
     const model = config.model;
     // The zone's own input list (`Input_Sel_Item`, per zone — Main and Zone 2 differ on
     // real hardware): the device says which inputs it accepts, so the input state gets a
@@ -287,7 +269,7 @@ export class XmlDeviceController {
     const inputLabels = new Map<string, Record<string, string>>();
     for (const zone of this.zones) {
       const body = await this.probeXml(
-        `xmlInputs:${zone.key}`,
+        xmlInputsKey(zone.key),
         zone.element,
         "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>",
         true, // the labels are the user's names for the inputs
@@ -317,14 +299,10 @@ export class XmlDeviceController {
     // later standby start — which may report fewer fields — cannot shrink the tree).
     for (const zone of this.zones) {
       const status = answered.find(probe => probe.zone.key === zone.key)?.status;
-      const key = `xmlStatusFields:${zone.key}`;
-      const remembered = this.deps.probeMemory.remembered<string[]>(key);
-      const fields = new Set<string>(Array.isArray(remembered) ? remembered : []);
-      for (const field of Object.keys(status ?? {})) {
-        fields.add(field);
-      }
-      this.deps.probeMemory.set(key, [...fields]);
-      this.zoneFields.set(zone.key, fields);
+      this.zoneFields.set(
+        zone.key,
+        this.deps.probeMemory.union(xmlStatusFieldsKey(zone.key), Object.keys(status ?? {})),
+      );
     }
     // Every parent — the zone channels included — is created by the per-state loop below
     // and named from the shared channel table (a zone that answered has at least
@@ -425,7 +403,7 @@ export class XmlDeviceController {
     };
     try {
       // `:v3` since the parse carries every declared write command (2026-09-29, D18) — an older parse lacks them.
-      return await this.deps.probeMemory.once("xmlDescriptor:v3", probe);
+      return await this.deps.probeMemory.once(MEMORY_KEY.xmlDescriptor, probe);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: desc.xml probe failed, asking again on the next connect (${errText(e)})`);
       return empty;
@@ -472,7 +450,7 @@ export class XmlDeviceController {
   private async setupScenes(): Promise<void> {
     for (const zone of this.zones) {
       const body = await this.probeXml(
-        `xmlScenes:${zone.key}`,
+        xmlScenesKey(zone.key),
         zone.element,
         "<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>",
         true, // the titles are the user's names for the scenes
@@ -524,7 +502,7 @@ export class XmlDeviceController {
    * (handleTuningWrite); RDS, tuned and stereo are read-only from Play_Info. On newer devices YNCA/YXC own these ids via the owner policy.
    */
   private async setupTuner(): Promise<void> {
-    const probe = await this.probeXml("xmlTuner", "Tuner", "<Play_Info>GetParam</Play_Info>");
+    const probe = await this.probeXml(MEMORY_KEY.xmlTuner, "Tuner", "<Play_Info>GetParam</Play_Info>");
     if (probe.length === 0) {
       return;
     }
@@ -543,7 +521,7 @@ export class XmlDeviceController {
     };
     // The slots the device declares (`Preset_Sel_Item`, desc.xml `Indirect G3`) — the 2008 generation
     // names them `A1…E8`; 0 is "no preset", as on YNCA and MusicCast (audit 2026-09-29, D2).
-    this.presetSlots = parsePresetList(await this.probeXml("xmlTunerPresets", "Tuner", PRESET_LIST_GET));
+    this.presetSlots = parsePresetList(await this.probeXml(MEMORY_KEY.xmlTunerPresets, "Tuner", PRESET_LIST_GET));
     const slots = this.presetSlots;
     await state("preset", {
       name: tName("presetRecallByNumber"),
@@ -708,7 +686,7 @@ export class XmlDeviceController {
    * receiver without YNCA keeps the switch (audit 2026-09-29, D4). Proven by the device's answer.
    */
   private async setupSystemPower(): Promise<void> {
-    const probe = await this.probeXml("xmlSystemPower", "System", SYSTEM_POWER_GET);
+    const probe = await this.probeXml(MEMORY_KEY.xmlSystemPower, "System", SYSTEM_POWER_GET);
     const power = parseSystemPower(probe);
     if (power === undefined) {
       return;
@@ -987,20 +965,10 @@ export class XmlDeviceController {
    * @param prefix the block's id prefix (`player`, `multiroom.zone2.player`)
    */
   private clearPlayer(prefix: string): void {
-    const cleared: Record<string, boolean | number | string> = {
-      source: "",
-      playback: MEDIA_STATE.stop,
-      artist: "",
-      album: "",
-      track: "",
-      station: "",
-      repeat: 0,
-      shuffle: false,
-      albumArt: "",
-    };
-    for (const [state, value] of Object.entries(cleared)) {
-      if (this.playerStates.has(`${prefix}.${state}`)) {
-        this.emit(`${prefix}.${state}`, value);
+    for (const clear of PLAYER_CLEAR) {
+      const id = `${prefix}.${clear.id.slice("player.".length)}`;
+      if (this.playerStates.has(id)) {
+        this.emit(id, clear.value);
       }
     }
   }
@@ -1113,7 +1081,7 @@ export class XmlDeviceController {
     try {
       available = new Set(
         // `:v2` since the answers are source ids (2026-09-24, D5) — the old key held keys.
-        await this.deps.probeMemory.once("xmlBrowseSources:v2", probe),
+        await this.deps.probeMemory.once(MEMORY_KEY.xmlBrowseSources, probe),
       );
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: browse probe failed, asking again on the next connect (${errText(e)})`);
@@ -1250,25 +1218,16 @@ export class XmlDeviceController {
    * silent on its socket. One probe for concurrent askers.
    */
   public verifyAlive(): Promise<void> {
-    this.aliveCheck ??= this.probeAlive().finally(() => {
-      this.aliveCheck = undefined;
-    });
-    return this.aliveCheck;
-  }
-
-  private async probeAlive(): Promise<void> {
     const zone = this.zones[0];
     if (!zone) {
-      return; // never started — nothing to ask, nothing to judge
+      return Promise.resolve(); // never started — nothing to ask, nothing to judge
     }
-    try {
-      if (!(await this.refreshZone(zone))) {
-        this.dropDetector.report("liveness check unanswered");
-      }
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: liveness probe failed: ${errText(e)}`);
-      this.dropDetector.report("liveness check unanswered");
-    }
+    return this.dropDetector.verify(() =>
+      this.refreshZone(zone).catch((e: unknown) => {
+        this.deps.log.debug(`${this.deviceId}: liveness probe failed: ${errText(e)}`);
+        return false;
+      }),
+    );
   }
 
   /**
@@ -1387,7 +1346,7 @@ export class XmlDeviceController {
           });
         }
         if (declaredPut?.words && !common.states) {
-          common.states = Object.fromEntries(declaredPut.words.map(word => [word, word]));
+          common.states = selfMap(declaredPut.words);
         }
       }
       // A number the user sets is a level, one the device only reports a value.
@@ -1440,7 +1399,7 @@ export class XmlDeviceController {
     }
     if (status.dialect !== undefined && status.dialect !== this.dialect) {
       this.dialect = status.dialect;
-      this.deps.probeMemory.set("xmlDialect", status.dialect);
+      this.deps.probeMemory.set(MEMORY_KEY.xmlDialect, status.dialect);
     }
     // A field the device delivers for the FIRST time mid-run has no object yet
     // (claim-with-proof creates only proven fields at start): remember it, build its object
@@ -1456,7 +1415,7 @@ export class XmlDeviceController {
         }
       }
       if (grew) {
-        this.deps.probeMemory.set(`xmlStatusFields:${zone.key}`, [...known]);
+        this.deps.probeMemory.set(xmlStatusFieldsKey(zone.key), [...known]);
         // 2.7.0: the objects for the new fields are built NOW and their values written right
         // after, instead of appearing one start later. The transport adapter signals the handle,
         // which adds them to the tree. A field that VANISHES from a later poll removes nothing —
@@ -1646,7 +1605,7 @@ export class XmlDeviceController {
     try {
       // Fresh on every connection — the names are the user's (D8).
       return this.deps.probeMemory
-        ? await this.deps.probeMemory.refresh(`xmlZoneNames:${zone.key}`, probe)
+        ? await this.deps.probeMemory.refresh(xmlZoneNamesKey(zone.key), probe)
         : await probe();
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: ${zone.element} name probe failed (${errText(e)})`);
@@ -1767,7 +1726,7 @@ export class XmlDeviceController {
       return "sent";
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: XML command failed: ${errText(e)}`);
-      return e instanceof XmlHttpError || errText(e).startsWith("device refused") ? "refused" : "unavailable";
+      return e instanceof HttpStatusError || errText(e).startsWith("device refused") ? "refused" : "unavailable";
     }
   }
 }

@@ -1,5 +1,6 @@
 import { tIn, type I18nKey } from "../i18n";
 import type { ObjectDef } from "./types";
+import { ZONE_PREFIX } from "./zones";
 
 /**
  * The words the adapter shows for a value — ONE table for all three transports, applied where every object is
@@ -175,9 +176,6 @@ export const STATE_LABELS: Readonly<Record<string, Readonly<Record<string, Label
   },
 };
 
-/** A zone's folder in front of a datapoint id — zones 2 to 4 and Zone B carry the main zone's datapoints. */
-const ZONE_FOLDER = /^multiroom\.zone(?:[234]|B)\./;
-
 /**
  * The datapoint's value list with the adapter's words in the system language.
  *
@@ -188,7 +186,8 @@ const ZONE_FOLDER = /^multiroom\.zone(?:[234]|B)\./;
  */
 export function withValueLabels(relativeId: string, def: ObjectDef, language: string): ObjectDef {
   const states = def.type === "state" ? def.common.states : undefined;
-  const labels = STATE_LABELS[relativeId.replace(ZONE_FOLDER, "")];
+  // A zone folder carries the main zone's datapoints (zones 2 to 4 and Zone B).
+  const labels = STATE_LABELS[relativeId.replace(ZONE_PREFIX, "")];
   if (!labels || !states || typeof states !== "object" || Array.isArray(states)) {
     return def;
   }

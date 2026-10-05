@@ -5,12 +5,11 @@ import {
   encodePut,
   parseBasicStatus,
   parseSystemConfig,
-  XmlHttpError,
   type BasicStatus,
   type XmlSystemConfig,
 } from "./protocol";
 import type { CommandGate } from "../lifecycle/command-gate";
-import { DeviceBody } from "../util";
+import { readDeviceResponse } from "../util";
 
 /** The receiver's XML control endpoint. */
 const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
@@ -27,36 +26,18 @@ export type XmlGetter = (ip: string, path: string) => Promise<string>;
 const DESCRIPTOR_PATH = "/YamahaRemoteControl/desc.xml";
 
 /**
- * Collect a response body under the size cap and turn the status into the caller's verdict.
+ * Settle a request with the device's answer: the body of a 2xx, or the device's verdict — the firmware
+ * answers a request for an unknown node with a BODYLESS HTTP 400 and a missing device description with a
+ * 404 (captured RX-V6A behaviour). Those are device verdicts, not transport noise, and they reach the
+ * caller as `HttpStatusError` instead of masquerading as an empty success; the status travels with
+ * the error so a per-device probe can tell the permanent "no such node" from a transient failure.
  *
- * @param res the incoming response
- * @param resolve resolves the caller's promise with the body
- * @param reject rejects it with a transport error or the device's HTTP verdict
+ * @param res the response
+ * @param resolve resolves the request with the body
+ * @param reject rejects the request
  */
 function readResponse(res: IncomingMessage, resolve: (body: string) => void, reject: (e: Error) => void): void {
-  // Collected as bytes and decoded once: a chunk may end inside a multi-byte character (a desc.xml
-  // of up to 160 KB always spans several), audit 2026-09-24 D12.
-  const body = new DeviceBody();
-  res.on("data", chunk => {
-    if (!body.add(chunk)) {
-      // A Basic_Status or a menu window is a few KB, a device description at most ~160 KB —
-      // past the cap this is no receiver answer but a stream that would grow memory without bound.
-      res.destroy(new Error("XML response too large"));
-    }
-  });
-  res.on("error", reject);
-  res.on("end", () => {
-    // The firmware answers a request for an unknown node with a BODYLESS HTTP 400 and a
-    // missing device description with a 404 (captured RX-V6A behaviour) — device verdicts,
-    // not transport noise, and they must reach the caller instead of masquerading as an
-    // empty success. The status travels with the error so a per-device probe can tell the
-    // permanent "no such node" from a transient failure.
-    if (res.statusCode !== undefined && (res.statusCode < 200 || res.statusCode >= 300)) {
-      reject(new XmlHttpError(`device refused the request (HTTP ${res.statusCode})`, res.statusCode));
-      return;
-    }
-    resolve(body.text());
-  });
+  readDeviceResponse(res, "the request").then(resolve, reject);
 }
 
 /**
@@ -137,7 +118,7 @@ export class XmlClient {
   /**
    * Read the device description (`/YamahaRemoteControl/desc.xml`) — the classic generation's
    * own enumeration of programs, sleep steps, value lists and ranges (2008–2017). A model without
-   * one answers HTTP 404, which travels as a permanent {@link XmlHttpError}.
+   * one answers HTTP 404, which travels as a permanent `HttpStatusError`.
    *
    * @returns the raw description body
    */

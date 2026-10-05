@@ -38,6 +38,41 @@ Funktionalität (voller MusicCast-Reichtum). Vorbild-Adapter (Multi-Transport): 
   (`Return`/`One`), PC = 2010/11 (`Back`/`Single`); Zonen-`TONEMODE` = MusicCast-Generation (Zonen-Klang ±6/0,5,
   sonst die offizielle ±10/2). Die Protokollhälfte von `SYS:VERSION` trennt keine Generation (gemessen).
 
+## Grundsatz: alle drei Protokolle, alle Generationen — immer vollständig (krobi 2026-10-05)
+
+Anlass: Das Gesamt-Review vom 2026-10-05 fand 58 Fehler. Viele davon waren Lücken der Art „nur ein Protokoll kann es“, die
+jahrelang niemand benannt hat: YNCA ohne Eingangsnamen, `info.model` nur über YNCA, Schreibwege ohne Ergebnis und damit ohne
+Y-04-Rückfall, ein XML-Steuerkreuz, das die Gerätebeschreibung deklariert und der Code ignoriert. Das gilt ab jetzt für JEDE
+Änderung und JEDES Review:
+
+- **Jede Funktion, jeder Datenpunkt, jede Korrektur wird für YNCA, MusicCast UND XML umgesetzt, eingebunden und getestet** —
+  überall, wo das Protokoll den Wert tragen kann. „Nur Protokoll X kann das“ gilt erst, wenn Spezifikation, Befehlsliste oder
+  `desc.xml` es belegen (Beleg im Code-Kommentar); sonst ist es eine Lücke.
+- **Jede Gerätegeneration zählt und wird mit einem Fixture getestet:**
+  - YNCA: 2010/11 (PC, `Back`/`Single`), 2012+ (SERVER, `Return`/`One`), MusicCast-Generation (Zonen-`TONEMODE`).
+  - XML: 2008 (`Vol`/`Surr`/`List_Info_2`, eigene desc.xml), 2009–2017 (desc.xml mit Puts), 2020 (kein desc.xml).
+  - MusicCast: die API-Stände (Schwellen wie 1.19).
+    Eine Änderung nennt, welche Generationen sie betrifft.
+- **Für den Nutzer darf es KEINEN Unterschied machen, welches Protokoll einen Datenpunkt bedient** (krobi 2026-10-05: „alle 3
+  protokolle müssen sich konsistent verhalten“). Derselbe kanonische Datenpunkt hat auf jedem Protokoll:
+  - dieselbe Form: Typ, Einheit, Rolle, Name, Werteliste in derselben Schreibweise und mit denselben Beschriftungen.
+  - dieselben Werte beim Lesen: aufbereitet nach denselben Regeln (Skala, Einheit, Leer-/„kein Wert“ = `null`, getrimmte
+    Texte). Nie liefert ein Protokoll roh, was ein anderes aufbereitet.
+  - dasselbe Schreibverhalten: Zahlen, Raster, Grenzen, Leerwerte und Texte werden gleich normalisiert, geprüft oder
+    abgewiesen; ein Wert, den eines verwirft, verwirft jedes; jedes liefert ein `WriteOutcome`, liest zurück und lässt den
+    Y-04-Rückfall zu.
+  - dasselbe Fehlerverhalten: eine Absage oder ein stiller Verwurf hinterlässt auf jedem Protokoll dieselbe Spur im Log.
+
+  Eine Abweichung ist ein Fehler, außer sie steht begründet in der Ausnahmeliste der Paritätsprüfung (Beleg: das Protokoll
+  kann es nachweislich nicht).
+
+- **Jeder Schreibweg liefert ein Ergebnis** (`sent`/`refused`/`unavailable`/`unclear` — bewusst gewählt, nie ein vergessenes
+  `undefined`), und **jeder Wert, den ein Controller meldet, hat ein Objekt** (sonst verwirft der Transport-Adapter ihn still).
+- **Prüfung:** `src/lib/parity.test.ts` fährt alle Inventar-Fixtures durch alle Protokolle und muss grün sein. Schutztests zu
+  Entscheidungen (`src/decisions/`) decken alle drei Protokolle ab (Ergänzungen über die Werkbank).
+- **Reviews** prüfen ausdrücklich, ob eine Funktion auf allen drei Protokollen und allen Generationen vorhanden ist und sich
+  gleich verhält — und sagen es laut, wenn nicht.
+
 ## Einlesen und Eingelesen (krobi 2026-10-02) — ein eingelesener Receiver bleibt stehen
 
 **Grundsatz:** Ein Receiver ändert im Produktleben nicht, was er kann (höchstens per Firmware). Wer welchen Datenpunkt
@@ -49,6 +84,11 @@ löscht und leert nichts. Belege und Befund: `.claude/dev-history.md` 2026-10-02
   ein bestehendes bekommt nur fehlende Listeneinträge und fehlende Grenzen; Typ, Einheit, Schreibrecht und Namen bleiben.
   Ein Protokoll, das später einen Datenpunkt bedient, wird zuständig nur, wenn es nach Rang vorn liegt UND die Form hält
   (`keepsForm`) — eine Richtung, gemerkt (der YNCA-Menübeweis, Forum 85413).
+- **Namen, die der Nutzer im Receiver vergibt, ziehen im Betrieb nach** (krobi 2026-10-05): Eingänge, Szenen, Klangprogramme
+  (wo MusicCast sie umbenennt), Zonen. Ihre Datenpunkte tragen `liveLabels` (`ObjectDef`), und `writeLearned` übernimmt für
+  sie die neue BESCHRIFTUNG bestehender Listeneinträge — Schlüssel, Typ, Grenzen bleiben, nichts wird gelöscht oder geleert
+  (Y-01 verbietet Löschen und Leeren, nicht Umbenennen). Y-25 gilt für alle drei Protokolle: auch YNCA beschriftet sein
+  Eingangs-Dropdown aus `INPNAME…`.
 - **Einlesen:** nach Neuinstallation, Adapter-Update (`settledVersion` ≠ Version) und Firmware-Update. Abgeschlossen bei
   EINER Verbindung, in der jedes bekannte Protokoll antwortet und jeder Lesevorgang von einem eingeschalteten Receiver
   stammt (`readComplete`: YNCA `awake` im Profil; MusicCast/XML lesen standby-unabhängig). Nur dieser Abschluss koordiniert

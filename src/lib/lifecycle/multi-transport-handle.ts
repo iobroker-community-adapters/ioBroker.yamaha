@@ -9,7 +9,7 @@ import { capabilityKeyOf, pickOwner, type Transport } from "../catalog/owner-pol
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errText } from "../err-text";
 import { readyLine } from "../ready-line";
-import type { TransportCapture } from "../diagnostics/device-capture";
+import type { HandleCapture, TransportCapture } from "../diagnostics/types";
 import { emptyLearnedTree, type LearnedTree } from "./learned-tree";
 
 /**
@@ -67,20 +67,6 @@ export interface TransportConnection {
   capture?(): Promise<TransportCapture | undefined>;
   /** Close this transport's connection. Synchronous — safe from onUnload. */
   close(): void;
-}
-
-/** What a diagnostics report reads from a running device: who serves what, and what the device answered. */
-export interface HandleCapture {
-  /** The transports live right now. */
-  live: Transport[];
-  /** Transports the device answered before that are not connected now. */
-  missing: Transport[];
-  /** Canonical datapoint id → the transport that serves it. */
-  owners: Record<string, Transport>;
-  /** The learned tree as kept in the capability profile. */
-  tree: LearnedTree;
-  /** The raw reads, one per live transport that can be read. */
-  captures: TransportCapture[];
 }
 
 /** A transport connection that can be brought online — a {@link TransportConnection} plus connect(). */

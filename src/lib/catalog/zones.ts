@@ -31,8 +31,22 @@ export const ZONE_KEYS: readonly ZoneKey[] = ZONES.map(zone => zone.key);
 /** The zones with a folder of their own (all but the main zone). */
 const ZONED = ZONES.filter(zone => zone.prefix !== "");
 
-/** A zoned state id's folder prefix (`multiroom.zone2.`), derived from the table. */
-export const ZONE_PREFIX = new RegExp(`^(?:${ZONED.map(zone => zone.prefix.replace(/\./g, "\\.")).join("|")})`);
+/**
+ * Zone B — the second speaker set of the main zone. In the tree it is a zone like any other (`multiroom.zoneB.`):
+ * MusicCast serves it as its `zone2` on a device that declares `zone_b` (YXC Basic Rev 1.10 §4.2), YNCA and XML
+ * through the main zone (`@MAIN:ZONEBVOL`, `<Main_Zone>…<Zone_B>`). No transport addresses it as a zone of its
+ * own, so it has no row in {@link ZONES} — but every rule that reads a zone folder (value labels, the datapoint
+ * groups, the owner policy, the percent switch) treats it as one. It stood in two hand-written expressions and was
+ * missing from the rest, so the same datapoint changed its name and role with the protocol serving it (review
+ * 2026-10-05, A27).
+ */
+export const ZONE_B_PREFIX = "multiroom.zoneB.";
+
+/** Every zone folder of the tree: zones 2 to 4 and Zone B. */
+const ZONE_FOLDERS: readonly string[] = [...ZONED.map(zone => zone.prefix), ZONE_B_PREFIX];
+
+/** A zone folder in front of a state id (`multiroom.zone2.`, `multiroom.zoneB.`), derived from the table. */
+export const ZONE_PREFIX = new RegExp(`^(?:${ZONE_FOLDERS.map(prefix => prefix.replace(/\./g, "\\.")).join("|")})`);
 
 /**
  * The prefix of a zone.

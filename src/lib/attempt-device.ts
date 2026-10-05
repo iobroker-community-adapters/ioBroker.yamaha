@@ -22,6 +22,7 @@ import type { ConnectionHandle, ControllerLog } from "./controller";
 import type { ObjectDef } from "./catalog/types";
 import type { DeviceRecord } from "./types";
 import type { PushLiveness } from "./yxc/push-liveness";
+import { MEMORY_KEY } from "./lifecycle/memory-keys";
 
 // Re-exported so existing importers (tests) keep resolving it from here.
 export type { ConnectableTransport };
@@ -425,8 +426,10 @@ export function attemptDevice(
       // identities — each written only once that transport answered (D1).
       proven: transport =>
         transport === "ynca"
-          ? deps.probeMemory.remembered("yncaCapabilities") !== undefined || deps.yncaSubunitCache.get() !== undefined
-          : deps.probeMemory.remembered(transport === "yxc" ? "yxcIdentity" : "xmlIdentity") !== undefined,
+          ? deps.probeMemory.remembered(MEMORY_KEY.yncaCapabilities) !== undefined ||
+            deps.yncaSubunitCache.get() !== undefined
+          : deps.probeMemory.remembered(transport === "yxc" ? MEMORY_KEY.yxcIdentity : MEMORY_KEY.xmlIdentity) !==
+            undefined,
       tree: deps.tree,
       adapterVersion: deps.adapterVersion,
       existing: deps.existing,

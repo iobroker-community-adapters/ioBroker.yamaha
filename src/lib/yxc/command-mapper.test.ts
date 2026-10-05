@@ -2,7 +2,6 @@ import {
   clientSlotEntries,
   playQueueCounters,
   stationSlotEntries,
-  absoluteDeviceUrl,
   distributionSummary,
   parseYxcClock,
   parseYxcDistribution,
@@ -17,6 +16,7 @@ import {
   parseYxcTunerPresetLists,
   stateToYxc,
 } from "./command-mapper";
+import { absoluteDeviceUrl } from "../catalog/device-url";
 import type { YxcClientLike } from "./client-contract";
 import ysp from "./__fixtures__/status/YSP1600_main.json";
 import rx from "./__fixtures__/status/RX_A2070_main.json";

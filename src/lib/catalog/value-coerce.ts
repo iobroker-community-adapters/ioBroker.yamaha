@@ -245,6 +245,17 @@ export function isWritableValue(value: unknown, numeric: boolean): boolean {
 }
 
 /**
+ * A value list whose labels are the values themselves — the device's own words (YNCA enums, MusicCast and XML
+ * declarations). The one helper for it; it stood in eight copies (review 2026-10-05).
+ *
+ * @param values the values
+ * @returns the states map for a dropdown
+ */
+export function selfMap(values: readonly string[]): Record<string, string> {
+  return Object.fromEntries(values.map(value => [value, value]));
+}
+
+/**
  * The number a value written to a NUMERIC datapoint means — a finite number, or a string that is
  * a plain decimal (the same strict rule the read path uses). Everything else means nothing:
  * `Number(false)` is 0 and `Number("0x10")` is 16, so a switch widget bound to `volume` by mistake
@@ -262,6 +273,56 @@ export function writableNumber(value: unknown): number | undefined {
     return DECIMAL_RE.test(trimmed) ? Number(trimmed) : undefined;
   }
   return undefined;
+}
+
+/**
+ * A written slot number — a scene, a preset, a favourite, a list line: a whole number ≥ 1 through the one number
+ * gate, and not past the last slot when the device declares one. The three protocols judged it each on their own:
+ * MusicCast recalled scene 2 for 1.5 and sent `recallScene(0)` for 0, YNCA and XML rounded a preset 2.5 while
+ * MusicCast sent it raw (review 2026-10-05, A26).
+ *
+ * @param value the written value
+ * @param max the highest slot the device declares, if it declares one
+ * @returns the slot, or undefined when the value names none
+ */
+export function slotNumber(value: unknown, max?: number): number | undefined {
+  const num = writableNumber(value);
+  return num !== undefined && Number.isInteger(num) && num >= 1 && (max === undefined || num <= max) ? num : undefined;
+}
+
+/** The grid a device declares for a number: its lower end, its step and — where declared — its upper end. */
+export interface NumberGrid {
+  /** The lower end, which the grid is counted from. */
+  min: number;
+  /** The step. */
+  step: number;
+  /** The upper end, when the device declares one. */
+  max?: number;
+}
+
+/**
+ * Put a written number onto the grid the device declares — the one rule for every protocol: snapped to the step,
+ * counted from the lower end. A value outside the declared range (half a step of tolerance at each end) names no
+ * point of the grid and is not sent: clamping it tuned another station than the one written. Without a grid the
+ * value stays — an invented grid would be worse than the device's own rounding, which the read-back shows. YNCA
+ * snapped without ends, XML snapped and clamped, MusicCast sent the raw value (review 2026-10-05, A20/A26).
+ *
+ * @param value the written number
+ * @param grid the grid the device declares, if any
+ * @returns the number on the grid, or undefined when it lies outside the declared range
+ */
+export function snapToGrid(value: number, grid: NumberGrid | undefined): number | undefined {
+  if (!grid || !(grid.step > 0)) {
+    return value;
+  }
+  const half = grid.step / 2;
+  if (value < grid.min - half || (grid.max !== undefined && value > grid.max + half)) {
+    return undefined;
+  }
+  const snapped = grid.min + Math.round((value - grid.min) / grid.step) * grid.step;
+  // Float noise of the multiplication (87.5 + 3 × 0.05) must not reach the wire.
+  const rounded = Number(snapped.toFixed(6));
+  return grid.max !== undefined ? Math.min(grid.max, rounded) : rounded;
 }
 
 /** The words a switch datapoint accepts besides a real boolean — compared lower-cased and trimmed. */
@@ -285,7 +346,9 @@ export function coerceBool(value: unknown): boolean | undefined {
     return Number.isNaN(value) ? undefined : value !== 0;
   }
   if (typeof value === "string") {
-    return BOOL_WORDS[value.trim().toLowerCase()];
+    // Own keys only: an inherited name ("constructor", "toString") is no switch word (review 2026-10-05, A35).
+    const word = value.trim().toLowerCase();
+    return Object.hasOwn(BOOL_WORDS, word) ? BOOL_WORDS[word] : undefined;
   }
   return undefined;
 }

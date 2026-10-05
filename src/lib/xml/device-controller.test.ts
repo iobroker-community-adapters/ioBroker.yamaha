@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { XmlDeviceController } from "./device-controller";
 import type { XmlClientLike } from "./device-controller";
-import { XmlHttpError, type BasicStatus, type XmlSystemConfig } from "./protocol";
+import { type BasicStatus, type XmlSystemConfig } from "./protocol";
+import { HttpStatusError } from "../util";
 import { CommandGate } from "../lifecycle/command-gate";
 import { ProbeMemory } from "../lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
@@ -718,7 +719,7 @@ describe("desc.xml — the classic generation's own enumerations (2026-09-09)", 
     const memory = new ProbeMemory();
     const s = setup({ Main_Zone: { power: true, soundProgram: "Standard" } });
     withMemory(s, memory);
-    s.client.descriptorError = new XmlHttpError("device refused the request (HTTP 404)", 404);
+    s.client.descriptorError = new HttpStatusError("device refused the request (HTTP 404)", 404);
     await s.controller.start();
     expect((s.defs.get("living.soundProgram") as Def | undefined)?.common?.states).toBeUndefined();
     expect(memory.remembered("xmlDescriptor:v3")).toEqual({ programs: [], sleep: [], adaptiveDrc: [] });
@@ -848,7 +849,7 @@ describe("XmlDeviceController browse surface (#613)", () => {
       }
       // What a real receiver answers for a source without a menu: a bodyless HTTP 400
       // (captured RX-V6A: tuner-list-info, bluetooth-list-info) — the model's own verdict.
-      return Promise.reject(new XmlHttpError("device refused the request (HTTP 400)", 400));
+      return Promise.reject(new HttpStatusError("device refused the request (HTTP 400)", 400));
     };
     const objects: string[] = [];
     const controller = new XmlDeviceController("living", {
@@ -1035,7 +1036,7 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     const first = setup({ Main_Zone: { power: true } });
     withMemory(first, memory);
     first.client.config = { model: "RX-V773" };
-    first.client.xmlErrors[sceneRequest] = new XmlHttpError("device refused the request (HTTP 400)", 400);
+    first.client.xmlErrors[sceneRequest] = new HttpStatusError("device refused the request (HTTP 400)", 400);
     await first.controller.start();
     expect(memory.remembered("xmlScenes:main")).toBe("");
 
@@ -1103,7 +1104,7 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
           `<YAMAHA_AV rsp="GET" RC="0"><${element}><List_Info_2><Menu_Layer>1</Menu_Layer></List_Info_2></${element}></YAMAHA_AV>`,
         );
       }
-      return Promise.reject(new XmlHttpError("device refused the request (HTTP 400)", 400));
+      return Promise.reject(new HttpStatusError("device refused the request (HTTP 400)", 400));
     };
     const objects: string[] = [];
     const controller = new XmlDeviceController("living", {
@@ -1158,7 +1159,7 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
       if (inner.includes("List_Info")) {
         return element === "NET_RADIO"
           ? Promise.reject(new Error("XML request timeout"))
-          : Promise.reject(new XmlHttpError("device refused the request (HTTP 400)", 400));
+          : Promise.reject(new HttpStatusError("device refused the request (HTTP 400)", 400));
       }
       return Promise.resolve("");
     };

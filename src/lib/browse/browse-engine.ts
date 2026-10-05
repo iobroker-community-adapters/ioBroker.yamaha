@@ -174,7 +174,7 @@ export class BrowseEngine {
     const sub = stateId.slice("player.browse.".length);
     switch (sub) {
       case "source":
-        if (typeof value === "string" && value in this.driver.sources()) {
+        if (typeof value === "string" && Object.hasOwn(this.driver.sources(), value)) {
           void this.run(`open ${value}`, async () => {
             await this.driver.open(value);
             this.deps.emit("player.browse.source", value);

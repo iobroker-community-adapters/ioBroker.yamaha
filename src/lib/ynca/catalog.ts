@@ -8,6 +8,7 @@ import {
   encode,
   formatWireNumber,
   isWritableValue,
+  selfMap,
   textWriteProblem,
   type ValueSpec,
 } from "../catalog/value-coerce";
@@ -94,16 +95,6 @@ function readFuncOf(entry: YncaEntry): string {
  */
 function readFuncsOf(entry: YncaEntry): string[] {
   return entry.readAliases ? [readFuncOf(entry), ...entry.readAliases] : [readFuncOf(entry)];
-}
-
-/**
- * Build a wire-value → label map — YNCA enum labels equal their wire value.
- *
- * @param values the enum wire values
- * @returns the states map for a dropdown
- */
-function selfMap(values: string[]): Record<string, string> {
-  return Object.fromEntries(values.map(value => [value, value]));
 }
 
 /**

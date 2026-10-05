@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { HandleCapture } from "../lifecycle/multi-transport-handle";
+import type { HandleCapture } from "./types";
 import {
   DiagnosticsHandler,
   musiccastStatus,

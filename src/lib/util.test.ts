@@ -1,4 +1,13 @@
-import { DeviceBody, decodeDeviceText, encodeDeviceText } from "./util";
+import { PassThrough } from "node:stream";
+import type { IncomingMessage } from "node:http";
+import {
+  DeviceBody,
+  decodeDeviceText,
+  encodeDeviceText,
+  HttpStatusError,
+  MAX_HTTP_BODY_BYTES,
+  readDeviceResponse,
+} from "./util";
 import { errText } from "./err-text";
 
 describe("errText", () => {
@@ -62,5 +71,45 @@ describe("device text (audit 2026-09-24, B5/C5/D12)", () => {
     expect(body.add(bytes.subarray(cut))).toBe(true);
     expect(body.text()).toBe('{"artist":"Die Ärzte"}');
     expect(new DeviceBody().add(Buffer.alloc(1024 * 1024 + 1))).toBe(false);
+  });
+});
+
+describe("readDeviceResponse — the one HTTP reader of the three clients (review 2026-10-05, A32)", () => {
+  /**
+   * A response stream with a status.
+   *
+   * @param statusCode the HTTP status
+   * @returns the stream, typed as a response
+   */
+  function response(statusCode: number): PassThrough & IncomingMessage {
+    const res = new PassThrough() as PassThrough & IncomingMessage;
+    res.statusCode = statusCode;
+    return res;
+  }
+
+  it("resolves the body of a 2xx, decoded once over a split character", async () => {
+    const res = response(200);
+    const read = readDeviceResponse(res, "desc");
+    const bytes = Buffer.from("K\u00fcche", "utf8");
+    res.write(bytes.subarray(0, 2));
+    res.end(bytes.subarray(2));
+    await expect(read).resolves.toBe("K\u00fcche");
+  });
+
+  it("rejects any other status with the device's verdict, the status kept", async () => {
+    const res = response(503);
+    const read = readDeviceResponse(res, "http://10.0.0.5/desc.xml");
+    res.end("<html>booting</html>");
+    const failure = await read.catch((e: unknown) => e);
+    expect(failure).toBeInstanceOf(HttpStatusError);
+    expect((failure as HttpStatusError).statusCode).toBe(503);
+    expect((failure as Error).message).toBe("device refused http://10.0.0.5/desc.xml (HTTP 503)");
+  });
+
+  it("rejects a body past the cap instead of growing memory", async () => {
+    const res = response(200);
+    const read = readDeviceResponse(res, "stream");
+    res.write(Buffer.alloc(MAX_HTTP_BODY_BYTES + 1));
+    await expect(read).rejects.toThrow("response too large: stream");
   });
 });

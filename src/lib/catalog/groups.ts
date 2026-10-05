@@ -12,16 +12,16 @@
  *   the menu is operated with, and on the two text protocols the browsing surface builds it — so
  *   it follows the "Playback & browsing" switch, or turning that off would leave a pad standing
  *   that nothing drives any more.
- * - A ZONE datapoint (`multiroom.zoneN.<theme>.…`) hangs on TWO switches: multiroom, because the
- *   zones are what that switch is about, and its own theme. `groupsOf` says so; `groupOf` reports
- *   the theme with the zone prefix stripped. Device-wide multiroom states (masterPower, party,
- *   the MusicCast link, Zone B) are multiroom's own and carry no second group.
+ * - A ZONE datapoint (`multiroom.zoneN.<theme>.…`, Zone B included) hangs on TWO switches: multiroom,
+ *   because the zones are what that switch is about, and its own theme. `groupsOf` says so; `groupOf`
+ *   reports the theme with the zone prefix stripped. Device-wide multiroom states (masterPower, party,
+ *   the MusicCast link) are multiroom's own and carry no second group.
  *
  * Legacy flat pre-v0.15.0 ids need no handling here: the start-up cleanup deletes them via
  * `RENAMED_CHANNELS` before anything queries them.
  */
 
-import { ZONE_PREFIX } from "./owner-policy";
+import { ZONE_PREFIX } from "./zones";
 
 /** The switchable groups. `amp` is the amplifier core and can never be turned off. */
 export type GroupId = "amp" | "player" | "tuner" | "multiroom" | "hdmi" | "scene" | "sound" | "advanced" | "clock";

@@ -8,6 +8,7 @@ import {
   type YncaAvailSnapshot,
   type YncaSubunitCache,
 } from "../ynca/subunit-cache";
+import { MEMORY_KEY } from "./memory-keys";
 
 /** The device object's native key the profile lives under — a JSON STRING (see {@link serializeCapabilityProfile}). */
 export const PROFILE_KEY = "capabilityProfile";
@@ -137,16 +138,16 @@ export function serializeCapabilityProfile(
  */
 export function profileIdentityOf(memory: Record<string, unknown>): ProfileIdentity {
   const identity: ProfileIdentity = {};
-  const caps = memory.yncaCapabilities as { model?: unknown; firmware?: unknown } | undefined;
+  const caps = memory[MEMORY_KEY.yncaCapabilities] as { model?: unknown; firmware?: unknown } | undefined;
   if (typeof caps === "object" && caps !== null && typeof caps.model === "string") {
     identity.ynca = { model: caps.model, firmware: typeof caps.firmware === "string" ? caps.firmware : "" };
   }
-  const ids = memory.yxcDeviceIds as { serial?: unknown; mac?: unknown } | undefined;
+  const ids = memory[MEMORY_KEY.yxcDeviceIds] as { serial?: unknown; mac?: unknown } | undefined;
   const serial = typeof ids === "object" && ids !== null && typeof ids.serial === "string" ? ids.serial : undefined;
   const mac = typeof ids === "object" && ids !== null && typeof ids.mac === "string" ? ids.mac : undefined;
-  if (typeof memory.yxcIdentity === "string" || serial !== undefined || mac !== undefined) {
-    const [model = "", systemVersion = ""] =
-      typeof memory.yxcIdentity === "string" ? memory.yxcIdentity.split("|") : ["", ""];
+  const yxcIdentity = memory[MEMORY_KEY.yxcIdentity];
+  if (typeof yxcIdentity === "string" || serial !== undefined || mac !== undefined) {
+    const [model = "", systemVersion = ""] = typeof yxcIdentity === "string" ? yxcIdentity.split("|") : ["", ""];
     identity.yxc = {
       model,
       systemVersion,
@@ -154,8 +155,9 @@ export function profileIdentityOf(memory: Record<string, unknown>): ProfileIdent
       ...(mac !== undefined ? { mac } : {}),
     };
   }
-  if (typeof memory.xmlIdentity === "string") {
-    const [model = "", systemId = "", version = ""] = memory.xmlIdentity.split("|");
+  const xmlIdentity = memory[MEMORY_KEY.xmlIdentity];
+  if (typeof xmlIdentity === "string") {
+    const [model = "", systemId = "", version = ""] = xmlIdentity.split("|");
     identity.xml = { model, systemId, version };
   }
   return identity;

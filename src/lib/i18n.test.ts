@@ -39,3 +39,11 @@ describe("i18n — the eleven admin languages from the admin's own files", () =>
     }
   });
 });
+
+describe("i18n placeholders take a device name literally (review 2026-10-05, A37)", () => {
+  it("keeps $& and $$ in an argument as written", () => {
+    const name = tName("dmDeleteConfirm", "Kino $& Bar $$") as Record<string, string>;
+    expect(name.en).toContain("Kino $& Bar $$");
+    expect(name.de).toContain("Kino $& Bar $$");
+  });
+});

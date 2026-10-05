@@ -132,3 +132,25 @@ describe("ProbeMemory.refresh", () => {
     expect(asked).toBe(0);
   });
 });
+
+describe("ProbeMemory.union — a memory that only grows (review 2026-10-05, E)", () => {
+  it("returns the remembered values with the new ones and writes only when the list grew", () => {
+    const snapshots: Array<Record<string, unknown>> = [];
+    const memory = new ProbeMemory(undefined, entries => snapshots.push(entries));
+    expect([...memory.union("zones", ["main", "zone2"])]).toEqual(["main", "zone2"]);
+    expect(snapshots).toHaveLength(1);
+    // A standby answer with fewer zones takes nothing away and writes nothing.
+    expect([...memory.union("zones", ["main"])]).toEqual(["main", "zone2"]);
+    expect(snapshots).toHaveLength(1);
+    expect([...memory.union("zones", ["zone3"])]).toEqual(["main", "zone2", "zone3"]);
+    expect(snapshots).toHaveLength(2);
+    expect(memory.remembered("zones")).toEqual(["main", "zone2", "zone3"]);
+  });
+
+  it("writes nothing for an empty first answer", () => {
+    const snapshots: Array<Record<string, unknown>> = [];
+    const memory = new ProbeMemory(undefined, entries => snapshots.push(entries));
+    expect(memory.union("fields", []).size).toBe(0);
+    expect(snapshots).toHaveLength(0);
+  });
+});

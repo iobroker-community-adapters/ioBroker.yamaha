@@ -69,8 +69,8 @@ vi.mock("node:http", () => ({
 }));
 
 import { XmlClient } from "./xml-client";
-import { isPermanentXmlRefusal, XmlHttpError } from "./protocol";
-import { MAX_HTTP_BODY_BYTES } from "../util";
+import { isPermanentXmlRefusal } from "./protocol";
+import { HttpStatusError, MAX_HTTP_BODY_BYTES } from "../util";
 
 describe("XmlClient", () => {
   test("send posts a PUT envelope to the control endpoint", async () => {
@@ -173,8 +173,8 @@ describe("XmlClient default poster — the device description", () => {
       () => undefined,
       (e: unknown) => e,
     );
-    expect(failure).toBeInstanceOf(XmlHttpError);
-    expect((failure as XmlHttpError).statusCode).toBe(404);
+    expect(failure).toBeInstanceOf(HttpStatusError);
+    expect((failure as HttpStatusError).statusCode).toBe(404);
     expect(isPermanentXmlRefusal(failure)).toBe(true);
   });
 });
@@ -254,12 +254,12 @@ describe("XmlClient default poster — verdicts and limits (audit 2026-09-02)", 
       () => undefined,
       (e: unknown) => e,
     );
-    expect(failure).toBeInstanceOf(XmlHttpError);
-    expect((failure as XmlHttpError).statusCode).toBe(400);
+    expect(failure).toBeInstanceOf(HttpStatusError);
+    expect((failure as HttpStatusError).statusCode).toBe(400);
     expect(isPermanentXmlRefusal(failure)).toBe(true);
     // A timeout, a connection error or a server error is NOT the model's verdict.
     expect(isPermanentXmlRefusal(new Error("XML request timeout"))).toBe(false);
-    expect(isPermanentXmlRefusal(new XmlHttpError("device refused the request (HTTP 503)", 503))).toBe(false);
+    expect(isPermanentXmlRefusal(new HttpStatusError("device refused the request (HTTP 503)", 503))).toBe(false);
   });
 
   test("rejects a body that streams past the size cap instead of buffering it", async () => {

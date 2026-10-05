@@ -165,7 +165,8 @@ export const MENU_WIRE: WireTable<MenuValue> = {
  * @returns the transport's wire spelling, or undefined
  */
 export function wireFor<K extends string>(table: WireTable<K>, value: string): string | undefined {
-  return (table as Record<string, string | undefined>)[value];
+  // Own keys only: `toString` put `function toString()…` on the wire (review 2026-10-05, A35).
+  return Object.hasOwn(table, value) ? (table as Record<string, string | undefined>)[value] : undefined;
 }
 
 /**

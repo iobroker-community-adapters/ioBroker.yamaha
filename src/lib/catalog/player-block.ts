@@ -1,6 +1,7 @@
-import { MEDIA_STATE_LABELS } from "./media-state";
+import { MEDIA_STATE, MEDIA_STATE_LABELS } from "./media-state";
 import type { ObjectDef } from "./types";
 import type { I18nKey } from "../i18n";
+import type { StateValue } from "../types";
 
 /** A player-block state as its catalog carries it: the common with name/explanation KEYS. */
 export interface PlayerBlockState {
@@ -134,3 +135,26 @@ export const PLAYER_STATION_STATE: PlayerBlockState = {
   state: "station",
   common: { nameKey: "station", type: "string", role: "text", read: true, write: false },
 };
+
+/**
+ * What a zone's player block shows once the zone left its media source: no metadata, times zero, playback Stop —
+ * ONE table for all three transports, each writing only the states it built. It stood three times and had drifted
+ * (YNCA left the cover standing, MusicCast the station and channel, XML the play times), so the same zone switch
+ * left a different block behind depending on the protocol (review 2026-10-05, D3).
+ */
+export const PLAYER_CLEAR: readonly StateValue[] = [
+  { id: "player.source", value: "" },
+  { id: "player.playback", value: MEDIA_STATE.stop },
+  { id: "player.artist", value: "" },
+  { id: "player.album", value: "" },
+  { id: "player.track", value: "" },
+  { id: "player.station", value: "" },
+  { id: "player.channelName", value: "" },
+  { id: "player.albumArt", value: "" },
+  { id: "player.elapsedTime", value: 0 },
+  { id: "player.elapsedTimeText", value: "" },
+  { id: "player.totalTime", value: 0 },
+  { id: "player.totalTimeText", value: "" },
+  { id: "player.repeat", value: 0 },
+  { id: "player.shuffle", value: false },
+];

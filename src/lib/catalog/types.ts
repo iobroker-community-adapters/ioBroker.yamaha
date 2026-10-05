@@ -74,21 +74,20 @@ export interface ObjectDef {
    */
   declaredStates?: boolean;
   /**
-   * Where a `common.states` map came from, for the tests and the coordinator's tie-breaks:
-   * `declared` = the device's own list (see {@link declaredStates}), `derived` = a rule over
-   * proven facts (the YNCA input list narrowed by the AVAIL probe and the XML source flags, the
-   * trigger zone list from the zones the device has), `candidates` = the documented values of
-   * the generation that has the function plus every value this device ever reported. Absent on
-   * a static catalog list. Never written to the object, like `unproven`.
-   */
-  statesOrigin?: "declared" | "derived" | "candidates";
-  /**
    * The value the owning transport reports for this datapoint right now (enums only). The
    * coordinator keeps it on a declared list it adopts from another transport — a dropdown must
    * never hide the value the device is showing, whichever transport declared the list. Never
    * written to the object.
    */
   reportedValue?: string;
+  /**
+   * The value labels are names the user gives in the receiver — inputs, scenes, sound programs (krobi
+   * 2026-10-05: „diese dürfen im laufenden betrieb geändert werden“). A running tree takes the new label of
+   * a value it already lists; it still never loses a value (Y-01), and every other list keeps the labels it
+   * was read in with. All three protocols mark their user-named lists alike (Y-25). Never written to the
+   * object.
+   */
+  liveLabels?: boolean;
   /** Object id relative to the device. */
   id: string;
   /** Object kind. */

@@ -6,6 +6,8 @@ import {
   specToCommon,
   textWriteProblem,
   writableNumber,
+  slotNumber,
+  snapToGrid,
 } from "./value-coerce";
 
 describe("specToCommon", () => {
@@ -298,5 +300,41 @@ describe("textWriteProblem", () => {
     expect(textWriteProblem("Küche", { maxLength: 9, charset: "latin1" })).toBeUndefined();
     expect(textWriteProblem("♥ long text beyond nine")).toBeUndefined();
     expect(textWriteProblem(5)).toBeUndefined();
+  });
+});
+
+describe("slotNumber — one rule for scene, preset and favourite numbers (review 2026-10-05, A26)", () => {
+  it("takes a whole number from 1, as a number or a numeric string", () => {
+    expect(slotNumber(2)).toBe(2);
+    expect(slotNumber(" 3 ")).toBe(3);
+  });
+  it("names no slot for a fraction, zero, a negative, a word or past the declared end", () => {
+    expect(slotNumber(1.5)).toBeUndefined();
+    expect(slotNumber(2.5)).toBeUndefined();
+    expect(slotNumber(0)).toBeUndefined();
+    expect(slotNumber(-1)).toBeUndefined();
+    expect(slotNumber(true)).toBeUndefined();
+    expect(slotNumber("")).toBeUndefined();
+    expect(slotNumber(41, 40)).toBeUndefined();
+    expect(slotNumber(40, 40)).toBe(40);
+  });
+});
+
+describe("snapToGrid — one tuner grid rule for every protocol (review 2026-10-05, A20/A26)", () => {
+  const fm = { min: 87500, max: 108000, step: 50 };
+  it("snaps onto the declared step, counted from the lower end", () => {
+    expect(snapToGrid(98120, fm)).toBe(98100);
+    expect(snapToGrid(98130, fm)).toBe(98150);
+    expect(snapToGrid(531 + 9 * 10 + 3, { min: 531, step: 9 })).toBe(621);
+  });
+  it("sends nothing outside the declared range instead of clamping to another station", () => {
+    expect(snapToGrid(1710, fm)).toBeUndefined();
+    expect(snapToGrid(120000, fm)).toBeUndefined();
+    // Half a step of tolerance at the ends.
+    expect(snapToGrid(108020, fm)).toBe(108000);
+  });
+  it("keeps the value without a grid, and has no float noise", () => {
+    expect(snapToGrid(98123, undefined)).toBe(98123);
+    expect(snapToGrid(87.65, { min: 87.5, step: 0.05 })).toBe(87.65);
   });
 });

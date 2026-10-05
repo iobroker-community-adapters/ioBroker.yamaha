@@ -1,37 +1,9 @@
 import { XML_BROWSE_SOURCES } from "../browse/xml-browse-driver";
-import type { Transport } from "../catalog/owner-policy";
 import { errText } from "../err-text";
 import { availGets, sweepGets, YNCA_CATALOG } from "../ynca/catalog";
 import { decodeLine } from "../ynca/protocol";
 import { YxcRefusalError } from "../yxc/http-client";
-
-/**
- * What the device answered when a diagnostics report read it — verbatim, in the shape of the
- * inventory fixtures (`test/fixtures/inventory/*.json`), so a user's report can become a fixture:
- * YNCA `SUBUNIT:FUNC` → value, MusicCast endpoint → JSON body, XML `Element/Node` → response body.
- */
-export interface TransportCapture {
-  /** Which protocol was read. */
-  transport: Transport;
-  /** When the read started (ISO time). */
-  startedAt: string;
-  /** How long it took. */
-  durationMs: number;
-  /** Whether every question was put and the read ran to its end (no drop, no shutdown). */
-  complete: boolean;
-  /** How many questions went to the device. */
-  asked: number;
-  /** The answers, keyed like the inventory fixtures. */
-  answers: Record<string, unknown>;
-  /** YNCA: every line the device sent while the read ran, in arrival order — refusals included. */
-  lines?: string[];
-  /** YNCA: functions asked that got no value (`@UNDEFINED`, write-only, or silent). */
-  unanswered?: string[];
-  /** XML: the device description (`desc.xml`), or null when the device has none. */
-  descriptor?: string | null;
-  /** A failure that ended the read early. */
-  error?: string;
-}
+import type { TransportCapture } from "./types";
 
 /** The YNCA client surface a capture needs. */
 export interface YncaCaptureClient {

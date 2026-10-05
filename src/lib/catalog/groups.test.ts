@@ -75,10 +75,21 @@ describe("groupOf", () => {
     expect(groupOf("advanced.inputNames.hdmi1")).toBe("advanced");
   });
 
-  it("maps Zone B and the all-zones power switch to the multiroom group", () => {
-    expect(groupOf("multiroom.zoneB.power")).toBe("multiroom");
-    expect(groupOf("multiroom.zoneB.volume")).toBe("multiroom");
+  it("maps the all-zones power switch to the multiroom group", () => {
     expect(groupOf("multiroom.masterPower")).toBe("multiroom");
+  });
+
+  it("treats Zone B as the zone folder it is: multiroom AND its theme (review 2026-10-05, A27)", () => {
+    // Its core datapoints hang on the multiroom switch alone, like zone 2's.
+    expect(groupsOf("multiroom.zoneB.power")).toEqual(["multiroom", "amp"]);
+    expect(groupsOf("multiroom.zoneB.volume")).toEqual(["multiroom", "amp"]);
+    expect(groupsOf("multiroom.zone2.power")).toEqual(["multiroom", "amp"]);
+    // The playback block MusicCast serves under Zone B follows "Playback & browsing" too — it stood
+    // after that switch was turned off.
+    expect(groupsOf("multiroom.zoneB.player.artist")).toEqual(["multiroom", "player"]);
+    expect(isGroupEnabled("multiroom.zoneB.player.artist", { group_player: false })).toBe(false);
+    expect(isGroupEnabled("multiroom.zoneB.power", { group_multiroom: false })).toBe(false);
+    expect(isGroupEnabled("multiroom.zoneB.power", { group_player: false })).toBe(true);
   });
 
   it("maps distributionEnable and party mode to the multiroom group", () => {

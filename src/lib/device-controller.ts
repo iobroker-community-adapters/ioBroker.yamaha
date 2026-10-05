@@ -1,12 +1,11 @@
-import { MEDIA_STATE } from "./catalog/media-state";
 import { splitZone } from "./catalog/zones";
 import { mergeYncaSubunits, type YncaCapabilities } from "./ynca/capability";
-import { formatWireNumber, writableNumber } from "./catalog/value-coerce";
+import { formatWireNumber, selfMap, writableNumber } from "./catalog/value-coerce";
 import { playTimeTwin } from "./catalog/play-time";
 import type { ObjectDef } from "./catalog/types";
 import { tName } from "./i18n";
 import { errText } from "./err-text";
-import type { ControllerLog } from "./controller";
+import type { ControllerDepsBase, ControllerLog } from "./controller";
 import {
   SOURCE_INPUTS,
   YNCA_CATALOG,
@@ -33,12 +32,10 @@ import {
 import type { StatesResolver } from "./catalog/build-objects";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { YncaMessage } from "./ynca/protocol";
-import type { CommandGate } from "./lifecycle/command-gate";
 import type { WriteOutcome } from "./lifecycle/multi-transport-handle";
-import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { BrowseEngine } from "./browse/browse-engine";
 import { createBrowseSurface } from "./browse/surface";
-import { YNCA_STATIC_KEY, sceneListSurface, sceneNumber, yncaSceneTitles } from "./catalog/scene-titles";
+import { sceneListSurface, sceneNumber, yncaSceneTitles } from "./catalog/scene-titles";
 import {
   YNCA_BROWSE_SOURCES,
   YncaBrowseDriver,
@@ -47,6 +44,8 @@ import {
 } from "./browse/ynca-browse-driver";
 import { remoteObjectDefs } from "./browse/objects";
 import { wireFor, type CursorValue, type MenuValue, type WireTable } from "./browse/types";
+import { MEMORY_KEY } from "./lifecycle/memory-keys";
+import { PLAYER_CLEAR } from "./catalog/player-block";
 
 // The YNCA catalog and its lookup maps are static — built once for all devices.
 // SYS:MODELNAME is part of the catalog (info.model), so the sweep already covers it.
@@ -119,41 +118,21 @@ function playerSubunitForInput(input: string | undefined): string | undefined {
  */
 const FLAT_PLAYER_ID = /^player\.[^.]+$/;
 
-/**
- * What a zone's player block is reset to when the zone leaves its playing source
- * (clear-on-switch): metadata empty, playback Stop. Filtered to the states the
- * device actually has before emitting.
- */
-const YNCA_PLAYER_CLEAR: Array<{ id: string; value: number | string | boolean }> = [
-  { id: "player.playback", value: MEDIA_STATE.stop },
-  { id: "player.artist", value: "" },
-  { id: "player.album", value: "" },
-  { id: "player.track", value: "" },
-  { id: "player.station", value: "" },
-  { id: "player.channelName", value: "" },
-  { id: "player.elapsedTime", value: 0 },
-  { id: "player.elapsedTimeText", value: "" },
-  { id: "player.totalTime", value: 0 },
-  { id: "player.totalTimeText", value: "" },
-  { id: "player.repeat", value: 0 },
-  { id: "player.shuffle", value: false },
-];
-
 /** Memory key for the remembered static values. */
-const STATIC_KEY = YNCA_STATIC_KEY;
+const STATIC_KEY = MEMORY_KEY.yncaStaticValues;
 
 /** Memory key for the persisted capability shape (the fast-restart layer). */
-const CAPS_KEY = "yncaCapabilities";
+const CAPS_KEY = MEMORY_KEY.yncaCapabilities;
 
 /**
  * Memory key for the pad dialect a PROBE proved: `{ dialect, proven: true }` (`zone` = the 2015
  * generation's CURSOR/MENU). A bare string is what 2.12.0 learned from a single refused key press —
  * it counts as unknown and is probed again (audit 2026-09-24, B3).
  */
-const PAD_DIALECT_KEY = "yncaPadDialect";
+const PAD_DIALECT_KEY = MEMORY_KEY.yncaPadDialect;
 
 /** Per zone, whether its pad answered the bracketed probe (`{ zone2: true, zone3: false }`, B9). */
-const ZONE_PAD_KEY = "yncaZonePads";
+const ZONE_PAD_KEY = MEMORY_KEY.yncaZonePads;
 
 /**
  * A remembered pad dialect, if a probe proved it.
@@ -175,7 +154,7 @@ function provenPadDialect(remembered: unknown): YncaPadDialect | undefined {
  * connect, the proof was missing on most starts and XML took the menus over (forum 85413,
  * 2026-10-02). Only a proof is remembered: a source that answered nothing is asked again.
  */
-const BROWSE_PROOF_KEY = "yncaBrowseSources";
+const BROWSE_PROOF_KEY = MEMORY_KEY.yncaBrowseSources;
 
 /**
  * The menu sources a remembered proof names (API boundary — the persisted memory is untrusted).
@@ -214,7 +193,7 @@ const UNKNOWN_LINES_LOGGED = 3;
  * the order first seen. YNCA declares no value lists, so a device's own spelling is learned
  * by observation and offered on the dropdown from then on (see `enumStatesFor`).
  */
-const OBSERVED_KEY = "yncaObserved";
+const OBSERVED_KEY = MEMORY_KEY.yncaObserved;
 
 /**
  * The ceiling per function of the observed store. A real enum has a dozen values at most;
@@ -371,15 +350,9 @@ export interface YncaClientLike {
 export type { ControllerLog };
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
-export interface ControllerDeps {
+export interface ControllerDeps extends ControllerDepsBase {
   /** The YNCA client for this device. */
   client: YncaClientLike;
-  /** Create or update an object in the device tree. */
-  upsertObject(id: string, def: ObjectDef): Promise<void>;
-  /** Write a state value with ack (device-originated). */
-  setStateAck(id: string, value: boolean | number | string | null): void;
-  /** Adapter log. */
-  log: ControllerLog;
   /**
    * Whether a catalog entry's datapoint group is enabled. A disabled group's entries
    * are dropped BEFORE the sweep, so their GETs are never sent (previously only the
@@ -393,14 +366,6 @@ export interface ControllerDeps {
    * mismatch clears the cache and re-probes.
    */
   subunitCache: YncaSubunitCache;
-  /**
-   * The device's command gate: every line this controller puts on the wire is already
-   * paced through it, and its signal is the connection's shutdown flag (a closed gate
-   * ends pending waits and stops state writes).
-   */
-  gate: CommandGate;
-  /** Per-device memory for answers that stay constant while the device runs (see ProbeMemory). */
-  probeMemory: ProbeMemory;
 }
 
 /**
@@ -1167,7 +1132,7 @@ export class YncaDeviceController {
     return {
       present,
       probed: this.probedSubunits,
-      ...xmlInputEvidence(this.deps.probeMemory.remembered("xmlConfig")),
+      ...xmlInputEvidence(this.deps.probeMemory.remembered(MEMORY_KEY.xmlConfig)),
     };
   }
 
@@ -1191,7 +1156,7 @@ export class YncaDeviceController {
       if (yncaEntry.func === "INP") {
         const zone = YNCA_ZONES.find(z => z.subunit === yncaEntry.subunit);
         if (zone) {
-          return { states: deviceInputStates(evidence, zone.key, current), origin: "derived", reported: current };
+          return { states: deviceInputStates(evidence, zone.key, current), reported: current };
         }
       }
       if (/^TRIG\dZONE$/.test(yncaEntry.func)) {
@@ -1202,14 +1167,10 @@ export class YncaDeviceController {
         if (current && !values.includes(current)) {
           values.push(current);
         }
-        return {
-          states: Object.fromEntries(values.map(value => [value, value])),
-          origin: "derived",
-          reported: current,
-        };
+        return { states: selfMap(values), reported: current };
       }
       const observed = this.observed[yncaEntry.subunit]?.[readFunc] ?? [];
-      return { states: enumStatesFor(yncaEntry, observed, current), origin: "candidates", reported: current };
+      return { states: enumStatesFor(yncaEntry, observed, current), reported: current };
     };
   }
 
@@ -1359,7 +1320,7 @@ export class YncaDeviceController {
         playing && input !== undefined ? input : "",
       );
       if (!playing) {
-        for (const clear of YNCA_PLAYER_CLEAR) {
+        for (const clear of PLAYER_CLEAR) {
           if (presentFlat.has(clear.id)) {
             this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${clear.id}`, clear.value);
           }
@@ -1420,7 +1381,7 @@ export class YncaDeviceController {
     const presentFlat = new Set(
       this.presentEntries.filter(entry => FLAT_PLAYER_ID.test(entry.id)).map(entry => entry.id),
     );
-    for (const clear of YNCA_PLAYER_CLEAR) {
+    for (const clear of PLAYER_CLEAR) {
       if (presentFlat.has(clear.id)) {
         this.deps.setStateAck(`${this.deviceId}.${zone.prefix}${clear.id}`, clear.value);
       }

@@ -111,13 +111,6 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
 };
 
 /**
- * A zoned state id's folder prefix, from the one zone table (`catalog/zones.ts`). The bare `zoneN.` form
- * of the pre-v0.19.0 tree cannot be produced any more and is NOT matched here; the upgrade cleanup
- * recognises it through `ANY_ZONE_PREFIX`.
- */
-export { ZONE_PREFIX } from "./zones";
-
-/**
  * Per-transport state-id → canonical capability key, for the ids that drift between transports
  * (census §3f, verified against the catalogs). The canonical key is the census left column; the
  * transports not listed already use the canonical id. Zone prefixes are stripped separately.

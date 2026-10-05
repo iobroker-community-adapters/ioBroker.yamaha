@@ -1,6 +1,7 @@
 import { channelCommon, type ObjectDef } from "../catalog/types";
-import { canonicalIdOf, ID_DRIFT, ZONE_PREFIX, type Transport } from "../catalog/owner-policy";
-import type { TransportCapture } from "../diagnostics/device-capture";
+import { canonicalIdOf, ID_DRIFT, type Transport } from "../catalog/owner-policy";
+import { ZONE_PREFIX } from "../catalog/zones";
+import type { TransportCapture } from "../diagnostics/types";
 import type { TransportConnection, WriteOutcome } from "./multi-transport-handle";
 
 /**

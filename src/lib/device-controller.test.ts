@@ -1424,7 +1424,6 @@ describe("YNCA dropdowns from proof — inputs narrowed by evidence, observed va
     expect(statesOf(objects, "living.input")).toHaveProperty("HDMI1");
     expect(statesOf(objects, "living.input")).not.toHaveProperty("Main Zone Sync");
     expect(statesOf(objects, "living.multiroom.zone2.input")).toHaveProperty("Main Zone Sync");
-    expect(objects.find(o => o.id === "living.input")?.def.statesOrigin).toBe("derived");
   });
 
   test("a blind sweep (no AVAIL answer) narrows nothing", async () => {

@@ -56,7 +56,10 @@ function translated(key: I18nKey, args: (string | number | boolean | null)[]): i
   for (const [lang, words] of Object.entries(LANGUAGES)) {
     let text = words[key] ?? en[key] ?? key;
     for (const arg of args) {
-      text = text.replace("%s", arg === null ? "null" : String(arg));
+      // A function, not a string: `$&` or `$$` in a device name is the name, not a replacement pattern
+      // (review 2026-10-05, A37).
+      const filled = arg === null ? "null" : String(arg);
+      text = text.replace("%s", () => filled);
     }
     out[lang] = text;
   }

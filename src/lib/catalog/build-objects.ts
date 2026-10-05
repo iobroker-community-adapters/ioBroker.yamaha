@@ -3,13 +3,14 @@ import { parentChannels, type CatalogEntry, type ObjectDef } from "./types";
 import { tName } from "../i18n";
 
 /**
- * What a transport knows about one entry's selectable values on THIS device: the states map to
- * put on the object and where it came from (see {@link ObjectDef.statesOrigin}). An empty map
- * means "nothing is known" — the object then carries no dropdown at all rather than an empty one.
+ * What a transport knows about one entry's selectable values on THIS device: the states map to put on the
+ * object, the value the device reports right now, and whether the labels are names the user gives in the
+ * receiver (see {@link ObjectDef.liveLabels}). An empty map means "nothing is known" — the object then carries
+ * no dropdown at all rather than an empty one.
  */
 export type StatesResolver = (
   entry: CatalogEntry,
-) => { states: Record<string, string>; origin: NonNullable<ObjectDef["statesOrigin"]>; reported?: string } | undefined;
+) => { states: Record<string, string>; reported?: string; liveLabels?: boolean } | undefined;
 
 /**
  * Turn catalog entries into the object tree: a channel object for every dotted
@@ -42,8 +43,8 @@ export function catalogToObjects(entries: CatalogEntry[], resolve?: StatesResolv
     objects.push({
       id: entry.id,
       type: "state",
-      ...(resolved && common.states ? { statesOrigin: resolved.origin } : {}),
       ...(resolved?.reported ? { reportedValue: resolved.reported } : {}),
+      ...(resolved?.liveLabels && common.states ? { liveLabels: true } : {}),
       common: {
         name: tName(entry.nameKey, ...(entry.nameArgs ?? [])),
         // Only written when the catalog carries one. An absent key means "explains itself" —

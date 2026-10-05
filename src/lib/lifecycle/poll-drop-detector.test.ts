@@ -52,3 +52,33 @@ describe("PollDropDetector reason (audit 2026-09-24, C29)", () => {
     expect(reasons).toEqual(["liveness check unanswered"]);
   });
 });
+
+describe("PollDropDetector.verify — one liveness question for MusicCast and XML (review 2026-10-05, E)", () => {
+  it("asks once for a burst of askers and reports an unanswered question at once", async () => {
+    const detector = new PollDropDetector();
+    const reasons: Array<string | undefined> = [];
+    detector.onDrop(reason => reasons.push(reason?.message));
+    let asked = 0;
+    let answer: (alive: boolean) => void = () => undefined;
+    const ask = (): Promise<boolean> => {
+      asked++;
+      return new Promise(resolve => (answer = resolve));
+    };
+    const first = detector.verify(ask);
+    const second = detector.verify(ask);
+    answer(false);
+    await Promise.all([first, second]);
+    expect(asked).toBe(1);
+    expect(reasons).toEqual(["liveness check unanswered"]);
+  });
+
+  it("takes a rejected question for no answer, and asks again once the first one settled", async () => {
+    const detector = new PollDropDetector();
+    const reasons: Array<string | undefined> = [];
+    detector.onDrop(reason => reasons.push(reason?.message));
+    await detector.verify(() => Promise.resolve(true));
+    expect(reasons).toEqual([]);
+    await detector.verify(() => Promise.reject(new Error("socket hang up")));
+    expect(reasons).toEqual(["liveness check unanswered"]);
+  });
+});

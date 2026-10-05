@@ -1,6 +1,6 @@
 import { get as httpGet, request as httpRequest, type IncomingMessage } from "node:http";
 import type { CommandGate } from "../lifecycle/command-gate";
-import { DeviceBody } from "../util";
+import { HttpStatusError, readDeviceResponse } from "../util";
 import { errText } from "../err-text";
 
 /**
@@ -167,26 +167,19 @@ function defaultSend(ip: string): YxcSend {
       const url = `http://${ip}${API_BASE}${command}`;
       const transportFailure = (e: Error): void => reject(new YxcTransportError(command, e));
       const onResponse = (res: IncomingMessage): void => {
-        // Collected as bytes and decoded once: a chunk may end inside a multi-byte character
-        // ("Die Ärzte" arrived as "Die ��rzte", audit 2026-09-24 C5).
-        const body = new DeviceBody();
-        res.on("data", chunk => {
-          if (!body.add(chunk)) {
-            // The largest real answer (getFeatures) is a few KB — past the cap this is no
-            // device answer but a stream that would grow memory without bound.
-            res.destroy(new Error(`YXC response too large: ${command}`));
-          }
-        });
-        // A connection dropped mid-body emits on the RESPONSE stream, not the request —
-        // without this handler that is an unhandled error event, not a rejected promise.
-        res.on("error", transportFailure);
-        res.on("end", () => {
-          try {
-            resolve(assertOk(JSON.parse(body.text()), command));
-          } catch (e) {
-            reject(e instanceof Error ? e : new Error(errText(e)));
-          }
-        });
+        // Bytes decoded once ("Die Ärzte" arrived as "Die ��rzte", audit 2026-09-24 C5), capped, and the
+        // status judged: an error page is the device's (or its booting web server's) answer, never JSON
+        // to parse — it travels as `HttpStatusError`, which is no lost connection.
+        readDeviceResponse(res, command).then(
+          text => {
+            try {
+              resolve(assertOk(JSON.parse(text), command));
+            } catch (e) {
+              reject(e instanceof Error ? e : new Error(errText(e)));
+            }
+          },
+          (e: Error) => (e instanceof HttpStatusError ? reject(e) : transportFailure(e)),
+        );
       };
       const req =
         body === undefined

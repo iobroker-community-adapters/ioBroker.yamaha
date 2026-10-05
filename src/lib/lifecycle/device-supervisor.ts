@@ -1,5 +1,5 @@
 import type { ConnectionHandle } from "../controller";
-import type { HandleCapture } from "./multi-transport-handle";
+import type { HandleCapture } from "../diagnostics/types";
 import { errText } from "../err-text";
 
 // Re-exported so existing importers (main.ts) keep resolving it from here.

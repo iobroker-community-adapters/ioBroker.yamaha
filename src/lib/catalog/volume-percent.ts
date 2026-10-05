@@ -1,4 +1,4 @@
-import { ZONE_PREFIX } from "./owner-policy";
+import { ZONE_PREFIX } from "./zones";
 import { tName } from "../i18n";
 import type { ObjectDef } from "./types";
 
@@ -48,9 +48,9 @@ export interface VolumeBounds {
  * @returns true when the id is a zone's volume datapoint
  */
 export function isAmpVolumeId(stateId: string): boolean {
-  // Zone B is a zone too, on the same decibel scale (audit 2026-09-29, D13) — it stood in dB beside a
+  // Zone B is a zone folder too, on the same decibel scale (audit 2026-09-29, D13) — it stood in dB beside a
   // main zone in percent.
-  return stateId.replace(ZONE_PREFIX, "").replace(/^multiroom\.zoneB\./, "") === "volume";
+  return stateId.replace(ZONE_PREFIX, "") === "volume";
 }
 
 /**

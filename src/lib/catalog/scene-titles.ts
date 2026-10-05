@@ -1,8 +1,10 @@
 import type { ProbeMemory } from "../lifecycle/probe-memory";
 import { parseSceneList } from "../xml/protocol";
 import { tName } from "../i18n";
-import { writableNumber } from "./value-coerce";
+import { slotNumber, writableNumber } from "./value-coerce";
 import type { ObjectDef } from "./types";
+import { ZONES } from "./zones";
+import { MEMORY_KEY, xmlScenesKey } from "../lifecycle/memory-keys";
 
 /**
  * Scene titles, cross-transport. The device reports its scene titles over XML
@@ -22,18 +24,9 @@ export interface SceneListEntry {
 }
 
 /** The probe-memory key the YNCA controller keeps its never-changing answers under (input and scene names). */
-export const YNCA_STATIC_KEY = "yncaStaticValues";
 
 /** The probe-memory shape of the YNCA static values: subunit → function → answer. */
 type YncaStatics = Record<string, Record<string, string>>;
-
-/** The YNCA subunit of each zone key. */
-const YNCA_ZONE_SUBUNITS: Readonly<Record<string, string>> = {
-  main: "MAIN",
-  zone2: "ZONE2",
-  zone3: "ZONE3",
-  zone4: "ZONE4",
-};
 
 /**
  * The scenes a YNCA zone declares, read from its `SCENExNAME` answers: MAIN up to twelve, a zone
@@ -68,7 +61,7 @@ export function knownScenes(memory: ProbeMemory | undefined, zoneKey: string): S
   if (!memory) {
     return [];
   }
-  const xml = memory.remembered<string>(`xmlScenes:${zoneKey}`);
+  const xml = memory.remembered<string>(xmlScenesKey(zoneKey));
   if (typeof xml === "string" && xml.length > 0) {
     // Parsed lazily from the remembered raw declaration — ONE stored form, one parser.
     const scenes = parseSceneList(xml);
@@ -76,11 +69,11 @@ export function knownScenes(memory: ProbeMemory | undefined, zoneKey: string): S
       return scenes;
     }
   }
-  const subunit = YNCA_ZONE_SUBUNITS[zoneKey];
+  const subunit = ZONES.find(zone => zone.key === zoneKey)?.ynca;
   if (subunit === undefined) {
     return [];
   }
-  return yncaSceneTitles(memory.remembered<YncaStatics>(YNCA_STATIC_KEY)?.[subunit], subunit);
+  return yncaSceneTitles(memory.remembered<YncaStatics>(MEMORY_KEY.yncaStaticValues)?.[subunit], subunit);
 }
 
 /**
@@ -112,15 +105,16 @@ export function resolveSceneNumber(
  * @returns the scene number, or undefined when the value names none
  */
 export function sceneNumber(value: unknown, scenes: readonly SceneListEntry[]): number | undefined {
-  const num = writableNumber(value);
-  if (num !== undefined) {
-    return Number.isInteger(num) && num >= 1 ? num : undefined;
+  if (writableNumber(value) !== undefined) {
+    return slotNumber(value);
   }
   if (typeof value !== "string") {
     return undefined;
   }
+  // An emptied VIS field or Blockly text names no scene — it matched the first blank title and recalled scene 1,
+  // switching input, volume and DSP (review 2026-10-05, A23).
   const needle = value.trim().toLowerCase();
-  return scenes.find(scene => scene.title.toLowerCase() === needle)?.num;
+  return needle === "" ? undefined : scenes.find(scene => scene.title.trim().toLowerCase() === needle)?.num;
 }
 
 /**

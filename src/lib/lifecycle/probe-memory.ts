@@ -118,6 +118,26 @@ export class ProbeMemory {
   }
 
   /**
+   * Remember a list as the union with what was remembered under the key — a memory that only grows: a zone that
+   * answered once, a field a status once carried, a setting a receiver once reported. One unanswered request or a
+   * standby answer is no proof that something is gone (krobi 2026-10-02). Written only when the list grew; the
+   * controllers spelled this union out by hand at every place (review 2026-10-05, E).
+   *
+   * @param key the memory key
+   * @param seen what was just seen
+   * @returns everything known: the remembered values and the new ones
+   */
+  public union(key: string, seen: Iterable<string>): Set<string> {
+    const stored = this.values.get(key);
+    const remembered = new Set(Array.isArray(stored) ? stored.filter((v): v is string => typeof v === "string") : []);
+    const all = new Set([...remembered, ...seen]);
+    if (Array.isArray(stored) ? all.size !== remembered.size : all.size > 0) {
+      this.set(key, [...all]);
+    }
+    return all;
+  }
+
+  /**
    * Forget the keys a predicate marks — a transport's freshness guard drops ITS portion
    * when the device behind the address turns out to be a different (or updated) one,
    * without touching what the other transports validated.

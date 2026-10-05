@@ -1,4 +1,5 @@
 import { PLAYER_DISPLAY_STATES } from "../catalog/player-block";
+import { selfMap } from "../catalog/value-coerce";
 import { MUSICCAST_INPUT_NAMES } from "../catalog/musiccast-vocabulary";
 import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
 import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
@@ -7,16 +8,6 @@ import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { YxcCapabilities, YxcZone } from "./capability";
 import { YXC_AMP_CATALOG } from "./catalog";
 import { ALARM_DAYS, DAB_FIELDS } from "./command-mapper";
-
-/**
- * Build a value → label dropdown map from a device-reported value list.
- *
- * @param values the allowed values
- * @returns the states map
- */
-function selfMap(values: readonly string[]): Record<string, string> {
-  return Object.fromEntries(values.map(value => [value, value]));
-}
 
 /** The zones the adapter maps: main flat, zone2-4 each under multiroom. */
 const ZONES: Array<{ id: string; prefix: string }> = YXC_ZONE_IDS.map(id => ({ id, prefix: zonePrefix(id) }));
@@ -120,17 +111,6 @@ function pushPlayerBlock(objects: ObjectDef[], prefix: string, settableModes: bo
       },
     });
   }
-}
-
-/**
- * A value list whose labels are its values — the words are said where the object is written
- * (`catalog/state-labels.ts`), in the system language.
- *
- * @param values the values the spec declares
- * @returns the list
- */
-function selfLabelled(values: readonly string[]): Record<string, string> {
-  return Object.fromEntries(values.map(value => [value, value]));
 }
 
 /**
@@ -995,7 +975,7 @@ export function mapYxcToObjects(
         read: true,
         write: false,
         // YXC Basic §6.2 `audio_mode`; none on AM.
-        states: selfLabelled(["mono", "stereo"]),
+        states: selfMap(["mono", "stereo"]),
       },
     });
     if (bands.includes("dab")) {
@@ -1015,7 +995,7 @@ export function mapYxcToObjects(
             ...(field.unit ? { unit: field.unit } : {}),
             ...(field.min !== undefined ? { min: field.min } : {}),
             ...(field.max !== undefined ? { max: field.max } : {}),
-            ...(field.states ? { states: selfLabelled(field.states) } : {}),
+            ...(field.states ? { states: selfMap(field.states) } : {}),
             read: true,
             write: false,
           },
@@ -1122,7 +1102,7 @@ export function mapYxcToObjects(
         role: "state",
         read: true,
         write: true,
-        states: Object.fromEntries(capabilities.clock.alarmModes.map(mode => [mode, mode])),
+        states: selfMap(capabilities.clock.alarmModes),
       },
     });
     // YXC Basic §9.1: `alarm.repeat` — whether the one-day alarm repeats; not snooze, which the clock
@@ -1222,7 +1202,7 @@ export function mapYxcToObjects(
           role,
           read: true,
           write: false,
-          ...(values ? { states: selfLabelled(values) } : {}),
+          ...(values ? { states: selfMap(values) } : {}),
         },
       });
     };

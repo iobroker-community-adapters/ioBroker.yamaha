@@ -1,5 +1,4 @@
-/** The zone keys a YXC push event may carry — each is a getStatus re-fetch signal. */
-const ZONE_KEYS = ["main", "zone2", "zone3", "zone4"];
+import { ZONE_KEYS } from "../catalog/zones";
 
 /** The media-player blocks a YXC push may carry — each is a getPlayInfo re-fetch signal. */
 const MEDIA_KEYS = ["netusb", "cd", "tuner"];
