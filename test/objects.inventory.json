@@ -48396,7 +48396,7 @@
   "yamaha.0.wx-030-7553": {
     "type": "device",
     "common": {
-      "name": "WX-030",
+      "name": "Badezimmer",
       "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMjIgNmgyMGE1IDUgMCAwIDEgNSA1djQyYTUgNSAwIDAgMSAtNSA1aC0yMGE1IDUgMCAwIDEgLTUgLTV2LTQyYTUgNSAwIDAgMSA1IC01eiIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iMTkiIHI9IjQiLz48Y2lyY2xlIGN4PSIzMiIgY3k9IjQwIiByPSI5Ii8+PC9zdmc+",
       "statusStates": {
         "onlineId": "yamaha.0.wx-030-7553.info.connection"
@@ -48404,8 +48404,8 @@
     },
     "native": {
       "volumeAsPercent": false,
-      "label": "WX-030",
-      "labelRank": 1,
+      "label": "Badezimmer",
+      "labelRank": 2,
       "model": "WX-030",
       "identity": {
         "serial": "0E897553",
@@ -59326,7 +59326,7 @@
   "yamaha.0.ysp-1600-7073": {
     "type": "device",
     "common": {
-      "name": "YSP-1600",
+      "name": "Wohnzimmer",
       "icon": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJjdXJyZW50Q29sb3IiIHN0cm9rZS13aWR0aD0iNCIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMjRoNDBhOCA4IDAgMCAxIDggOHYwYTggOCAwIDAgMSAtOCA4aC00MGE4IDggMCAwIDEgLTggLTh2LTBhOCA4IDAgMCAxIDggLTh6Ii8+PHBhdGggZD0iTTE3IDMyaC4wMU0yNyAzMmguMDFNMzcgMzJoLjAxTTQ3IDMyaC4wMSIgc3Ryb2tlLXdpZHRoPSI1Ii8+PC9zdmc+",
       "statusStates": {
         "onlineId": "yamaha.0.ysp-1600-7073.info.connection"
@@ -59334,8 +59334,8 @@
     },
     "native": {
       "volumeAsPercent": false,
-      "label": "YSP-1600",
-      "labelRank": 1,
+      "label": "Wohnzimmer",
+      "labelRank": 2,
       "model": "YSP-1600",
       "identity": {
         "serial": "0B587073",
