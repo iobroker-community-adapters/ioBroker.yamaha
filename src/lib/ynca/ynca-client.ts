@@ -3,6 +3,7 @@ import { LineBuffer } from "./line-buffer";
 import { decodeLine, encodeCommand, encodeGet, type YncaMessage } from "./protocol";
 import { buildCapabilities, type YncaCapabilities } from "./capability";
 import { CommandGateClosedError, type CommandGate } from "../lifecycle/command-gate";
+import { DropLatch } from "../lifecycle/drop-latch";
 import { encodeDeviceText } from "../util";
 import { errText } from "../err-text";
 
@@ -171,7 +172,8 @@ export class YncaClient {
   private socket: YncaSocket | undefined;
   private readonly lineBuffer = new LineBuffer();
   private readonly messageHandlers: Array<(message: YncaMessage) => void> = [];
-  private dropHandler: ((reason?: Error) => void) | undefined;
+  /** The drop of an established connection, kept until the handle listens (the fleet latch, review 2026-10-05, E). */
+  private readonly dropLatch = new DropLatch();
   private refusalHandler: ((command: string, verdict: "restricted" | "undefined") => void) | undefined;
   /**
    * One entry per `@SYS:VERSION=?` on the wire, in wire order — the answers come in the same order,
@@ -199,8 +201,6 @@ export class YncaClient {
   /** Keepalive polls sent since the last byte arrived — any byte counts, not just the answer. */
   private unansweredKeepalives = 0;
   private lastError: Error | undefined;
-  /** A genuine drop that fired before onDrop was registered — delivered once it is. */
-  private pendingDrop = false;
 
   /**
    * @param host the receiver IP or hostname
@@ -316,11 +316,7 @@ export class YncaClient {
     // after every transport connected and the tree was built), latch the drop so it is
     // delivered the moment onDrop registers — otherwise this transport dies unnoticed.
     if (this.everReachable) {
-      if (this.dropHandler) {
-        this.dropHandler(this.lastError);
-      } else {
-        this.pendingDrop = true;
-      }
+      this.dropLatch.report(this.lastError);
     }
   }
 
@@ -593,11 +589,7 @@ export class YncaClient {
    * @param handler called on an unexpected drop, with the last error if any
    */
   public onDrop(handler: (reason?: Error) => void): void {
-    this.dropHandler = handler;
-    if (this.pendingDrop) {
-      this.pendingDrop = false;
-      handler(this.lastError);
-    }
+    this.dropLatch.onDrop(handler);
   }
 
   /**
