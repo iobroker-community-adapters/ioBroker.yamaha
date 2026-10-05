@@ -76,6 +76,26 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 ### **WORK IN PROGRESS**
 
 - (krobipd) New: Diagnostics report on the new Expert tab of the instance settings — reads the receiver over every protocol (read only), adds its datapoints, the recent log lines and whether the musiccast adapter is installed, switched on and running, and saves it as one file for a GitHub issue; addresses, serial numbers and names are replaced by markers
+- (krobipd) Changed: A datapoint looks and works the same whichever protocol serves it — YNCA, MusicCast and XML now share names, roles, value lists and the handling of written numbers
+- (krobipd) Changed: Over YNCA the input dropdown shows the names you gave the inputs in the receiver; the 29 datapoints advanced.inputNames.\* are removed
+- (krobipd) New: Input, scene and sound program names you change in the receiver or the MusicCast app reach the dropdowns while the adapter runs
+- (krobipd) Changed: sound.adaptiveDrc is a switch on every receiver (Auto = on); writing "Auto" still works
+- (krobipd) Changed: On MusicCast-only devices, sleep is the same dropdown as on the other receivers (Off, 30 min …) and bass and treble are shown in dB
+- (krobipd) Fixed: info.model and info.firmware are filled on devices without YNCA, so the device card shows the model
+- (krobipd) Fixed: A command the receiver refuses over one protocol goes over another one also for scenes, tuner, party mode, HDMI outputs, speakers and playback keys, and also when YNCA was busy since the start
+- (krobipd) Fixed: An empty value or a number like 1.5 or 0 written to scene.recall or a preset no longer recalls anything
+- (krobipd) Fixed: A tuner frequency written right after the band goes to the new band and is never clamped to another station
+- (krobipd) Fixed: Switches on receivers with a device description (2008–2017) no longer show an On/Standby list
+- (krobipd) Fixed: The on-screen remote works over XML on the 2012 entry class (RX-V473 …) as its device description declares
+- (krobipd) Fixed: A YNCA receiver that did not answer its probe once is read in full on the next start instead of keeping only its system datapoints
+- (krobipd) Fixed: Zone B datapoints carry the same names and roles as the other zones on every protocol
+- (krobipd) Fixed: The lists of found and deleted receivers are never treated as empty when they cannot be read, and are written safely; editing a device card no longer restarts the instance
+- (krobipd) Fixed: Zones on Main Zone Sync show and control the main zone's playback; zones without a media input get no player datapoints
+- (krobipd) Fixed: MusicCast — two quick link commands build one group; a favourite never goes to a zone in standby; "power on, then volume" works on soundbars; a late zone's volume uses the right scale; events of the first seconds are kept
+- (krobipd) Fixed: CD receivers with MusicCast get their CD datapoints
+- (krobipd) Fixed: The menu path finds entries on later pages and stops at a folder that does not open; a "not now" answer no longer hides the XML menus
+- (krobipd) Fixed: A powered-off XML receiver goes offline in seconds; read-backs after a command no longer wait behind the poll
+- (krobipd) Fixed: The diagnostics report also hides names when the receiver is offline, and the Expert tab no longer waits forever when the instance is stopped
 
 ### 3.2.0 (2026-10-02)
 

@@ -72,8 +72,9 @@ export const OWNER_OVERRIDES: Record<string, readonly Transport[]> = {
   // half-decibels (−12…+12 in 25 steps over the same range the YNCA spec calls −6…+6 dB in 25
   // steps of 0.5, measured across 19 device captures). Both scales are correct for their own
   // protocol, but only one of them is decibels — so the documented dB scale wins wherever it is
-  // present (unlike `volume`, which MusicCast owns by modernity since 2.8.0). A MusicCast-only device keeps its own scale and its own
-  // declared bounds, without a unit claim.
+  // present (unlike `volume`, which MusicCast owns by modernity since 2.8.0). Since 2026-10-05 MusicCast shows bass
+  // and treble in decibels too (its half-decibel steps halved, `yxc/catalog.ts` `halfDb`); the order stays, so an
+  // existing receiver keeps its owner. The subwoofer trim keeps MusicCast's device steps (no documented step size).
   "sound.bass": ["ynca", "xml", "yxc"],
   "sound.treble": ["ynca", "xml", "yxc"],
   // YNCA joined this key with the 2026-09-06 catalog wave (MAIN:SWFRTRIM, wire form `0.0`/`3.0`);

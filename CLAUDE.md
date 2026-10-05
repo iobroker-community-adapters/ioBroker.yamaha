@@ -66,10 +66,19 @@ Y-04-Rückfall, ein XML-Steuerkreuz, das die Gerätebeschreibung deklariert und 
   Eine Abweichung ist ein Fehler, außer sie steht begründet in der Ausnahmeliste der Paritätsprüfung (Beleg: das Protokoll
   kann es nachweislich nicht).
 
+- **Entschiedene Formen (krobi 2026-10-05):** feste Stufen = Dropdown, freie Zahl = Zahl — `sleep` ist auf allen drei
+  Protokollen das Dropdown `Off`/`30 min`…`120 min` (MusicCast nimmt weiter Minuten an); `sound.adaptiveDrc` ist überall ein
+  Schalter (`Auto` = an, geschriebenes „Auto" bleibt gültig); Bass/Höhen sind überall dB (MusicCast-Halbdezibel-Stufen
+  halbiert, `halfDb`); der Subwoofer bleibt bei MusicCast-only-Geräten in Gerätestufen (Bereich je Modell verschieden,
+  Schrittweite nirgends belegt). Eine desc.xml-Taste mit `Assigned="No"` wird nicht angeboten. Die Zone-B-Datenpunkte heißen
+  wie die jeder Zone (Power/Mute/Volume/Zone name, Rolle `switch.power.zone`).
 - **Jeder Schreibweg liefert ein Ergebnis** (`sent`/`refused`/`unavailable`/`unclear` — bewusst gewählt, nie ein vergessenes
   `undefined`), und **jeder Wert, den ein Controller meldet, hat ein Objekt** (sonst verwirft der Transport-Adapter ihn still).
-- **Prüfung:** `src/lib/parity.test.ts` fährt alle Inventar-Fixtures durch alle Protokolle und muss grün sein. Schutztests zu
-  Entscheidungen (`src/decisions/`) decken alle drei Protokolle ab (Ergänzungen über die Werkbank).
+- **Prüfung:** `src/lib/parity.test.ts` startet die Inventar-Fixture-Geräte, liest jedes einmal je Protokoll (echter Client,
+  Controller und Transport-Adapter, `test/helpers/parity-harness.ts`) und vergleicht die Form jedes Datenpunkts, den zwei
+  Protokolle auf einem Receiver bauen (`catalog/object-form.ts` `formDifferences`), prüft, dass jeder gemeldete Wert ein
+  Objekt hat, und dass eine Id auf jedem Receiver Typ und Namen behält. Abweichungen nur in seiner Ausnahmeliste mit
+  Begründung. Schutztests zu Entscheidungen (`src/decisions/`) decken alle drei Protokolle ab (Ergänzungen über die Werkbank).
 - **Reviews** prüfen ausdrücklich, ob eine Funktion auf allen drei Protokollen und allen Generationen vorhanden ist und sich
   gleich verhält — und sagen es laut, wenn nicht.
 
@@ -299,9 +308,11 @@ Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht; der 
   Werten, Logzeilen (`LogRing`, alle Stufen inkl. debug, auch bei Loglevel info).
 - **Pseudonymisierung** (`pseudonymiser.ts`): IP/MAC/Mail per Form, Seriennummer/MAC/SSID/Netz-/Standort-/Zonennamen aus
   ihren Fundstellen (YXC-Schlüssel, XML-Tags, YNCA `ZONENAME`), stabile Marker je Datei; Seriennummer behält die letzten 4.
-- ⚠️ **Zwei versiegelte Schutztests sind dadurch rot und warten auf die Werkbank:** Y-11 (`src/decisions/y11.test.ts`
-  verbietet jeden Zugriff auf `system.adapter.<fremd>`, auch lesend — krobi will den musiccast-Stand direkt gelesen) und
-  Y-27 (`y27.test.ts` liest `jsonConfig.items.discovery` flach, seit dem Tab-Umbau `items._main.items.discovery`).
+- ⚠️ **Drei versiegelte Schutztests sind rot und warten auf die Werkbank:** Y-11 (`src/decisions/y11.test.ts`
+  verbietet jeden Zugriff auf `system.adapter.<fremd>`, auch lesend — krobi will den musiccast-Stand direkt gelesen),
+  Y-27 (`y27.test.ts` liest `jsonConfig.items.discovery` flach, seit dem Tab-Umbau `items._main.items.discovery`) und
+  Y-07 (`y07.test.ts` erwartet für MusicCast-Bass die rohen Stufen −12…12; seit „dB überall" sind es dieselben Grenzen in
+  dB, −6…6/0,5 und für Zone 2 −5…5/1). Dazu braucht `y25.test.ts` einen YNCA-Fall (Eingangsnamen aus `INPNAME`).
 
 ## Chroniken — verlegt nach `.claude/dev-history.md` (2026-09-21)
 
@@ -516,7 +527,7 @@ Der Upgrade-Pfad vom Ur-Adapter 0.5.4 ist test-bewiesen (`pure-helpers.test.ts` 
 `legacyDeviceRow` (config.ip/IP, Hostname ok, `:port`-Suffix wird gestrippt) + `cleanupStaleObjects`
 räumt den KOMPLETTEN Alt-Baum (47 Instanz-Objekte + dynamische `Realtime.*`/`SystemConfig.*`/`inputEnum`).
 
-**Update-Meldungen (`common.messages`, sechs: 1.0.0, 2.0.0, 2.2.0, 2.8.0, 3.0.0, 3.1.0 — `player.playback` nach Rollenkatalog) folgen seit 2026-09-27 der Flotten-Form:**
+**Update-Meldungen (`common.messages`, sieben: 1.0.0, 2.0.0, 2.2.0, 2.8.0, 3.0.0, 3.1.0 — `player.playback` nach Rollenkatalog —, 3.3.0 — Adaptive DRC als Schalter, MusicCast-`sleep` als Text, `advanced.inputNames.*` entfallen) folgen seit 2026-09-27 der Flotten-Form:**
 Titel = die Warnung, Text je Sprache ≤ 200 Zeichen mit einem Beispiel alt → neu, `link` auf die englische Wiki-Seite
 `Upgrade` (Gate `audit_upgrade_messages_short`, `CLAUDE_CONSISTENCY.md`).
 

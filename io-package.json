@@ -505,6 +505,60 @@
           "agree",
           "cancel"
         ]
+      },
+      {
+        "condition": {
+          "operand": "and",
+          "rules": [
+            "oldVersion<3.3.0",
+            "newVersion>=3.3.0"
+          ]
+        },
+        "title": {
+          "en": "Datapoints change type, input names move",
+          "de": "Datenpunkte ändern ihren Typ, Eingangsnamen ziehen um",
+          "ru": "Точки данных меняют тип, имена входов переносятся",
+          "pt": "Pontos de dados mudam de tipo, nomes das entradas mudam de lugar",
+          "nl": "Datapunten veranderen van type, ingangsnamen verhuizen",
+          "fr": "Des points de données changent de type, les noms d'entrée déménagent",
+          "it": "I punti dati cambiano tipo, i nomi degli ingressi si spostano",
+          "es": "Los puntos de datos cambian de tipo, los nombres de entrada se mueven",
+          "pl": "Punkty danych zmieniają typ, nazwy wejść się przenoszą",
+          "uk": "Точки даних змінюють тип, назви входів переносяться",
+          "zh-cn": "数据点类型改变，输入名称迁移"
+        },
+        "text": {
+          "en": "sound.adaptiveDrc becomes a switch (\"Auto\" → true). On MusicCast-only devices sleep becomes text (30 → \"30 min\"). advanced.inputNames.* go: the names are the input dropdown's labels.",
+          "de": "sound.adaptiveDrc wird ein Schalter (\"Auto\" → true). Bei reinen MusicCast-Geräten wird sleep Text (30 → \"30 min\"). advanced.inputNames.* entfallen: die Namen stehen im Eingangs-Dropdown.",
+          "ru": "sound.adaptiveDrc становится переключателем (\"Auto\" → true). На устройствах только с MusicCast sleep становится текстом (30 → \"30 min\"). advanced.inputNames.* удалены: имена — в списке входов.",
+          "pt": "sound.adaptiveDrc passa a interruptor (\"Auto\" → true). Em aparelhos só MusicCast, sleep passa a texto (30 → \"30 min\"). advanced.inputNames.* saem: os nomes ficam na lista de entradas.",
+          "nl": "sound.adaptiveDrc wordt een schakelaar (\"Auto\" → true). Op apparaten met alleen MusicCast wordt sleep tekst (30 → \"30 min\"). advanced.inputNames.* vervallen: de namen staan in de ingangslijst.",
+          "fr": "sound.adaptiveDrc devient un interrupteur (\"Auto\" → true). Sur les appareils MusicCast seul, sleep devient du texte (30 → \"30 min\"). advanced.inputNames.* disparaissent : les noms sont dans la liste.",
+          "it": "sound.adaptiveDrc diventa un interruttore (\"Auto\" → true). Sui dispositivi solo MusicCast sleep diventa testo (30 → \"30 min\"). advanced.inputNames.* spariscono: i nomi sono nell'elenco ingressi.",
+          "es": "sound.adaptiveDrc pasa a interruptor (\"Auto\" → true). En equipos solo MusicCast, sleep pasa a texto (30 → \"30 min\"). advanced.inputNames.* se eliminan: los nombres están en la lista de entradas.",
+          "pl": "sound.adaptiveDrc staje się przełącznikiem (\"Auto\" → true). Na urządzeniach tylko z MusicCast sleep staje się tekstem (30 → \"30 min\"). advanced.inputNames.* znikają: nazwy są na liście wejść.",
+          "uk": "sound.adaptiveDrc стає перемикачем (\"Auto\" → true). На пристроях лише з MusicCast sleep стає текстом (30 → \"30 min\"). advanced.inputNames.* видалено: назви — у списку входів.",
+          "zh-cn": "sound.adaptiveDrc 变为开关（\"Auto\" → true）。仅支持 MusicCast 的设备上 sleep 变为文本（30 → \"30 min\"）。advanced.inputNames.* 被移除：名称显示在输入下拉列表中。"
+        },
+        "link": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Upgrade",
+        "linkText": {
+          "en": "Details",
+          "de": "Details",
+          "ru": "Подробнее",
+          "pt": "Detalhes",
+          "nl": "Details",
+          "fr": "Détails",
+          "it": "Dettagli",
+          "es": "Detalles",
+          "pl": "Szczegóły",
+          "uk": "Докладніше",
+          "zh-cn": "详情"
+        },
+        "level": "warn",
+        "buttons": [
+          "agree",
+          "cancel"
+        ]
       }
     ]
   },
