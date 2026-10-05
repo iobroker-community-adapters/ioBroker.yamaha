@@ -1,4 +1,9 @@
-import { PLAYER_DISPLAY_STATES } from "../catalog/player-block";
+import {
+  PLAYER_DISPLAY_STATES,
+  PLAYER_KEY_STATES,
+  playerBlockObjects,
+  type PlayerBlockState,
+} from "../catalog/player-block";
 import { selfMap } from "../catalog/value-coerce";
 import { MUSICCAST_INPUT_NAMES } from "../catalog/musiccast-vocabulary";
 import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
@@ -12,19 +17,14 @@ import { ALARM_DAYS, DAB_FIELDS } from "./command-mapper";
 /** The zones the adapter maps: main flat, zone2-4 each under multiroom. */
 const ZONES: Array<{ id: string; prefix: string }> = YXC_ZONE_IDS.map(id => ({ id, prefix: zonePrefix(id) }));
 
-/** The "now playing" block's states (v2.0.0, one per zone): read metadata + transport buttons. */
-const PLAYER_STATES: Array<{
-  state: string;
-  common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
-}> = [
+/**
+ * The "now playing" block's states (v2.0.0, one per zone): the shared display states, the transport keys of the one
+ * key table, and MusicCast's two toggles — built by the one block builder (`catalog/player-block.ts`; review
+ * 2026-10-05, E: the five buttons stood here a second time).
+ */
+const PLAYER_STATES: readonly PlayerBlockState[] = [
   ...PLAYER_DISPLAY_STATES,
-  // Transport buttons carry the type-detector media-player roles so a MusicCast player's
-  // controls are recognised as play/pause/stop/next/prev, not generic buttons.
-  { state: "play", common: { nameKey: "play", type: "boolean", role: "button.play", read: false, write: true } },
-  { state: "pause", common: { nameKey: "pause", type: "boolean", role: "button.pause", read: false, write: true } },
-  { state: "stop", common: { nameKey: "stop", type: "boolean", role: "button.stop", read: false, write: true } },
-  { state: "next", common: { nameKey: "next", type: "boolean", role: "button.next", read: false, write: true } },
-  { state: "prev", common: { nameKey: "previous", type: "boolean", role: "button.prev", read: false, write: true } },
+  ...PLAYER_KEY_STATES,
   {
     state: "repeatToggle",
     common: {
@@ -48,6 +48,9 @@ const PLAYER_STATES: Array<{
     },
   },
 ];
+
+/** Repeat and shuffle are written directly where the network player takes setRepeat/setShuffle (API 1.19+, C37). */
+const SETTABLE_MODES: ReadonlySet<string> = new Set(["repeat", "shuffle"]);
 
 /**
  * An action datapoint: a slot number to act on (store, clear, play — a readable `level` that keeps
@@ -109,30 +112,6 @@ export function playerZones(capabilities: YxcCapabilities): string[] {
   return capabilities.zones
     .filter(zone => !types || zone.inputs.some(input => PLAYER_SOURCES.includes(types[input] ?? "")))
     .map(zone => zone.id);
-}
-
-/**
- * Append a zone's "now playing" block (channel + the shared player states) under a
- * dotted prefix — once for the main zone and once per further zone.
- *
- * @param objects the object list to append to
- * @param prefix the channel/state prefix (`player`, `multiroom.zone2.player`)
- * @param settableModes whether repeat and shuffle are written directly (API 1.19+ network player)
- */
-function pushPlayerBlock(objects: ObjectDef[], prefix: string, settableModes: boolean): void {
-  // Named and explained from the one channel table — the hand-written name here had no explanation,
-  // and MusicCast owns the folder wherever it answers (audit 2026-09-29, A26).
-  objects.push({ id: prefix, type: "channel", common: channelCommon("player") });
-  for (const player of PLAYER_STATES) {
-    objects.push({
-      id: `${prefix}.${player.state}`,
-      type: "state",
-      common: {
-        ...keyedCommon(player.common),
-        ...(settableModes && (player.state === "repeat" || player.state === "shuffle") ? { write: true } : {}),
-      },
-    });
-  }
 }
 
 /** One `range_step` entry as a zone declares it. */
@@ -620,7 +599,9 @@ export function mapYxcToObjects(
   const settableModes =
     capabilities.media.includes("netusb") && capabilities.apiVersion !== undefined && capabilities.apiVersion >= 1.19;
   for (const zoneId of playerZones(capabilities)) {
-    pushPlayerBlock(objects, `${zonePrefix(zoneId)}player`, settableModes);
+    objects.push(
+      ...playerBlockObjects(`${zonePrefix(zoneId)}player`, PLAYER_STATES, settableModes ? SETTABLE_MODES : undefined),
+    );
   }
   if (capabilities.media.includes("netusb")) {
     objects.push({ id: "player.netPlayer", type: "channel", common: channelCommon("netPlayer") });
