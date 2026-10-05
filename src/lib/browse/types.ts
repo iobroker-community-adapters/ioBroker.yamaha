@@ -7,6 +7,13 @@
  * path auto-walk for scripts — the predecessor adapter's proven VIS workflow.
  */
 
+/**
+ * The lines of one menu window — eight on every protocol (YNCA `LINE1…LINE8`, XML `Line_1…Line_8`, and the window
+ * MusicCast is asked for). The pages of a list are aligned to it: MusicCast takes a list index only in multiples of
+ * eight (YXC Basic, `getListInfo`).
+ */
+export const BROWSE_LINES = 8;
+
 /** The kind of a menu row, as the device reports it. */
 export type BrowseRowKind = "folder" | "item" | "unplayable" | "unselectable";
 
@@ -40,10 +47,11 @@ export interface BrowseWindow {
    * official YNCA command list defines CURRLINE as ("absolute position number of current
    * cursor position"), and the XML `Current_Line` matches it. It is NOT necessarily the
    * window's first line: after stepping back out of a submenu the cursor sits on the row
-   * that was entered. The YXC driver has a real window index and reports that.
+   * that was entered. The YXC driver has a real window index and reports that. Either way it
+   * lies on the page the window shows, which is all the engine reads from it.
    */
   currentLine: number;
-  /** The visible rows (up to 8). */
+  /** The visible rows (up to {@link BROWSE_LINES}). */
   rows: BrowseRow[];
 }
 

@@ -23,14 +23,13 @@ export interface SceneListEntry {
   title: string;
 }
 
-/** The probe-memory key the YNCA controller keeps its never-changing answers under (input and scene names). */
-
 /** The probe-memory shape of the YNCA static values: subunit → function → answer. */
 type YncaStatics = Record<string, Record<string, string>>;
 
 /**
  * The scenes a YNCA zone declares, read from its `SCENExNAME` answers: MAIN up to twelve, a zone
- * four (official lists). The one reader for the YNCA controller and for {@link knownScenes}.
+ * four (official lists). The one reader for the YNCA controller and for {@link knownScenes}. A name
+ * of blanks names no scene, like an empty one; a name is trimmed like every text the adapter shows.
  *
  * @param answers the zone subunit's function → answer map
  * @param subunit the zone subunit (MAIN, ZONE2 …)
@@ -40,8 +39,8 @@ export function yncaSceneTitles(answers: Record<string, string> | undefined, sub
   const scenes: SceneListEntry[] = [];
   for (let n = 1; n <= (subunit === "MAIN" ? 12 : 4); n++) {
     const title = answers?.[`SCENE${n}NAME`];
-    if (typeof title === "string" && title.length > 0) {
-      scenes.push({ num: n, title });
+    if (typeof title === "string" && title.trim().length > 0) {
+      scenes.push({ num: n, title: title.trim() });
     }
   }
   return scenes;
@@ -53,14 +52,11 @@ export function yncaSceneTitles(answers: Record<string, string> | undefined, sub
  * each zone's four (`ZONE2:SCENE1NAME` …), so a MusicCast-owned zone recall resolves a title only
  * YNCA knows (audit 2026-09-29, B16).
  *
- * @param memory the device's shared probe memory
+ * @param memory the device's shared probe memory (every controller holds one — `ControllerDepsBase`)
  * @param zoneKey the zone (`main`, `zone2`, …)
  * @returns the scenes with titles, empty when no transport reported any
  */
-export function knownScenes(memory: ProbeMemory | undefined, zoneKey: string): SceneListEntry[] {
-  if (!memory) {
-    return [];
-  }
+export function knownScenes(memory: ProbeMemory, zoneKey: string): SceneListEntry[] {
   const xml = memory.remembered<string>(xmlScenesKey(zoneKey));
   if (typeof xml === "string" && xml.length > 0) {
     // Parsed lazily from the remembered raw declaration — ONE stored form, one parser.
@@ -87,11 +83,7 @@ export function knownScenes(memory: ProbeMemory | undefined, zoneKey: string): S
  * @param zoneKey the zone (`main`, `zone2`, …)
  * @returns the scene number, or undefined when unresolvable
  */
-export function resolveSceneNumber(
-  value: unknown,
-  memory: ProbeMemory | undefined,
-  zoneKey: string,
-): number | undefined {
+export function resolveSceneNumber(value: unknown, memory: ProbeMemory, zoneKey: string): number | undefined {
   return sceneNumber(value, knownScenes(memory, zoneKey));
 }
 
@@ -118,14 +110,30 @@ export function sceneNumber(value: unknown, scenes: readonly SceneListEntry[]): 
 }
 
 /**
+ * The labels of a scene-recall dropdown — ONE rule for the three protocols: the scene's title, trimmed, or its
+ * number where the device declares the scene without one. The RX-V6A declares all eight XML titles empty, and its
+ * dropdown offered eight blank entries (review 2026-10-05, A23).
+ *
+ * @param scenes the scenes the zone declares
+ * @returns scene number → label, the `common.states` of the recall datapoint
+ */
+export function sceneRecallStates(scenes: readonly SceneListEntry[]): Record<string, string> {
+  return Object.fromEntries(scenes.map(scene => [scene.num, scene.title.trim() || String(scene.num)]));
+}
+
+/**
  * The scene list of one scene channel as datapoints: the JSON list (for widgets that render every
  * scene at once) and, beside it, one title datapoint per scene — a Blockly user reads "scene 3 is
  * called …" as a value, never by parsing JSON (fleet rule 2026-09-28; audit 2026-09-29, D8). Shared
  * by all three transports, so the ids and texts cannot drift between them.
  *
+ * A scene the device declares without a title has no title datapoint — an empty text is no value, and the
+ * RX-V6A stood with eight empty ones (review 2026-10-05, A23). The list still names the scene (its title
+ * empty), and the recall dropdown labels it with its number ({@link sceneRecallStates}).
+ *
  * @param channel the scene channel id (`scene`, `multiroom.zone2.scene`)
  * @param scenes the scenes the channel declares
- * @returns the objects to create (the list, then `title<N>` per scene) and their values
+ * @returns the objects to create (the list, then `title<N>` per titled scene) and their values
  */
 export function sceneListSurface(
   channel: string,
@@ -145,8 +153,12 @@ export function sceneListSurface(
       },
     },
   ];
-  const values = [{ id: `${channel}.list`, value: JSON.stringify(scenes) }];
-  for (const scene of scenes) {
+  const listed = scenes.map(scene => ({ num: scene.num, title: scene.title.trim() }));
+  const values = [{ id: `${channel}.list`, value: JSON.stringify(listed) }];
+  for (const scene of listed) {
+    if (scene.title === "") {
+      continue;
+    }
     objects.push({
       id: `${channel}.title${scene.num}`,
       type: "state",
