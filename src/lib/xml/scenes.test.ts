@@ -17,7 +17,7 @@ const SCENES = "<Scene><Scene_Sel_Item>GetParam</Scene_Sel_Item></Scene>";
 const INPUTS = "<Input><Input_Sel_Item>GetParam</Input_Sel_Item></Input>";
 
 describe("a scene without a title (review 2026-10-05, A23)", () => {
-  test("the RX-V6A's blank titles: numbers as labels, no empty title datapoints, no title-less list", async () => {
+  test("the RX-V6A's blank titles: every scene stays, numbers as labels, no empty title datapoints", async () => {
     expect(parseSceneList(RX_V6A["Main_Zone/Scene"]).map(scene => scene.title)).toEqual(Array(8).fill(""));
     const h = xmlHarness({ Main_Zone: { power: true }, Zone_2: { power: false } });
     h.client.xmlAnswers[`Main_Zone|${SCENES}`] = RX_V6A["Main_Zone/Scene"];
@@ -26,8 +26,11 @@ describe("a scene without a title (review 2026-10-05, A23)", () => {
     for (const prefix of ["living.", "living.multiroom.zone2."]) {
       const recall = h.defs.get(`${prefix}scene.recall`);
       expect(recall?.common.states).toEqual({ 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8" });
+      expect(recall?.liveLabels).toBe(true);
       expect(h.objects.filter(id => id.startsWith(`${prefix}scene.title`))).toEqual([]);
-      expect(h.objects).not.toContain(`${prefix}scene.list`);
+      // The list still names every declared scene — a blank title is just no title.
+      const list = h.acks.find(ack => ack.id === `${prefix}scene.list`);
+      expect(JSON.parse(String(list?.value))).toHaveLength(8);
     }
   });
 
@@ -41,7 +44,13 @@ describe("a scene without a title (review 2026-10-05, A23)", () => {
     await h.controller.start();
     expect(h.defs.get("living.scene.recall")?.common.states).toEqual({ 1: "Movie", 2: "2" });
     expect(h.objects.filter(id => id.startsWith("living.scene.title"))).toEqual(["living.scene.title1"]);
-    expect(h.acks).toContainEqual({ id: "living.scene.list", value: JSON.stringify([{ num: 1, title: "Movie" }]) });
+    expect(h.acks).toContainEqual({
+      id: "living.scene.list",
+      value: JSON.stringify([
+        { num: 1, title: "Movie" },
+        { num: 2, title: "" },
+      ]),
+    });
     // The unnamed scene is still a scene: recalled by its number.
     h.client.calls.length = 0;
     await expect(Promise.resolve(h.controller.handleWrite("scene.recall", 2))).resolves.toBe("sent");

@@ -1,6 +1,5 @@
 import { absoluteDeviceUrl, withAlbumArtId } from "../catalog/device-url";
-import { PLAYER_CLEAR, PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE } from "../catalog/player-block";
-import { keyedCommon } from "../catalog/types";
+import { PLAYER_CLEAR, PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE, playerStateObject } from "../catalog/player-block";
 import { errText } from "../err-text";
 import type { XmlControllerContext } from "./controller-context";
 import { parsePlayInfo, type XmlPlayInfo } from "./protocol";
@@ -94,7 +93,7 @@ export class XmlPlayerBlocks {
         const id = `${prefix}.${state}`;
         if (!this.built.has(id)) {
           await ctx.ensureChannels(id);
-          await ctx.deps.upsertObject(`${ctx.deviceId}.${id}`, { id, type: "state", common: keyedCommon(def.common) });
+          await ctx.deps.upsertObject(`${ctx.deviceId}.${id}`, playerStateObject(prefix, def));
           this.built.add(id);
           ctx.markWritable(id, false);
         }

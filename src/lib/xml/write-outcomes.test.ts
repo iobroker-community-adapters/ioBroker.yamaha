@@ -75,15 +75,17 @@ describe("every XML write says what became of it (review 2026-10-05, A3)", () =>
     await settle();
   });
 
-  test("the menu runs in the browse engine's own queue: its outcome is unclear by design, never re-sent elsewhere", async () => {
+  test("the menu and the main zone's remote answer with the browse engine's own outcome", async () => {
     const h = xmlHarness({ Main_Zone: { power: true } });
     h.client.xmlAnswers["NET_RADIO|<List_Info>GetParam</List_Info>"] =
       '<YAMAHA_AV rsp="GET" RC="0"><NET_RADIO><List_Info><Menu_Status>Ready</Menu_Status><Menu_Layer>1</Menu_Layer>' +
       "<Menu_Name>NET RADIO</Menu_Name><Current_List><Line_1><Txt>Bookmarks</Txt><Attribute>Container</Attribute></Line_1>" +
       "</Current_List><Cursor_Position><Current_Line>1</Current_Line><Max_Line>1</Max_Line></Cursor_Position></List_Info></NET_RADIO></YAMAHA_AV>";
     await h.controller.start();
-    expect(h.controller.handleWrite("player.browse.source", "netRadio")).toBe("unclear");
-    expect(h.controller.handleWrite("remote.cursor", "up")).toBe("unclear");
+    expect(h.controller.handleWrite("player.browse.source", "netRadio")).toBe("sent");
+    expect(h.controller.handleWrite("player.browse.source", "bluetooth")).toBe("unavailable");
+    expect(h.controller.handleWrite("remote.cursor", "up")).toBe("sent");
+    expect(h.controller.handleWrite("remote.cursor", "sideways")).toBe("unavailable");
     await settle();
   });
 });

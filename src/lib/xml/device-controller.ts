@@ -28,8 +28,8 @@ import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
 import { XmlBrowseDriver } from "../browse/xml-browse-driver";
 import { decideBrowseSources } from "./browse-probe";
-import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
-import { splitZone, ZONE_PREFIX } from "../catalog/zones";
+import { sceneListSurface, sceneNumber, sceneRecallStates } from "../catalog/scene-titles";
+import { splitZone } from "../catalog/zones";
 import { XML_ZONES, type XmlZone } from "./zones";
 import { MEMORY_KEY, xmlInputsKey, xmlScenesKey, xmlStatusFieldsKey } from "../lifecycle/memory-keys";
 import { HttpStatusError } from "../util";
@@ -131,26 +131,19 @@ export class XmlDeviceController {
         serves: stateId => this.readOnlyStates.has(stateId),
         write: (stateId, value) => this.dropWrite(stateId, value, "this device declares no write for it"),
       },
-      // The main zone's remote and the menu go to the browse engine, which runs each operation in its own queue and
-      // reports a failure itself: nothing can be said here, so nothing is sent again elsewhere — a menu step or a key
-      // sent twice would act twice.
+      // The main zone's remote and the menu go to the browse engine, which says what became of each write (a drop as
+      // "unavailable", an operation it started as "unclear" — a menu step sent twice would act twice).
       {
         serves: stateId => stateId.startsWith("remote.") && this.browseEngine !== undefined,
-        write: (stateId, value) => {
-          this.browseEngine?.handleRemoteWrite(stateId, value);
-          return "unclear";
-        },
+        write: (stateId, value) => this.browseEngine!.handleRemoteWrite(stateId, value),
       },
       declared.zoneCommands,
       {
         serves: stateId => stateId.startsWith("player.browse."),
-        write: (stateId, value) => {
-          if (!this.browseEngine) {
-            return this.dropWrite(stateId, value, "this device proved no menu");
-          }
-          this.browseEngine.handleWrite(stateId, value);
-          return "unclear";
-        },
+        write: (stateId, value) =>
+          this.browseEngine
+            ? this.browseEngine.handleWrite(stateId, value)
+            : this.dropWrite(stateId, value, "this device proved no menu"),
       },
       // Scenes and the classic tuner are device-declared (not in the static catalog).
       {
@@ -471,18 +464,14 @@ export class XmlDeviceController {
           step: 1,
           // The declared titles as the dropdown, so the picker shows "Movie Viewing", not a bare number — and a
           // scene without a title shows its number, never an empty label (review 2026-10-05, A23).
-          states: Object.fromEntries(scenes.map(scene => [scene.num, scene.title || String(scene.num)])),
+          states: sceneRecallStates(scenes),
         },
       });
       // Visualizations read titles as VALUES (button captions — the #613 reporter's setup), and a
       // dropdown's labels are not readable: the list for widgets, a title datapoint per scene for
-      // everything else (D8). Only scenes that HAVE a title: a blank one gave an empty title datapoint, and a zone
-      // without any titles has no list — as on YNCA, whose list holds the named scenes only (A23).
-      const titled = scenes.filter(scene => scene.title.length > 0);
-      if (titled.length === 0) {
-        continue;
-      }
-      const surface = sceneListSurface(channelId, titled);
+      // everything else (D8). Every declared scene stays — a blank title is just no title: the list names
+      // the scene, and no empty title datapoint is built for it (A23, `sceneListSurface`).
+      const surface = sceneListSurface(channelId, scenes);
       for (const object of surface.objects) {
         await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
       }
@@ -752,8 +741,7 @@ export class XmlDeviceController {
       const keyed = keyedCommon(entry.common);
       // The role of the zone folder the datapoint sits in: a zone's, or Zone B's — which XML addresses through the
       // main zone but the tree shows as a zone like any other (review 2026-10-05, A27).
-      const folder = ZONE_PREFIX.exec(stateId)?.[0] ?? "";
-      const common: ObjectDef["common"] = { ...keyed, role: zoneRole(keyed.role, folder) };
+      const common: ObjectDef["common"] = { ...keyed, role: zoneRole(keyed.role, stateId) };
       // The device's own lists become the dropdowns — DECLARED, so the coordinator puts them on
       // the YNCA-owned datapoint too (#619): the zone's `Input_Sel_Item` list, and from the
       // device description the sound programs (main zone), the sleep steps and the Adaptive

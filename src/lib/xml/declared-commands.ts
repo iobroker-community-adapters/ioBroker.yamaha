@@ -1,6 +1,6 @@
 import { remoteObjectDefs } from "../browse/objects";
 import { MENU_WIRE, RETURN_CURSOR_WIRE, wireFor } from "../browse/types";
-import { TRANSPORT_KEYS } from "../catalog/media-state";
+import { PLAYER_KEY_STATES, playerStateObject } from "../catalog/player-block";
 import { coerceBool, textWriteProblem } from "../catalog/value-coerce";
 import { splitZone } from "../catalog/zones";
 import { errText } from "../err-text";
@@ -212,14 +212,10 @@ export class XmlDeclaredCommands {
         continue;
       }
       await ctx.ensureChannels(`${zone.prefix}player.play`);
-      for (const [key, { nameKey, role }] of Object.entries(TRANSPORT_KEYS)) {
-        const stateId = `${zone.prefix}player.${key}`;
-        await ctx.deps.upsertObject(`${ctx.deviceId}.${stateId}`, {
-          id: stateId,
-          type: "state",
-          common: { name: tName(nameKey), type: "boolean", role, read: false, write: true },
-        });
-        this.markCreated(stateId);
+      for (const key of PLAYER_KEY_STATES) {
+        const object = playerStateObject(`${zone.prefix}player`, key);
+        await ctx.deps.upsertObject(`${ctx.deviceId}.${object.id}`, object);
+        this.markCreated(object.id);
       }
     }
   }
