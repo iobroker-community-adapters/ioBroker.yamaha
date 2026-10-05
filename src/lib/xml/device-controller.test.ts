@@ -1126,12 +1126,11 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
       probeMemory: memory,
     });
     await controller.start();
-    expect(memory.remembered("xmlBrowseSources:v2")).toEqual([
-      "NET_USB/NET RADIO",
-      "NET_USB/PC/MCX",
-      "NET_USB/USB",
-      "iPod",
-    ]);
+    // One verdict per source (review 2026-10-05, A21): the proven menus and the ones the model does not have.
+    expect(memory.remembered("xmlBrowseSources:v2")).toEqual({
+      proven: ["NET_USB/NET RADIO", "NET_USB/PC/MCX", "NET_USB/USB", "iPod"],
+      absent: ["NET_RADIO", "SERVER", "USB", "iPod_USB", "JUKE", "Napster", "Pandora", "Rhapsody", "SiriusXM"],
+    });
     expect(objects).toContain("living.player.browse.source");
     // One probe per menu element — the three network inputs share NET_USB.
     expect(client.calls.filter(c => c.zone === "NET_USB")).toHaveLength(1);
@@ -1154,10 +1153,29 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
       probeMemory: memory,
     });
     await controller.start();
-    expect(memory.remembered("xmlBrowseSources:v2")).toEqual([]);
+    expect(memory.remembered("xmlBrowseSources:v2")).toEqual({
+      proven: [],
+      absent: [
+        "NET_RADIO",
+        "SERVER",
+        "USB",
+        "NET_USB/NET RADIO",
+        "NET_USB/PC/MCX",
+        "NET_USB/USB",
+        "iPod",
+        "iPod_USB",
+        "JUKE",
+        "Napster",
+        "Pandora",
+        "Rhapsody",
+        "SiriusXM",
+      ],
+    });
   });
 
-  test("a transient failure during the menu probe leaves the menus un-remembered, not 'none' for good", async () => {
+  // Review 2026-10-05, A21: one verdict per source — the timed-out menu stays undecided and is asked again, the
+  // definite answers of the others are remembered (they were thrown away with it before).
+  test("a transient failure during the menu probe leaves that menu undecided, not 'none' for good", async () => {
     const memory = new ProbeMemory();
     const client = new FakeClient({ Main_Zone: { power: true } });
     client.getXml = (element: string, inner: string): Promise<string> => {
@@ -1184,9 +1202,12 @@ describe("XmlDeviceController probe memory verdicts (audit 2026-09-02)", () => {
     });
     await controller.start();
     expect(objects.some(id => id.includes("player.browse"))).toBe(false);
-    // The NET_RADIO menu could not be asked — so nothing is remembered and the next
-    // connect probes again, instead of "this device has no menus" standing for good.
-    expect(memory.remembered("xmlBrowseSources:v2")).toBeUndefined();
+    // The NET_RADIO menu could not be asked — it is in neither list, so the next connect asks it again,
+    // instead of "this device has no menus" standing for good.
+    const verdicts = memory.remembered<{ proven: string[]; absent: string[] }>("xmlBrowseSources:v2");
+    expect(verdicts?.proven).toEqual([]);
+    expect(verdicts?.absent).not.toContain("NET_RADIO");
+    expect(verdicts?.absent).toContain("SERVER");
   });
 });
 

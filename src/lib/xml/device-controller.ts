@@ -24,7 +24,8 @@ import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
-import { provesMenu, XML_BROWSE_SOURCES, XmlBrowseDriver } from "../browse/xml-browse-driver";
+import { XmlBrowseDriver } from "../browse/xml-browse-driver";
+import { decideBrowseSources } from "./browse-probe";
 import { sceneListSurface, sceneNumber } from "../catalog/scene-titles";
 import { splitZone } from "../catalog/zones";
 import { XML_ZONES, type XmlZone } from "./zones";
@@ -501,42 +502,13 @@ export class XmlDeviceController {
   private async setupBrowse(): Promise<void> {
     const gate = this.deps.gate;
     const delay = (ms: number): Promise<void> => gate.delay(ms);
-    // Which sources have a menu is a property of the MODEL, not of this connection — ask
-    // once per device instead of one request per menu element (each up to five seconds on a
-    // receiver that has no menus at all) on every single reconnect.
-    // One request per menu element — the 2008 generation's three network inputs share one NET_USB
-    // menu (D5). The proven sources are remembered by id.
-    const probe = async (): Promise<string[]> => {
-      const menus = [
-        ...new Map(XML_BROWSE_SOURCES.map(source => [`${source.element}|${source.list}`, source])).values(),
-      ];
-      const proven = new Set<string>();
-      await Promise.all(
-        menus.map(async menu => {
-          // RC 3/4 or a transport error throws — "no menus" must not be remembered for good.
-          const body = await definiteXmlBody(
-            () => this.deps.client.getXml(menu.element, `<${menu.list}>GetParam</${menu.list}>`),
-            `${menu.element} ${menu.list} probe`,
-          );
-          if (provesMenu(menu, body)) {
-            proven.add(`${menu.element}|${menu.list}`);
-          }
-        }),
-      );
-      return XML_BROWSE_SOURCES.filter(source => proven.has(`${source.element}|${source.list}`)).map(
-        source => source.id,
-      );
-    };
-    let available: Set<string>;
-    try {
-      available = new Set(
-        // `:v2` since the answers are source ids (2026-09-24, D5) — the old key held keys.
-        await this.deps.probeMemory.once(MEMORY_KEY.xmlBrowseSources, probe),
-      );
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: browse probe failed, asking again on the next connect (${errText(e)})`);
-      return;
-    }
+    // One verdict per source, remembered — a "not now" from one service no longer hides every other menu (A21).
+    const available = await decideBrowseSources({
+      deviceId: this.deviceId,
+      getXml: (element, inner) => this.deps.client.getXml(element, inner),
+      probeMemory: this.deps.probeMemory,
+      log: this.deps.log,
+    });
     if (available.size === 0) {
       return;
     }
