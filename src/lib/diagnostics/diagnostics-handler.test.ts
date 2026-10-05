@@ -16,22 +16,27 @@ import { diagnosticsFileName } from "./report";
  * @param options.devices the running devices
  * @param options.objects the objects by id
  * @param options.states the state values by id
+ * @param options.bulk whether it offers the bulk state read
  */
 function makeHost(
   options: {
     devices?: DiagnosticsDeviceState[];
     objects?: Record<string, ioBroker.Object>;
     states?: Record<string, unknown>;
+    bulk?: boolean;
   } = {},
-): DiagnosticsHost & { lines: string[] } {
+): DiagnosticsHost & { lines: string[]; reads: { one: string[]; bulk: Array<string | string[]> } } {
   const objects = options.objects ?? {};
   const states = options.states ?? {};
   const lines: string[] = [];
+  const reads = { one: [] as string[], bulk: [] as Array<string | string[]> };
   const ring = new LogRing();
   ring.add("info", "rx-v6a-2b3c: ready (YNCA, MusicCast)");
   ring.add("debug", "wx-030-f504: swept");
+  const state = (id: string): ioBroker.State => ({ val: states[id], ack: true }) as ioBroker.State;
   return {
     lines,
+    reads,
     namespace: "yamaha.0",
     version: "3.3.0",
     hostName: "iobroker",
@@ -41,8 +46,26 @@ function makeHost(
     pushPort: () => ({ listening: true, blocked: false }),
     devices: () => options.devices ?? [],
     getForeignObjectAsync: id => Promise.resolve(id in objects ? structuredClone(objects[id]) : null),
-    getForeignStateAsync: id =>
-      Promise.resolve(id in states ? ({ val: states[id], ack: true } as ioBroker.State) : null),
+    getForeignStateAsync: id => {
+      reads.one.push(id);
+      return Promise.resolve(id in states ? state(id) : null);
+    },
+    ...(options.bulk
+      ? {
+          getForeignStatesAsync: (pattern: string | string[]) => {
+            reads.bulk.push(pattern);
+            const wanted = (id: string): boolean =>
+              Array.isArray(pattern) ? pattern.includes(id) : id.startsWith(pattern.replace(/\*$/, ""));
+            return Promise.resolve(
+              Object.fromEntries(
+                Object.keys(states)
+                  .filter(wanted)
+                  .map(id => [id, state(id)]),
+              ),
+            );
+          },
+        }
+      : {}),
     getObjectViewAsync: (_design, _search, params) =>
       Promise.resolve({
         rows: Object.entries(objects)
@@ -144,6 +167,38 @@ describe("DiagnosticsHandler", () => {
     expect(answer.content).not.toContain("kueche");
     expect(answer.content).not.toContain("Küche");
     expect(answer.content).toContain("device-1: no reachable transport");
+  });
+
+  // Review 2026-10-05, B8: one state read per datapoint — 900 round trips for a three-protocol receiver.
+  it("reads the device's values in one bulk read where the adapter offers it", async () => {
+    const objects: Record<string, ioBroker.Object> = {
+      "system.adapter.musiccast.0": instance(true),
+    };
+    const states: Record<string, unknown> = {
+      "system.adapter.musiccast.0.alive": true,
+      "yamaha.0.rx-v6a-2b3c.info.transports.yxc": true,
+    };
+    for (let i = 0; i < 50; i++) {
+      objects[`yamaha.0.rx-v6a-2b3c.dp${i}`] = { common: { type: "number" } } as unknown as ioBroker.Object;
+      states[`yamaha.0.rx-v6a-2b3c.dp${i}`] = i;
+    }
+    const host = makeHost({ devices: [device()], objects, states, bulk: true });
+    const answer = (await new DiagnosticsHandler(host).export("rx-v6a-2b3c")) as { content: string };
+    const report = JSON.parse(answer.content) as {
+      objectTree: Array<{ id: string; val: unknown }>;
+      device: { transports: Record<string, boolean> };
+      environment: { musiccast: { status: string } };
+    };
+    expect(host.reads.one).toEqual([]);
+    // Two reads, running side by side: the device subtree and the musiccast instances' `alive`.
+    expect(host.reads.bulk).toHaveLength(2);
+    expect(host.reads.bulk).toEqual(
+      expect.arrayContaining(["yamaha.0.rx-v6a-2b3c.*", ["system.adapter.musiccast.0.alive"]]),
+    );
+    expect(report.objectTree).toHaveLength(50);
+    expect(report.objectTree.find(entry => entry.id === "dp7")?.val).toBe(7);
+    expect(report.device.transports).toEqual({ ynca: false, yxc: true, xml: false });
+    expect(report.environment.musiccast.status).toBe("running");
   });
 
   it("says when the device is not connected instead of failing", async () => {

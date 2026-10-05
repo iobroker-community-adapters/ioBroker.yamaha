@@ -10,6 +10,9 @@ import {
   type ObjectTreeEntry,
 } from "./report";
 
+/** The protocol flags a device carries under `info.transports`. */
+const TRANSPORTS = ["ynca", "yxc", "xml"] as const;
+
 /** Shortest gap after a finished report before the next one of the same device — a double click is not two sweeps. */
 export const DIAGNOSTICS_COOLDOWN_MS = 2_000;
 
@@ -79,6 +82,11 @@ export interface DiagnosticsHost {
   getForeignObjectAsync(id: string): Promise<ioBroker.Object | null | undefined>;
   /** Read one state. */
   getForeignStateAsync(id: string): Promise<ioBroker.State | null | undefined>;
+  /**
+   * Read every state a pattern (or a list of ids) names, in one round trip. Optional: without it the
+   * handler reads state by state.
+   */
+  getForeignStatesAsync?(pattern: string | string[]): Promise<Record<string, ioBroker.State | null | undefined>>;
   /** Read a range of objects. */
   getObjectViewAsync(
     design: "system",
@@ -177,11 +185,10 @@ export class DiagnosticsHandler {
         connectionNote = `live read failed: ${errText(e)}`;
       }
       const prefix = `${this.host.namespace}.${deviceId}`;
-      const [environment, deviceObject, objectTree, transports] = await Promise.all([
+      const [environment, deviceObject, { objectTree, transports }] = await Promise.all([
         this.environment(devices),
         this.host.getForeignObjectAsync(prefix).catch(() => null),
-        this.objectTree(prefix),
-        this.transports(prefix),
+        this.deviceTree(prefix),
       ]);
       const others = devices.filter(d => d.id !== deviceId).flatMap(d => [d.id, d.ip]);
       const report = diagnosticsExport({
@@ -256,19 +263,14 @@ export class DiagnosticsHandler {
     const view = await this.host
       .getObjectViewAsync("system", "instance", { startkey: start, endkey: `${start}\u9999` })
       .catch(() => null);
-    const instances: InstanceInfo[] = [];
-    for (const row of view?.rows ?? []) {
-      const number = row.id.slice(start.length);
-      if (!/^\d+$/.test(number)) {
-        continue;
-      }
-      const alive = await this.host.getForeignStateAsync(`${row.id}.alive`).catch(() => null);
-      instances.push({
-        instance: `musiccast.${number}`,
-        enabled: (row.value?.common as { enabled?: unknown } | undefined)?.enabled === true,
-        alive: alive?.val === true,
-      });
-    }
+    const rows = (view?.rows ?? []).filter(row => /^\d+$/.test(row.id.slice(start.length)));
+    const aliveIds = rows.map(row => `${row.id}.alive`);
+    const alive = aliveIds.length > 0 ? await this.readStates(aliveIds, aliveIds) : {};
+    const instances: InstanceInfo[] = rows.map(row => ({
+      instance: `musiccast.${row.id.slice(start.length)}`,
+      enabled: (row.value?.common as { enabled?: unknown } | undefined)?.enabled === true,
+      alive: alive[`${row.id}.alive`]?.val === true,
+    }));
     const installed = Boolean(adapter) || instances.length > 0;
     return {
       status: musiccastStatus(installed, instances),
@@ -279,38 +281,28 @@ export class DiagnosticsHandler {
   }
 
   /**
-   * The device's protocol flags (`info.transports.*`) as the card shows them.
-   *
-   * @param prefix the device's full id
-   * @returns transport → connected
-   */
-  private async transports(prefix: string): Promise<Record<string, boolean>> {
-    const out: Record<string, boolean> = {};
-    for (const transport of ["ynca", "yxc", "xml"]) {
-      const state = await this.host.getForeignStateAsync(`${prefix}.info.transports.${transport}`).catch(() => null);
-      out[transport] = state?.val === true;
-    }
-    return out;
-  }
-
-  /**
    * The device's datapoints as they really exist — type, role, unit, limits, value list and value: the
-   * answer to "this datapoint is missing / has the wrong list", which no in-memory view gives. ONE
-   * device's subtree, never the whole instance.
+   * answer to "this datapoint is missing / has the wrong list", which no in-memory view gives — and its
+   * protocol flags (`info.transports.*`) as the card shows them. ONE device's subtree, never the whole
+   * instance, its values in ONE read.
    *
    * @param prefix the device's full id
-   * @returns one entry per datapoint
+   * @returns one entry per datapoint, and transport → connected
    */
-  private async objectTree(prefix: string): Promise<ObjectTreeEntry[]> {
+  private async deviceTree(
+    prefix: string,
+  ): Promise<{ objectTree: ObjectTreeEntry[]; transports: Record<string, boolean> }> {
     const start = `${prefix}.`;
     const view = await this.host
       .getObjectViewAsync("system", "state", { startkey: start, endkey: `${start}\u9999` })
       .catch(() => null);
-    const entries: ObjectTreeEntry[] = [];
-    for (const row of view?.rows ?? []) {
+    const rows = view?.rows ?? [];
+    const flags = TRANSPORTS.map(transport => `${start}info.transports.${transport}`);
+    const states = await this.readStates(`${start}*`, [...rows.map(row => row.id), ...flags]);
+    const objectTree = rows.map(row => {
       const common = (row.value?.common ?? {}) as Partial<ioBroker.StateCommon>;
-      const state = await this.host.getForeignStateAsync(row.id).catch(() => null);
-      entries.push({
+      const state = states[row.id];
+      return {
         id: row.id.slice(start.length),
         type: common.type,
         role: common.role,
@@ -323,9 +315,34 @@ export class DiagnosticsHandler {
         states: common.states,
         val: state?.val,
         ack: state?.ack,
-      });
+      };
+    });
+    const transports = Object.fromEntries(
+      TRANSPORTS.map((transport, index) => [transport, states[flags[index]]?.val === true]),
+    );
+    return { objectTree, transports };
+  }
+
+  /**
+   * Read states: in one round trip where the host offers a bulk read, one by one where it does not — a
+   * receiver with 900 datapoints cost 900 reads per report (review 2026-10-05, B8).
+   *
+   * @param pattern what the bulk read is asked for (a pattern or the ids)
+   * @param ids the ids the caller needs — what the one-by-one read asks
+   * @returns id → state
+   */
+  private async readStates(
+    pattern: string | string[],
+    ids: readonly string[],
+  ): Promise<Record<string, ioBroker.State | null | undefined>> {
+    if (this.host.getForeignStatesAsync) {
+      return (await this.host.getForeignStatesAsync(pattern).catch(() => null)) ?? {};
     }
-    return entries;
+    const out: Record<string, ioBroker.State | null | undefined> = {};
+    for (const id of ids) {
+      out[id] = await this.host.getForeignStateAsync(id).catch(() => null);
+    }
+    return out;
   }
 }
 
