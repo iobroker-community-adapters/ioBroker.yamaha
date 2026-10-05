@@ -1,7 +1,7 @@
 import { MEDIA_STATE } from "../catalog/media-state";
 import { ZONES } from "../catalog/zones";
 import { HttpStatusError } from "../util";
-import { decodeXmlText } from "./entities";
+import { decodeXmlText, escapeXmlText } from "./entities";
 
 /**
  * The device's own verdict on a request: every `<YAMAHA_AV rsp=…>` answer carries an
@@ -19,38 +19,72 @@ export function parseReturnCode(xml: string): number | undefined {
 }
 
 /**
+ * The device answered — and said no: a return code other than 0 in its `<YAMAHA_AV>` answer (2 = the node does not
+ * exist on this model, 3/4 = value refused / not executable right now), or an empty answer to a command. Proof that
+ * the device is there, like MusicCast's `YxcRefusalError`: a refused write is read back, and it is never a reason to
+ * ask whether the device is still alive. The controller told a refusal from a lost connection by the MESSAGE text
+ * (`startsWith("device refused")`), which a reworded message or any other error with those words broke (review
+ * 2026-10-05, E).
+ */
+export class XmlRefusalError extends Error {
+  /**
+   * @param what the request the device refused
+   * @param code the return code, undefined for an empty answer
+   */
+  public constructor(
+    what: string,
+    public readonly code?: number,
+  ) {
+    super(`device refused ${what} (${code === undefined ? "empty response" : `RC=${code}`})`);
+    this.name = "XmlRefusalError";
+  }
+}
+
+/**
+ * The refusal an answer body carries, if any — the ONE reading of the return code, for commands and probes alike
+ * (it stood twice, in `assertXmlOk` and `definiteXmlBody`; review 2026-10-05, E).
+ *
+ * @param xml the response body
+ * @param what the request, for the error message
+ * @returns the refusal, or undefined when the device executed the request (RC 0, or no return code at all)
+ */
+function refusalIn(xml: string, what: string): XmlRefusalError | undefined {
+  const code = parseReturnCode(xml);
+  return code !== undefined && code !== 0 ? new XmlRefusalError(what, code) : undefined;
+}
+
+/**
  * Throw when a response reports a non-zero return code — the device REFUSED the
- * request. An empty body counts as a refusal too: the firmware answers unknown
- * nodes with a bodyless HTTP 400 (captured RX-V6A behaviour).
+ * request. An empty body counts as a refusal too: a command answered with nothing was not executed.
  *
  * @param xml the response body
  * @param what the request, for the error message
  * @returns the body, for chaining
  */
 export function assertXmlOk(xml: string, what: string): string {
-  if (xml.length === 0) {
-    throw new Error(`device refused ${what} (empty response)`);
-  }
-  const code = parseReturnCode(xml);
-  if (code !== undefined && code !== 0) {
-    throw new Error(`device refused ${what} (RC=${code})`);
+  const refusal = xml.length === 0 ? new XmlRefusalError(what) : refusalIn(xml, what);
+  if (refusal) {
+    throw refusal;
   }
   return xml;
 }
 
 /**
- * Whether a failed XML read is the model's permanent verdict (the node does not exist:
- * bodyless HTTP 400) rather than a transient failure (timeout, connection error, HTTP 5xx).
- * A device that was merely busy or asleep must be asked again, or a probe that is
- * remembered per device would record "declares none" for good.
+ * Whether a failed XML request is the model's permanent verdict — the node does not exist (RC 2, or the
+ * bodyless HTTP 400 the firmware answers an unknown node with), or the model has no device description
+ * (HTTP 404) — rather than a transient failure (timeout, connection error, HTTP 5xx, RC 3/4 "not now").
+ * A device that was merely busy or asleep must be asked again, or a probe that is remembered per device
+ * would record "declares none" for good.
  *
  * @param e the caught value
  * @returns true when the refusal is permanent for this model
  */
 export function isPermanentXmlRefusal(e: unknown): boolean {
-  // 400 without a body: an unknown control node. 404: no device description on this model — the
-  // 2020 generation answers exactly that for /YamahaRemoteControl/desc.xml (RX-V6A harvest).
-  return e instanceof HttpStatusError && (e.statusCode === 400 || e.statusCode === 404);
+  // 404: the 2020 generation answers exactly that for /YamahaRemoteControl/desc.xml (RX-V6A harvest).
+  return (
+    (e instanceof HttpStatusError && (e.statusCode === 400 || e.statusCode === 404)) ||
+    (e instanceof XmlRefusalError && e.code === 2)
+  );
 }
 
 /**
@@ -65,23 +99,19 @@ export function isPermanentXmlRefusal(e: unknown): boolean {
  * @returns the body, or "" when the model has no such node
  */
 export async function definiteXmlBody(request: () => Promise<string>, what: string): Promise<string> {
-  let body: string;
   try {
-    body = await request();
+    const body = await request();
+    const refusal = refusalIn(body, what);
+    if (refusal) {
+      throw refusal;
+    }
+    return body;
   } catch (e) {
     if (isPermanentXmlRefusal(e)) {
       return "";
     }
     throw e;
   }
-  const rc = parseReturnCode(body);
-  if (rc !== undefined && rc !== 0) {
-    if (rc === 2) {
-      return "";
-    }
-    throw new Error(`device refused ${what} (RC=${rc})`);
-  }
-  return body;
 }
 
 /** One scene as the device declares it in `<Scene_Sel_Item>`. */
@@ -99,6 +129,10 @@ export interface XmlScene {
  * the RX-V6A capture shows `Scene_Sel` as the declared write element, not the
  * predecessor's `Scene_Load` (#615).
  *
+ * A blank title stays blank (trimmed to ""): the scene exists and is recalled by its number, but it has no name — the
+ * RX-V6A declares all eight that way, and the blank titles became eight empty dropdown labels and eight empty title
+ * datapoints (review 2026-10-05, A23).
+ *
  * @param xml the Scene_Sel_Item response body
  * @returns the declared writable scenes, empty when the zone has none
  */
@@ -107,7 +141,7 @@ export function parseSceneList(xml: string): XmlScene[] {
   const pattern = /<Item_\d+>\s*<Param>Scene (\d+)<\/Param>\s*<RW>([^<]*)<\/RW>\s*<Title>([^<]*)<\/Title>/g;
   for (let match = pattern.exec(xml); match; match = pattern.exec(xml)) {
     if (match[2].includes("W")) {
-      scenes.push({ num: Number(match[1]), title: decodeXmlText(match[3]) });
+      scenes.push({ num: Number(match[1]), title: decodeXmlText(match[3]).trim() });
     }
   }
   return scenes;
@@ -228,6 +262,25 @@ export function parseInputSources(xml: string): Record<string, string> {
     }
   }
   return sources;
+}
+
+/**
+ * The inputs an `<Input_Sel_Item>` answer declares as read-only (`<RW>R</RW>`): the zone reports them, but takes no
+ * switch to them — the RX-V3900's iPod and Bluetooth (its iPod is reached through the write-only DOCK).
+ *
+ * @param xml the Input_Sel_Item response body
+ * @returns the read-only input values
+ */
+export function parseReadOnlyInputs(xml: string): string[] {
+  const readOnly: string[] = [];
+  for (const match of xml.matchAll(/<Item_\d+>([\s\S]*?)<\/Item_\d+>/g)) {
+    const param = /<Param>([^<]*)<\/Param>/.exec(match[1]);
+    const rw = /<RW>([^<]*)<\/RW>/.exec(match[1]);
+    if (param && rw && !rw[1].includes("W")) {
+      readOnly.push(decodeXmlText(param[1]));
+    }
+  }
+  return readOnly;
 }
 
 /**
@@ -590,10 +643,6 @@ export interface XmlDescriptor {
   sleep: string[];
   /** `Sound_Video,Adaptive_DRC` — Auto/Off. */
   adaptiveDrc: string[];
-  /** The zone elements whose `Cmd_List` defines `Cursor_Control,Cursor` — the zone-wide cursor pad. */
-  cursorZones?: string[];
-  /** The zone elements with `Cursor_Control,Menu_Control` — the zone-wide menu keys. */
-  menuZones?: string[];
   /** The zone elements with `Play_Control,Playback` — transport keys per zone. */
   playbackZones?: string[];
   /** The zone elements with `Sound_Video,Tone,Manual,Bass` (see {@link XmlZoneForm}). */
@@ -613,8 +662,22 @@ export interface XmlDescriptor {
 }
 
 /**
+ * The band a frequency lies in, by its magnitude: AM below 2000 (kHz — the AM band ends at 1710 kHz, every FM band
+ * starts above 76 MHz). The one classification for the declared ranges (where AM is counted in kHz and FM in
+ * hundredths of a MHz, both far from the edge) and for a written frequency in kHz — a write took the band the tuner
+ * last REPORTED instead, so a script that switched to FM and set 98.1 MHz right after tuned `AM 1710` (review
+ * 2026-10-05, A20).
+ *
+ * @param value the frequency (kHz), or a declared range's upper end in the description's own unit
+ * @returns the band
+ */
+export function tunerBandOf(value: number): "AM" | "FM" {
+  return value < 2000 ? "AM" : "FM";
+}
+
+/**
  * The tuner's declared frequency grid (see {@link XmlDescriptor.tunerGrid}): every `<Range>` of a
- * `Tuning,Freq` reading, classified by magnitude — AM in kHz (below 2000), FM in hundredths of a MHz.
+ * `Tuning,Freq` reading, classified by magnitude ({@link tunerBandOf}) — AM in kHz, FM in hundredths of a MHz.
  *
  * @param xml the desc.xml body
  * @returns the grid per band, in kHz
@@ -625,7 +688,7 @@ function tunerGridOf(xml: string): { AM?: XmlRange; FM?: XmlRange } | undefined 
   for (const block of blocks) {
     for (const range of block[1].matchAll(/<Range>(-?\d+),(-?\d+),(\d+)<\/Range>/g)) {
       const [min, max, step] = [Number(range[1]), Number(range[2]), Number(range[3])];
-      if (max < 2000) {
+      if (tunerBandOf(max) === "AM") {
         grid.AM ??= { min, max, step };
       } else {
         grid.FM ??= { min: min * 10, max: max * 10, step: step * 10 };
@@ -644,6 +707,59 @@ function tunerGridOf(xml: string): { AM?: XmlRange; FM?: XmlRange } | undefined 
  */
 function zonesDeclaring(puts: Record<string, Record<string, XmlDeclaredPut>>, path: string): string[] {
   return Object.keys(puts).filter(element => /^(Main_Zone|Zone_[234])$/.test(element) && puts[element][path]);
+}
+
+/** One zone-wide pad command as desc.xml declares it: its path after the zone element, and its declared words. */
+export interface XmlPadCommand {
+  /** The command path (`Cursor_Control,Cursor`, or the 2012 entry class's `List_Control,Cursor`). */
+  path: string;
+  /** The wire words declared for it (`Up` … `Return to Home`); empty where the description names the path only. */
+  words: string[];
+}
+
+/** A zone's pad as desc.xml declares it: the cursor keys and the menu keys, each where declared. */
+export interface XmlZonePad {
+  /** The cursor keys. */
+  cursor?: XmlPadCommand;
+  /** The menu keys. */
+  menu?: XmlPadCommand;
+}
+
+/**
+ * The zone-wide pad desc.xml declares for one zone element. Two declared forms: `Cursor_Control,Cursor` /
+ * `Menu_Control` (7 of the 10 captured descriptors) and `List_Control,Cursor` / `Menu_Control` of the 2012 entry
+ * class (RX-V473: the cross with Return and Return to Home, and only On Screen/Option/Display as menu keys). Only the
+ * first was read, and a test called the second "menu-bound" on purpose — against the rule that desc.xml decides
+ * (review 2026-10-05, decision C3). The words are the zone's own; where its block declares the path without words
+ * (RX-V675 zone 2), the same command's words on the main zone.
+ *
+ * @param puts the declared write commands (see {@link descriptorPuts})
+ * @param element the zone element
+ * @returns the pad, empty where the zone declares none
+ */
+export function zonePad(puts: Record<string, Record<string, XmlDeclaredPut>>, element: string): XmlZonePad {
+  const command = (key: "Cursor" | "Menu_Control"): XmlPadCommand | undefined => {
+    const path = [`Cursor_Control,${key}`, `List_Control,${key}`].find(candidate => puts[element]?.[candidate]);
+    if (path === undefined) {
+      return undefined;
+    }
+    return { path, words: puts[element][path].words ?? puts.Main_Zone?.[path]?.words ?? [] };
+  };
+  const cursor = command("Cursor");
+  const menu = command("Menu_Control");
+  return { ...(cursor ? { cursor } : {}), ...(menu ? { menu } : {}) };
+}
+
+/**
+ * A pad key on the wire in its declared path: `Cursor_Control,Cursor` + `Up` →
+ * `<Cursor_Control><Cursor>Up</Cursor></Cursor_Control>`.
+ *
+ * @param path the declared command path
+ * @param word the wire word
+ * @returns the inner XML
+ */
+export function padInner(path: string, word: string): string {
+  return path.split(",").reduceRight((inner, element) => `<${element}>${inner}</${element}>`, escapeXmlText(word));
 }
 
 /**
@@ -689,8 +805,6 @@ export function parseDescriptor(xml: string): XmlDescriptor {
     adaptiveDrc: descriptorParam(xml, "Sound_Video,Adaptive_DRC").values,
   };
   const puts = descriptorPuts(xml);
-  descriptor.cursorZones = zonesDeclaring(puts, "Cursor_Control,Cursor");
-  descriptor.menuZones = zonesDeclaring(puts, "Cursor_Control,Menu_Control");
   descriptor.playbackZones = zonesDeclaring(puts, "Play_Control,Playback");
   descriptor.toneManualZones = zonesDeclaring(puts, "Sound_Video,Tone,Manual,Bass");
   descriptor.enhancerCurrentZones = zonesDeclaring(puts, "Surround,Current,Enhancer");

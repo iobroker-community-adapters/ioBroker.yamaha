@@ -8,7 +8,10 @@ import {
 } from "./types";
 import type { BrowseEngine } from "./browse-engine";
 import type { ControllerLog } from "../controller";
-import { decodeXmlText } from "../xml/entities";
+import type { CommandPriority } from "../lifecycle/command-gate";
+import { errText } from "../err-text";
+import { decodeXmlText, escapeXmlText } from "../xml/entities";
+import { padInner } from "../xml/protocol";
 
 /**
  * How often, and how many times, to re-read while the device reports Menu_Status Busy — 20 × 1 s, as
@@ -112,7 +115,7 @@ export interface XmlBrowseClient {
   /** Send an inner PUT command to an element (a zone or a source). */
   send(element: string, inner: string): Promise<void>;
   /** Read an element's inner GET request and return the raw response body. */
-  getXml(element: string, inner: string): Promise<string>;
+  getXml(element: string, inner: string, priority?: CommandPriority): Promise<string>;
 }
 
 /** A parsed List_Info response. */
@@ -161,17 +164,60 @@ export function parseXmlListInfo(xml: string): XmlListInfo {
   };
 }
 
+/** One zone-wide pad command: the path desc.xml declares it under, and the keys (shared vocabulary) it takes. */
+export interface XmlPadKeys {
+  /** The declared command path after the zone element (`Cursor_Control,Cursor`, `List_Control,Menu_Control`). */
+  path: string;
+  /** The keys in the shared vocabulary (`up`, `on_screen`) whose wire word the declaration names. */
+  keys: readonly string[];
+}
+
 /**
- * Which zone-wide pad commands the receiver's desc.xml declares for the main zone. The words are the
- * shared `RETURN_CURSOR_WIRE` / `MENU_WIRE` — inside `List_Control` (the menu-bound pad of the 2012
- * entry class) and, where desc.xml declares `Cursor_Control,Cursor`/`Menu_Control` (7 of the 10
- * captured descriptors), inside the zone-wide `Cursor_Control`.
+ * The zone-wide pad desc.xml declares for the main zone — `Cursor_Control` (7 of the 10 captured descriptors) or the
+ * 2012 entry class's `List_Control` (RX-V473, decision C3) — each with exactly the declared keys.
  */
 export interface XmlZoneWidePad {
-  /** `Main_Zone,Cursor_Control,Cursor` declared. */
-  cursor: boolean;
-  /** `Main_Zone,Cursor_Control,Menu_Control` declared. */
-  menu: boolean;
+  /** The cursor keys, where declared. */
+  cursor?: XmlPadKeys;
+  /** The menu keys, where declared. */
+  menu?: XmlPadKeys;
+}
+
+/**
+ * The keys of the shared vocabulary a declared pad command takes: those whose wire word the declaration names — all
+ * of the table where it names the path without words (RX-V675 zone 2 and its main zone alike declare none in the
+ * zone's block).
+ *
+ * @param table the vocabulary's wire table (`RETURN_CURSOR_WIRE`, `MENU_WIRE`)
+ * @param command the declared command, if any
+ * @param command.path the declared path
+ * @param command.words the declared wire words
+ * @returns the pad keys, undefined where nothing is declared
+ */
+export function declaredPadKeys(
+  table: Partial<Record<string, string>>,
+  command: { path: string; words: readonly string[] } | undefined,
+): XmlPadKeys | undefined {
+  if (command === undefined) {
+    return undefined;
+  }
+  const keys = Object.keys(table).filter(key => command.words.length === 0 || command.words.includes(table[key]!));
+  return keys.length > 0 ? { path: command.path, keys } : undefined;
+}
+
+/** What the driver knows about the receiver besides its menus. */
+export interface XmlBrowseOptions {
+  /** Adapter log, prefixed with the device — a cursor press with no open menu has to say so. */
+  log?: ControllerLog;
+  /** The zone-wide pad desc.xml declares for the main zone (none = the cursor goes to the open menu's source). */
+  zoneWide?: XmlZoneWidePad;
+  /** The main zone as its status and its input list show it. */
+  mainZone?: {
+    /** The input the main zone is on, if known. */
+    input(): string | undefined;
+    /** Whether the zone's input list declares the input read-only (`RW` = `R`). */
+    readOnly(input: string): boolean;
+  };
 }
 
 /**
@@ -186,40 +232,45 @@ export class XmlBrowseDriver implements BrowseDriver {
   private lastTotal = 0;
   /** Whether the device is of the 2008 generation (its menus are `List_Info_2`). */
   private readonly legacy: boolean;
+  private readonly log: ControllerLog | undefined;
+  private readonly zoneWide: XmlZoneWidePad;
+
   /**
    * @param client the XML client slice (send + getXml)
    * @param available the source ids whose menu the start-up probe proved (see {@link XML_BROWSE_SOURCES})
    * @param delay adapter-managed delay
-   * @param log adapter log — a cursor press with no open menu has to say so
-   * @param zoneWide the zone-wide pad commands desc.xml declares for the main zone (none = the
-   *   menu-bound List_Control pad of the 2012 entry class)
+   * @param options the log, the declared zone-wide pad and the main zone's input
    */
   public constructor(
     private readonly client: XmlBrowseClient,
     private readonly available: ReadonlySet<string>,
     private readonly delay: (ms: number) => Promise<void>,
-    private readonly log?: ControllerLog,
-    private readonly zoneWide: XmlZoneWidePad = { cursor: false, menu: false },
+    private readonly options: XmlBrowseOptions = {},
   ) {
-    this.menuValues = zoneWide.menu ? Object.keys(MENU_WIRE) : undefined;
+    this.log = options.log;
+    this.zoneWide = options.zoneWide ?? {};
+    this.menuValues = this.zoneWide.menu?.keys;
     this.legacy = XML_BROWSE_SOURCES.some(source => source.list === "List_Info_2" && available.has(source.id));
-    this.cursorValues = this.legacy ? LEGACY_CURSOR_VALUES : Object.keys(RETURN_CURSOR_WIRE);
+    this.cursorValues = this.legacy
+      ? LEGACY_CURSOR_VALUES
+      : (this.zoneWide.cursor?.keys ?? Object.keys(RETURN_CURSOR_WIRE));
   }
 
-  /** The menu keys — only where desc.xml declares the zone-wide `Menu_Control`. */
+  /** The menu keys — only where desc.xml declares the zone-wide menu, and only the keys it declares (C3). */
   public readonly menuValues: readonly string[] | undefined;
 
   /**
-   * Press a menu key on the zone-wide `Cursor_Control` (declared models only).
+   * Press a menu key on the declared zone-wide menu (`Cursor_Control` or `List_Control`).
    *
    * @param value one of {@link menuValues}
    */
   public async menu(value: string): Promise<void> {
     const wire = wireFor(MENU_WIRE, value);
-    if (wire === undefined || !this.zoneWide.menu) {
+    const menu = this.zoneWide.menu;
+    if (wire === undefined || !menu?.keys.includes(value)) {
       return;
     }
-    await this.client.send("Main_Zone", `<Cursor_Control><Menu_Control>${wire}</Menu_Control></Cursor_Control>`);
+    await this.client.send("Main_Zone", padInner(menu.path, wire));
   }
 
   /**
@@ -261,13 +312,29 @@ export class XmlBrowseDriver implements BrowseDriver {
       return;
     }
     this.active = entry;
-    await this.client.send("Main_Zone", `<Input><Input_Sel>${entry.input}</Input_Sel></Input>`);
+    // The input is switched only where that is a switch: not when the zone is on it already, and not to an input the
+    // zone's list declares read-only — the RX-V3900 reports its iPod, but refuses `Input_Sel` iPod, and the refusal
+    // cost the menu (review 2026-10-05, A51).
+    const mainZone = this.options.mainZone;
+    if (mainZone?.input() === entry.input) {
+      // already there
+    } else if (mainZone?.readOnly(entry.input)) {
+      this.log?.debug(`menu of ${entry.key}: input ${entry.input} takes no switch over XML — its menu opens as it is`);
+    } else {
+      await this.client.send("Main_Zone", `<Input><Input_Sel>${escapeXmlText(entry.input)}</Input_Sel></Input>`);
+    }
     const first = await this.readWindow();
     if (!first || first.rows.length > 0) {
       this.render(first);
       return;
     }
-    await this.send(entry.list === "List_Info_2" ? "<Page>Up</Page>" : "<Jump_Line>1</Jump_Line>");
+    // A nudge of our own, not the user's command: a refusal of it must not cost the menu — the window is read again
+    // either way (A51).
+    try {
+      await this.send(entry.list === "List_Info_2" ? "<Page>Up</Page>" : "<Jump_Line>1</Jump_Line>");
+    } catch (e) {
+      this.log?.debug(`menu of ${entry.key}: the empty window's nudge failed (${errText(e)}) — reading it again`);
+    }
     let window = first;
     for (let read = 0; read < MAX_EMPTY_READS && window.rows.length === 0; read++) {
       if (read > 0) {
@@ -349,12 +416,11 @@ export class XmlBrowseDriver implements BrowseDriver {
   public readonly cursorValues: readonly string[];
 
   /**
-   * Press a cursor key: on the zone-wide `Cursor_Control` where desc.xml declares it (menu open
-   * or not — that is the remote's own cross), else inside `List_Control`, addressed to the
-   * source whose menu is open (`PUT <NET_RADIO><List_Control>…`). The 2012 entry class (RX-V473,
-   * #613) has only the latter, so there a press with no menu open goes nowhere — which is said
-   * out loud rather than swallowed. Until 2026-09-09 this comment claimed the whole generation
-   * had no zone-wide endpoint; desc.xml declares one on 7 of the 10 captured descriptors.
+   * Press a cursor key: on the main zone's own pad where desc.xml declares one (menu open or not — that is the
+   * remote's own cross): `Cursor_Control,Cursor` on 7 of the 10 captured descriptors, `List_Control,Cursor` on the
+   * 2012 entry class (RX-V473 — read as "menu-bound" until review 2026-10-05, C3). Without a declaration the key goes
+   * inside `List_Control` to the source whose menu is open (`PUT <NET_RADIO><List_Control>…`), so a press with no
+   * menu open goes nowhere — which is said out loud rather than swallowed.
    *
    * @param value one of {@link cursorValues}
    */
@@ -364,7 +430,7 @@ export class XmlBrowseDriver implements BrowseDriver {
       return;
     }
     if (this.zoneWide.cursor) {
-      await this.client.send("Main_Zone", `<Cursor_Control><Cursor>${wire}</Cursor></Cursor_Control>`);
+      await this.client.send("Main_Zone", padInner(this.zoneWide.cursor.path, wire));
       return;
     }
     if (!this.active) {
@@ -458,7 +524,9 @@ export class XmlBrowseDriver implements BrowseDriver {
     }
     for (let attempt = 0; attempt < MAX_BUSY_POLLS; attempt++) {
       const list = this.active.list;
-      const info = parseXmlListInfo(await this.client.getXml(this.active.element, `<${list}>GetParam</${list}>`));
+      const info = parseXmlListInfo(
+        await this.client.getXml(this.active.element, `<${list}>GetParam</${list}>`, "user"),
+      );
       if (info.ready) {
         return info;
       }
