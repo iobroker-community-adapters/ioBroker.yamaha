@@ -1,4 +1,5 @@
 import { remoteObjectDefs } from "../browse/objects";
+import type { CommandPriority } from "../lifecycle/command-gate";
 import { MENU_WIRE, RETURN_CURSOR_WIRE, wireFor } from "../browse/types";
 import { PLAYER_KEY_STATES, playerStateObject } from "../catalog/player-block";
 import { coerceBool, textWriteProblem } from "../catalog/value-coerce";
@@ -346,11 +347,15 @@ export class XmlDeclaredCommands {
     this.ctx.markWritable(stateId, write);
   }
 
-  /** Read the all-zones power and write it (poll and read-back). */
-  private async refreshSystemPower(): Promise<void> {
+  /**
+   * Read the all-zones power and write it (poll and read-back).
+   *
+   * @param priority the gate priority — `user` for the read-back of a user's write (A58)
+   */
+  private async refreshSystemPower(priority: CommandPriority = "background"): Promise<void> {
     const ctx = this.ctx;
     try {
-      const power = parseSystemPower(await ctx.deps.client.getXml("System", SYSTEM_POWER_GET));
+      const power = parseSystemPower(await ctx.deps.client.getXml("System", SYSTEM_POWER_GET, priority));
       if (power !== undefined) {
         ctx.emit("multiroom.masterPower", power);
       }
@@ -376,7 +381,7 @@ export class XmlDeclaredCommands {
     }
     return this.ctx.applyCommand(
       { zone: "System", inner: `<Power_Control><Power>${on ? "On" : "Standby"}</Power></Power_Control>` },
-      () => this.refreshSystemPower(),
+      () => this.refreshSystemPower("user"),
     );
   }
 
@@ -384,12 +389,16 @@ export class XmlDeclaredCommands {
    * Read one zone's contents display.
    *
    * @param zone the zone
+   * @param priority the gate priority
    * @returns On as true, Off as false, undefined when the zone does not answer it
    */
-  private async readContentsDisplay(zone: XmlZone): Promise<boolean | undefined> {
+  private async readContentsDisplay(
+    zone: XmlZone,
+    priority: CommandPriority = "background",
+  ): Promise<boolean | undefined> {
     const ctx = this.ctx;
     try {
-      const body = await ctx.deps.client.getXml(zone.element, CONTENTS_DISPLAY_GET);
+      const body = await ctx.deps.client.getXml(zone.element, CONTENTS_DISPLAY_GET, priority);
       const word = /<Contents_Display>\s*(On|Off)\s*<\/Contents_Display>/.exec(body)?.[1];
       return word === undefined ? undefined : word === "On";
     } catch (e) {
@@ -398,13 +407,17 @@ export class XmlDeclaredCommands {
     }
   }
 
-  /** Read the contents display of every zone that has one (poll and read-back). */
-  private async refreshContentsDisplay(): Promise<void> {
+  /**
+   * Read the contents display of every zone that has one (poll and read-back).
+   *
+   * @param priority the gate priority — `user` for the read-back of a user's write (A58)
+   */
+  private async refreshContentsDisplay(priority: CommandPriority = "background"): Promise<void> {
     for (const zone of this.zones()) {
       if (!this.contentsDisplayZones.has(zone.key)) {
         continue;
       }
-      const on = await this.readContentsDisplay(zone);
+      const on = await this.readContentsDisplay(zone, priority);
       if (on !== undefined) {
         this.ctx.emit(`${zone.prefix}sound.contentsDisplay`, on);
       }
@@ -433,7 +446,7 @@ export class XmlDeclaredCommands {
         zone: zone.element,
         inner: `<Cursor_Control><Contents_Display>${on ? "On" : "Off"}</Contents_Display></Cursor_Control>`,
       },
-      () => this.refreshContentsDisplay(),
+      () => this.refreshContentsDisplay("user"),
     );
   }
 
@@ -463,14 +476,18 @@ export class XmlDeclaredCommands {
    * the next connect.
    *
    * @param zone the zone
+   * @param priority the gate priority — `user` for the read-back of a rename (A58)
    * @returns the names, "" where the zone declares none
    */
-  private async probeZoneNames(zone: XmlZone): Promise<{ zone: string; zoneB: string }> {
+  private async probeZoneNames(
+    zone: XmlZone,
+    priority: CommandPriority = "background",
+  ): Promise<{ zone: string; zoneB: string }> {
     const ctx = this.ctx;
     const rename = ctx.declares(zone.element, RENAME_PATH);
     const probe = async (): Promise<{ zone: string; zoneB: string }> => {
       const body = await definiteXmlBody(
-        () => ctx.deps.client.getXml(zone.element, rename ? RENAME_GET : "<Config>GetParam</Config>"),
+        () => ctx.deps.client.getXml(zone.element, rename ? RENAME_GET : "<Config>GetParam</Config>", priority),
         `${zone.element} name probe`,
       );
       const text = (pattern: RegExp): string => {
@@ -527,7 +544,7 @@ export class XmlDeclaredCommands {
         return ctx.dropWrite(stateId, value, "it is no key this receiver declares");
       }
       return ctx.applyCommand({ zone: zone.element, inner: padInner(declared.path, wire) }, () =>
-        ctx.refreshZone(zone),
+        ctx.refreshZone(zone, "user"),
       );
     }
     if (command === "zoneName" || command === "multiroom.zoneB.name") {
@@ -550,7 +567,7 @@ export class XmlDeclaredCommands {
             ? `<Rename><Rename_Latin_1>${escaped}</Rename_Latin_1></Rename>`
             : `<Config><Name><Zone>${escaped}</Zone></Name></Config>`;
       return ctx.applyCommand({ zone: zone.element, inner: nameInner }, async () => {
-        const names = await this.probeZoneNames(zone);
+        const names = await this.probeZoneNames(zone, "user");
         const name = command === "multiroom.zoneB.name" ? names.zoneB : names.zone;
         if (name) {
           ctx.emit(stateId, name);
@@ -562,8 +579,8 @@ export class XmlDeclaredCommands {
     return ctx.applyCommand(
       { zone: zone.element, inner: `<Play_Control><Playback>${word}</Playback></Play_Control>` },
       async () => {
-        await ctx.refreshZone(zone);
-        await ctx.refreshPlayers();
+        await ctx.refreshZone(zone, "user");
+        await ctx.refreshPlayers("user");
       },
     );
   }

@@ -1,4 +1,5 @@
 import { catalogToObjects } from "../catalog/build-objects";
+import type { CommandPriority } from "../lifecycle/command-gate";
 import { INFO_ENTRIES } from "../catalog/info-objects";
 import { keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
 import { selfMap } from "../catalog/value-coerce";
@@ -122,8 +123,8 @@ export class XmlDeviceController {
       descriptor: () => this.deviceDescriptor,
       declares: (element, path) => this.declares(element, path),
       hasCommandList: () => this.hasCommandList(),
-      refreshZone: zone => this.refreshZone(zone),
-      refreshPlayers: () => this.players.refresh(this.zones),
+      refreshZone: (zone, priority) => this.refreshZone(zone, priority),
+      refreshPlayers: priority => this.players.refresh(this.zones, priority),
     };
     this.tuner = new XmlTuner(this.context);
     this.players = new XmlPlayerBlocks(this.context);
@@ -507,7 +508,7 @@ export class XmlDeviceController {
       return this.dropWrite(stateId, value, "it names no scene this zone declares");
     }
     return this.applyCommand({ zone: zone.element, inner: `<Scene><Scene_Sel>Scene ${num}</Scene_Sel></Scene>` }, () =>
-      this.refreshZone(zone),
+      this.refreshZone(zone, "user"),
     );
   }
 
@@ -612,9 +613,9 @@ export class XmlDeviceController {
     // A new input changes which source the zone's player block shows (D3).
     const players = /(^|\.)input$/.test(stateId);
     return this.applyCommand(command, async () => {
-      await this.refreshZone(zone);
+      await this.refreshZone(zone, "user");
       if (players) {
-        await this.players.refresh(this.zones);
+        await this.players.refresh(this.zones, "user");
       }
     });
   }
@@ -709,10 +710,11 @@ export class XmlDeviceController {
    * Fetch a zone's status and write its amp states with ack.
    *
    * @param zone the zone to refresh
+   * @param priority the gate priority — `user` for the read-back of a user's write (A58)
    * @returns true if the status was fetched, false if the request failed
    */
-  private async refreshZone(zone: XmlZone): Promise<boolean> {
-    const status = await this.tryGetStatus(zone.element);
+  private async refreshZone(zone: XmlZone, priority: CommandPriority = "background"): Promise<boolean> {
+    const status = await this.tryGetStatus(zone.element, priority);
     if (!status) {
       return false;
     }
@@ -893,11 +895,15 @@ export class XmlDeviceController {
    * Read a zone's status, swallowing errors (an absent zone or an offline device).
    *
    * @param element the XML zone element
+   * @param priority the gate priority
    * @returns the parsed status, or undefined on failure
    */
-  private async tryGetStatus(element: string): Promise<BasicStatus | undefined> {
+  private async tryGetStatus(
+    element: string,
+    priority: CommandPriority = "background",
+  ): Promise<BasicStatus | undefined> {
     try {
-      return await this.deps.client.getStatus(element);
+      return await this.deps.client.getStatus(element, priority);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getStatus(${element}) failed: ${errText(e)}`);
       return undefined;
@@ -944,7 +950,11 @@ export class XmlDeviceController {
    * Send a command and read what it touched back at once — an older receiver reports nothing by
    * itself, and the next poll is up to a minute away. A refused command is read back too: nothing
    * else would put the device's value back over the one the user wrote (audit 2026-09-24). Called
-   * without an awaiting caller, so the whole body is one try/catch.
+   * without an awaiting caller, so the whole body is one try/catch. The read-back runs at `user` priority (A58).
+   *
+   * A command nobody answered asks at once whether the device is still there — only MusicCast did: a powerless XML
+   * receiver stayed "connected" for up to three poll minutes while every write merely warned (review 2026-10-05,
+   * A55). Its read-back is the liveness question's answer.
    *
    * @param command the zone element and the inner XML to send
    * @param readBack reads the zone, the tuner or the name the command touched
@@ -952,6 +962,10 @@ export class XmlDeviceController {
    */
   private async applyCommand(command: XmlCommand, readBack?: () => Promise<unknown>): Promise<WriteOutcome> {
     const outcome = await this.sendCommand(command);
+    if (outcome === "unavailable") {
+      void this.verifyAlive();
+      return outcome;
+    }
     // Read back behind the answer, so the caller learns at once what the device made of the command.
     void (async () => {
       try {

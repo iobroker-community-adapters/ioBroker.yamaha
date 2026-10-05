@@ -1,4 +1,5 @@
 import type { ObjectDef } from "../catalog/types";
+import type { CommandPriority } from "../lifecycle/command-gate";
 import { slotNumber, snapToGrid, writableNumber } from "../catalog/value-coerce";
 import { errText } from "../err-text";
 import { tName } from "../i18n";
@@ -139,10 +140,14 @@ export class XmlTuner implements XmlWriteRoute {
     await this.refresh();
   }
 
-  /** Poll the tuner's Play_Info (keepalive, read-back) and write the states. */
-  public async refresh(): Promise<void> {
+  /**
+   * Poll the tuner's Play_Info (keepalive, read-back) and write the states.
+   *
+   * @param priority the gate priority — `user` for the read-back of a user's write (A58)
+   */
+  public async refresh(priority: CommandPriority = "background"): Promise<void> {
     try {
-      this.emitTunerInfo(await this.ctx.deps.client.getXml("Tuner", PLAY_INFO_GET));
+      this.emitTunerInfo(await this.ctx.deps.client.getXml("Tuner", PLAY_INFO_GET, priority));
     } catch (e) {
       this.ctx.deps.log.debug(`${this.ctx.deviceId}: tuner Play_Info failed: ${errText(e)}`);
     }
@@ -189,7 +194,7 @@ export class XmlTuner implements XmlWriteRoute {
     }
     return this.ctx.applyCommand(
       { zone: "Tuner", inner: `<Play_Control><Preset><Preset_Sel>${code}</Preset_Sel></Preset></Play_Control>` },
-      () => this.refresh(),
+      () => this.refresh("user"),
     );
   }
 
@@ -240,7 +245,7 @@ export class XmlTuner implements XmlWriteRoute {
       }
       return this.ctx.applyCommand(
         { zone: "Tuner", inner: `<Play_Control><Tuning><Band>${value}</Band></Tuning></Play_Control>` },
-        () => this.refresh(),
+        () => this.refresh("user"),
       );
     }
     const khz = writableNumber(value);
@@ -263,7 +268,7 @@ export class XmlTuner implements XmlWriteRoute {
     const freq = this.freqForm === "flat" ? `<Freq>${wire}</Freq>` : `<Freq><${band}>${wire}</${band}></Freq>`;
     return this.ctx.applyCommand(
       { zone: "Tuner", inner: `<Play_Control><Tuning>${freq}</Tuning></Play_Control>` },
-      () => this.refresh(),
+      () => this.refresh("user"),
     );
   }
 }

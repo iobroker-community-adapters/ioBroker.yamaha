@@ -8,7 +8,7 @@ import {
   type BasicStatus,
   type XmlSystemConfig,
 } from "./protocol";
-import type { CommandGate } from "../lifecycle/command-gate";
+import type { CommandGate, CommandPriority } from "../lifecycle/command-gate";
 import { readDeviceResponse } from "../util";
 
 /** The receiver's XML control endpoint. */
@@ -92,7 +92,7 @@ function defaultGetter(ip: string, path: string): Promise<string> {
 
 /** An XML/YNC transport client for one receiver over HTTP (port 80). */
 export class XmlClient {
-  private readonly request: XmlPoster;
+  private readonly request: (ip: string, body: string, priority?: CommandPriority) => Promise<string>;
   private readonly fetch: XmlGetter;
 
   /**
@@ -109,9 +109,12 @@ export class XmlClient {
     gate?: CommandGate,
     get: XmlGetter = defaultGetter,
   ) {
+    // A command is the user's; a read is background work — unless the caller says it reads back what the user just
+    // wrote: that read must not wait behind a poll sweep (review 2026-10-05, A58).
     this.request = gate
-      ? (ip_, body) => gate.run(() => post(ip_, body), body.includes('cmd="PUT"') ? "user" : "background")
-      : post;
+      ? (ip_, body, priority) =>
+          gate.run(() => post(ip_, body), priority ?? (body.includes('cmd="PUT"') ? "user" : "background"))
+      : (ip_, body) => post(ip_, body);
     this.fetch = gate ? (ip_, path) => gate.run(() => get(ip_, path), "background") : get;
   }
 
@@ -143,10 +146,11 @@ export class XmlClient {
    * like a present zone with an empty status.
    *
    * @param zone the zone element (e.g. `Main_Zone`)
+   * @param priority the gate priority — `user` for the read-back of a user's write; background by default
    * @returns the parsed amplifier fields
    */
-  public async getStatus(zone: string): Promise<BasicStatus> {
-    const response = await this.request(this.ip, encodeGet(zone, "<Basic_Status>GetParam</Basic_Status>"));
+  public async getStatus(zone: string, priority?: CommandPriority): Promise<BasicStatus> {
+    const response = await this.request(this.ip, encodeGet(zone, "<Basic_Status>GetParam</Basic_Status>"), priority);
     return parseBasicStatus(assertXmlOk(response, `<${zone}> Basic_Status`));
   }
 
@@ -169,9 +173,11 @@ export class XmlClient {
    *
    * @param element the XML element (a zone or a source)
    * @param inner the inner request XML
+   * @param priority the gate priority — `user` for the read-back of a user's write or a menu step; background by
+   *   default
    * @returns the raw response body
    */
-  public getXml(element: string, inner: string): Promise<string> {
-    return this.request(this.ip, encodeGet(element, inner));
+  public getXml(element: string, inner: string, priority?: CommandPriority): Promise<string> {
+    return this.request(this.ip, encodeGet(element, inner), priority);
   }
 }

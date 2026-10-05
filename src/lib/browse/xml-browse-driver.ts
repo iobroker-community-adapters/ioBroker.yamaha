@@ -8,6 +8,7 @@ import {
 } from "./types";
 import type { BrowseEngine } from "./browse-engine";
 import type { ControllerLog } from "../controller";
+import type { CommandPriority } from "../lifecycle/command-gate";
 import { errText } from "../err-text";
 import { decodeXmlText, escapeXmlText } from "../xml/entities";
 import { padInner } from "../xml/protocol";
@@ -114,7 +115,7 @@ export interface XmlBrowseClient {
   /** Send an inner PUT command to an element (a zone or a source). */
   send(element: string, inner: string): Promise<void>;
   /** Read an element's inner GET request and return the raw response body. */
-  getXml(element: string, inner: string): Promise<string>;
+  getXml(element: string, inner: string, priority?: CommandPriority): Promise<string>;
 }
 
 /** A parsed List_Info response. */
@@ -523,7 +524,9 @@ export class XmlBrowseDriver implements BrowseDriver {
     }
     for (let attempt = 0; attempt < MAX_BUSY_POLLS; attempt++) {
       const list = this.active.list;
-      const info = parseXmlListInfo(await this.client.getXml(this.active.element, `<${list}>GetParam</${list}>`));
+      const info = parseXmlListInfo(
+        await this.client.getXml(this.active.element, `<${list}>GetParam</${list}>`, "user"),
+      );
       if (info.ready) {
         return info;
       }

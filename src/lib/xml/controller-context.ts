@@ -1,4 +1,5 @@
 import type { ControllerDepsBase } from "../controller";
+import type { CommandPriority } from "../lifecycle/command-gate";
 import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import type { XmlCommand } from "./command-mapper";
 import type { BasicStatus, XmlDescriptor, XmlSystemConfig } from "./protocol";
@@ -6,16 +7,16 @@ import type { XmlZone } from "./zones";
 
 /** The subset of the XML client the controller uses (so tests can inject a fake). */
 export interface XmlClientLike {
-  /** Read a zone's Basic_Status. */
-  getStatus(zone: string): Promise<BasicStatus>;
+  /** Read a zone's Basic_Status — at `user` priority for the read-back of a user's write. */
+  getStatus(zone: string, priority?: CommandPriority): Promise<BasicStatus>;
   /** Read the device's declaration of itself (System > Config): model, identity, zones, sources, input names. */
   getSystemConfig(): Promise<XmlSystemConfig>;
   /** Read the raw device description (`desc.xml`); absent on older fakes → no description is read. */
   getDescriptor?(): Promise<string>;
   /** Send an inner command to a zone. */
   send(zone: string, inner: string): Promise<void>;
-  /** Read an element's inner GET request and return the raw response body. */
-  getXml(element: string, inner: string): Promise<string>;
+  /** Read an element's inner GET request and return the raw response body — at `user` priority for a read-back. */
+  getXml(element: string, inner: string, priority?: CommandPriority): Promise<string>;
 }
 
 /** The adapter callbacks the controller drives — narrow, so no adapter mock is needed in tests. */
@@ -103,11 +104,16 @@ export interface XmlControllerContext {
    * Read a zone's status back and write its states.
    *
    * @param zone the zone
+   * @param priority the gate priority — `user` for the read-back of a user's write
    * @returns true when the zone answered
    */
-  refreshZone(zone: XmlZone): Promise<boolean>;
-  /** Read what every zone's media source plays (the player blocks). */
-  refreshPlayers(): Promise<void>;
+  refreshZone(zone: XmlZone, priority?: CommandPriority): Promise<boolean>;
+  /**
+   * Read what every zone's media source plays (the player blocks).
+   *
+   * @param priority the gate priority — `user` for the read-back of a user's write
+   */
+  refreshPlayers(priority?: CommandPriority): Promise<void>;
 }
 
 /**

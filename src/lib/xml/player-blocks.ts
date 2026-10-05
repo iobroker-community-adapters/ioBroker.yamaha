@@ -1,4 +1,5 @@
 import { absoluteDeviceUrl, withAlbumArtId } from "../catalog/device-url";
+import type { CommandPriority } from "../lifecycle/command-gate";
 import { PLAYER_CLEAR, PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE, playerStateObject } from "../catalog/player-block";
 import { errText } from "../err-text";
 import type { XmlControllerContext } from "./controller-context";
@@ -67,8 +68,9 @@ export class XmlPlayerBlocks {
    * Read what every zone's source plays and write the blocks; clear the block of a zone that left its source.
    *
    * @param zones the zones of the device
+   * @param priority the gate priority — `user` for the read-back of a user's write (A58)
    */
-  public async refresh(zones: readonly XmlZone[]): Promise<void> {
+  public async refresh(zones: readonly XmlZone[], priority: CommandPriority = "background"): Promise<void> {
     const ctx = this.ctx;
     const answers = new Map<string, XmlPlayInfo | undefined>();
     for (const zone of zones) {
@@ -84,7 +86,7 @@ export class XmlPlayerBlocks {
       }
       if (!answers.has(source)) {
         try {
-          answers.set(source, parsePlayInfo(await ctx.deps.client.getXml(source, PLAY_INFO_GET)));
+          answers.set(source, parsePlayInfo(await ctx.deps.client.getXml(source, PLAY_INFO_GET, priority)));
         } catch (e) {
           answers.set(source, undefined);
           ctx.deps.log.debug(`${ctx.deviceId}: ${source} Play_Info failed: ${errText(e)}`);
