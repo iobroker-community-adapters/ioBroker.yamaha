@@ -1664,15 +1664,39 @@ describe("the YNCA pad dialect of the 2015 generation (RX-A850: @MAIN:CURSOR/MEN
     expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "zone", proven: true });
   });
 
-  // A re-probe that comes back unclear proves nothing — the dialect proven before stays remembered (2026-10-02).
-  test("an unclear re-probe keeps the dialect proven before", async () => {
+  // A re-probe that comes back unclear proves nothing — the dialect proven before stays remembered (2026-10-02) AND
+  // in use: the fallback word of an unproven start switched a proven ZONE pad to LIST for the rest of the session,
+  // and every later key went out in the wrong dialect (review 2026-10-05, A38).
+  test("an unclear re-probe keeps the dialect proven before — remembered and in use", async () => {
     const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: { dialect: "zone", proven: true } });
     const s = await padSetup(memory, {});
     s.client.probeKnown = () => Promise.resolve({ LISTCURSOR: "unclear", CURSOR: "unclear" });
     void s.controller.handleWrite("remote.cursor", "up");
     s.refuse("@MAIN:CURSOR=Up", "undefined");
     await flush();
+    await flush();
     expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "zone", proven: true });
+    void s.controller.handleWrite("remote.cursor", "down");
+    expect(s.client.sent).toEqual([
+      { subunit: "MAIN", func: "CURSOR", value: "Up" },
+      { subunit: "MAIN", func: "CURSOR", value: "Down" },
+    ]);
+  });
+
+  test("a re-probe that finds no pad at all takes the keys away instead of sending them in the list words", async () => {
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA, yncaPadDialect: { dialect: "zone", proven: true } });
+    const s = await padSetup(memory, {});
+    s.client.probeKnown = () => Promise.resolve({ LISTCURSOR: "undefined", CURSOR: "undefined" });
+    void s.controller.handleWrite("remote.cursor", "up");
+    s.refuse("@MAIN:CURSOR=Up", "undefined");
+    for (let i = 0; i < 10; i++) {
+      await flush();
+    }
+    expect(memory.remembered("yncaPadDialect")).toEqual({ dialect: "none", proven: true });
+    s.client.sent.length = 0;
+    void s.controller.handleWrite("remote.cursor", "down");
+    await flush();
+    expect(s.client.sent.filter(m => /CURSOR/.test(m.func))).toEqual([]);
   });
 });
 

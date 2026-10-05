@@ -506,6 +506,16 @@ export class YncaMenus {
     if (!proven) {
       return "list";
     }
+    return (await this.probePadDialect()) ?? "list";
+  }
+
+  /**
+   * Ask the device which pad it has — a bracketed probe of `@MAIN:LISTCURSOR` and `@MAIN:CURSOR` — and remember a
+   * definite answer.
+   *
+   * @returns the proven dialect, or undefined when the answer was unclear (a receiver not ready): that proves nothing
+   */
+  private async probePadDialect(): Promise<YncaPadDialect | undefined> {
     const verdicts = await this.deps.client.probeKnown("MAIN", ["LISTCURSOR", "CURSOR"]);
     // Both unknown to the device: it has no pad, and none is offered (audit 2026-09-29, B5).
     const dialect: YncaPadDialect | undefined =
@@ -516,16 +526,17 @@ export class YncaMenus {
           : verdicts.LISTCURSOR === "undefined" && verdicts.CURSOR === "undefined"
             ? "none"
             : undefined;
-    if (!dialect) {
-      return "list";
+    if (dialect) {
+      this.deps.probeMemory.set(PAD_DIALECT_KEY, { dialect, proven: true });
     }
-    this.deps.probeMemory.set(PAD_DIALECT_KEY, { dialect, proven: true });
     return dialect;
   }
 
   /**
-   * A pad key came back `@UNDEFINED`: probe the dialect again and, when it turns out to be the other one, switch,
-   * remember and send the key once more in it.
+   * A pad key came back `@UNDEFINED`: probe the dialect again and, when it turns out to be another one, switch,
+   * remember and send the key once more in it. An unclear answer proves nothing: the dialect in use and the one
+   * remembered both stay — before, the fallback word `list` of an unproven start replaced a PROVEN zone dialect for
+   * the rest of the session, and every later key went out in the wrong dialect (review 2026-10-05, A38).
    *
    * @param func the refused function
    * @param wire the refused wire value
@@ -536,21 +547,21 @@ export class YncaMenus {
       return;
     }
     try {
-      const before = driver.padDialect;
-      const known = this.deps.probeMemory.remembered(PAD_DIALECT_KEY);
-      this.deps.probeMemory.drop(key => key === PAD_DIALECT_KEY);
-      const after = await this.padDialect(true);
-      // An unclear answer proves nothing: the dialect proven before stays remembered.
-      if (known !== undefined && this.deps.probeMemory.remembered(PAD_DIALECT_KEY) === undefined) {
-        this.deps.probeMemory.set(PAD_DIALECT_KEY, known);
+      const after = await this.probePadDialect();
+      if (after === undefined || after === driver.padDialect || this.ended()) {
+        return;
       }
-      if (after !== before) {
-        driver.usePadDialect(after);
-        this.deps.log.info(
-          `${this.deviceId}: the pad speaks the ${after === "zone" ? "CURSOR/MENU" : "LIST"} dialect — switched`,
-        );
-        driver.resend(func, wire);
+      if (after === "none") {
+        // No pad at all: the surface is built once more without one — every key would come back @UNDEFINED.
+        this.deps.log.info(`${this.deviceId}: the receiver has no on-screen pad — its keys are taken away`);
+        await this.buildBrowse(this.browsePresent, this.unprovenBrowse.size === 0);
+        return;
       }
+      driver.usePadDialect(after);
+      this.deps.log.info(
+        `${this.deviceId}: the pad speaks the ${after === "zone" ? "CURSOR/MENU" : "LIST"} dialect — switched`,
+      );
+      driver.resend(func, wire);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: probing the pad dialect failed (${errText(e)})`);
     }
