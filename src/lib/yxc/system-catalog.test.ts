@@ -1,4 +1,4 @@
-import { YXC_SYSTEM_CATALOG, presentSystemEntries } from "./system-catalog";
+import { YXC_SYSTEM_CATALOG, presentSystemEntries, systemWrite } from "./system-catalog";
 import type { YxcClientLike } from "./client-contract";
 
 /** The RX-A3080 answer (bundled capture RXA3080_213_215.json) — the richest getFuncStatus on record. */
@@ -193,8 +193,49 @@ describe("every system-catalog entry converts and writes what it claims", () => 
   test.each(Object.entries(WRITES))("%s writes to its own endpoint", async (state, expected) => {
     const entry = YXC_SYSTEM_CATALOG.find(candidate => candidate.state === state)!;
     const { client, calls } = recordingClient();
-    await entry.write!.apply(client, expected.value);
+    const write = systemWrite(entry, expected.value);
+    expect(write.dropped).toBeUndefined();
+    await write.run?.(client);
     expect(calls).toEqual([{ method: expected.method, args: expected.args }]);
+  });
+});
+
+// The one gate of a device-wide write (review 2026-10-05, KISS): the controller coerced the switches on its own and
+// the setters did it again with `Boolean()` — the word "false" switched a setter ON when called directly.
+describe("systemWrite — the one gate of a device-wide setting", () => {
+  const entry = (state: string): (typeof YXC_SYSTEM_CATALOG)[number] =>
+    YXC_SYSTEM_CATALOG.find(candidate => candidate.state === state)!;
+
+  it("reads the switch words, and sends nothing for a word that names no switch value", async () => {
+    const { client, calls } = recordingClient();
+    await systemWrite(entry("hdmi.out1"), "false").run?.(client);
+    await systemWrite(entry("multiroom.party"), "ON").run?.(client);
+    expect(calls).toEqual([
+      { method: "setHdmiOut1", args: [false] },
+      { method: "setPartyMode", args: [true] },
+    ]);
+    expect(systemWrite(entry("hdmi.out1"), "maybe")).toEqual({ dropped: '"maybe" is no switch value' });
+  });
+
+  it("a setter itself coerces nothing — only `true` is on", async () => {
+    const { client, calls } = recordingClient();
+    await entry("hdmi.out2").write!.apply(client, "true");
+    expect(calls).toEqual([{ method: "setHdmiOut2", args: [false] }]);
+  });
+
+  it("puts a number on the grid the system block declares, and sends none outside it", async () => {
+    const declared = { systemRanges: { dimmer: { min: -1, max: 15, step: 1 } } };
+    const { client, calls } = recordingClient();
+    await systemWrite(entry("advanced.displayBrightness"), "3.4", declared).run?.(client);
+    expect(calls).toEqual([{ method: "setDimmer", args: [3] }]);
+    expect(systemWrite(entry("advanced.displayBrightness"), 99, declared)).toEqual({
+      dropped: "99 is outside the declared range -1…15",
+    });
+    expect(systemWrite(entry("advanced.displayBrightness"), true, declared).dropped).toBe("true is no number");
+  });
+
+  it("a read-only setting sends nothing", () => {
+    expect(systemWrite(entry("hdmi.out3"), true)).toEqual({ dropped: "it is read-only on MusicCast" });
   });
 });
 

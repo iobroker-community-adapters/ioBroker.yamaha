@@ -113,29 +113,6 @@ function pushPlayerBlock(objects: ObjectDef[], prefix: string, settableModes: bo
   }
 }
 
-/**
- * The `range_step` id that carries a state's bounds. The names are the device's own
- * (capture-verified across 25 models); a state not listed here declares no range.
- *
- * `volume` is listed, but the entry is the FALLBACK: on a device that declares a display scale,
- * `volumePresentation` overrides it, because the bounds then follow the scale the receiver is
- * showing and no single `range_step` id can express that. A speaker, soundbar or CD receiver
- * declares no display scale and keeps the raw step range read from here.
- */
-const RANGE_BY_STATE: Readonly<Record<string, string>> = {
-  volume: "volume",
-  "sound.bass": "tone_control",
-  "sound.treble": "tone_control",
-  subwooferVolume: "subwoofer_volume",
-  "sound.dialogueLevel": "dialogue_level",
-  "sound.dialogueLift": "dialogue_lift",
-  "sound.dtsDialogueControl": "dts_dialogue_control",
-  "sound.balance": "balance",
-  "sound.equalizer.low": "equalizer",
-  "sound.equalizer.mid": "equalizer",
-  "sound.equalizer.high": "equalizer",
-};
-
 /** One `range_step` entry as a zone declares it. */
 type DeclaredRange = NonNullable<YxcZone["ranges"]>[string];
 
@@ -270,7 +247,7 @@ export function volumePresentation(
   const db = zone.ranges?.actual_volume_db;
   const numeric = zone.ranges?.actual_volume_numeric;
   // A device that declares no display scale at all (speakers, soundbars, CD receivers) keeps its
-  // own step scale and the bounds RANGE_BY_STATE reads for it — there is nothing to follow here.
+  // own step scale and the bounds its `range_step` declares — there is nothing to follow here.
   if (!db && !numeric) {
     return undefined;
   }
@@ -350,27 +327,19 @@ function belongsToZone(entry: (typeof YXC_AMP_CATALOG)[number], zoneId: string):
 }
 
 /**
- * Whether the device's getFeatures declares what the entry needs: the zone function, an input,
- * or a system function (`always` needs nothing).
+ * Whether the device's getFeatures declares what the entry needs: the zone function or an input
+ * (`always` needs nothing).
  *
  * @param entry the catalog entry
  * @param zone the zone as getFeatures declares it
- * @param capabilities the parsed YXC capabilities
  * @returns whether the declaration carries the entry
  */
-function declares(
-  entry: (typeof YXC_AMP_CATALOG)[number],
-  zone: YxcCapabilities["zones"][number],
-  capabilities: YxcCapabilities,
-): boolean {
+function declares(entry: (typeof YXC_AMP_CATALOG)[number], zone: YxcZone): boolean {
   if (entry.create.kind === "always") {
     return true;
   }
   if (entry.create.kind === "input") {
     return zone.inputs.length > 0;
-  }
-  if (entry.create.kind === "systemFunc") {
-    return capabilities.systemFuncs?.includes(entry.create.func) ?? false;
   }
   return zone.funcs.includes(entry.create.func);
 }
@@ -416,7 +385,7 @@ export function yxcDeclaredAbsent(capabilities: YxcCapabilities): string[] {
       continue;
     }
     for (const entry of YXC_AMP_CATALOG) {
-      if (belongsToZone(entry, zoneDef.id) && !declares(entry, zone, capabilities)) {
+      if (belongsToZone(entry, zoneDef.id) && !declares(entry, zone)) {
         absent.push(`${zoneDef.prefix}${entry.state}`);
       }
     }
@@ -447,12 +416,10 @@ export function mapYxcToObjects(
     if (!zone) {
       continue;
     }
-    const entries = YXC_AMP_CATALOG.filter(
-      entry => belongsToZone(entry, zoneDef.id) && declares(entry, zone, capabilities),
-    );
+    const entries = YXC_AMP_CATALOG.filter(entry => belongsToZone(entry, zoneDef.id) && declares(entry, zone));
     // A zone needs an advertised function or an input to exist — the "always" status
     // fields and the device-wide entries alone do not create a zone.
-    if (!entries.some(entry => entry.create.kind !== "always" && entry.create.kind !== "systemFunc")) {
+    if (!entries.some(entry => entry.create.kind !== "always")) {
       continue;
     }
     // Every parent — the zone channel included — is created by the per-state loop and
@@ -472,12 +439,12 @@ export function mapYxcToObjects(
       // "Volume" either way. A device without a declared display scale falls through to its own
       // step scale below, unchanged.
       const shown =
-        entry.state === "volume" ? volumePresentation(zone, current?.[zone.id]?.actualVolumeMode) : undefined;
+        entry.scale === "volume" ? volumePresentation(zone, current?.[zone.id]?.actualVolumeMode) : undefined;
       if (shown) {
         common.unit = shown.unit;
         common.desc = tName(shown.descKey);
         range = shown.range;
-      } else if (entry.state === "advanced.maxVolume") {
+      } else if (entry.scale === "volumeLimit") {
         // `max_volume` arrives in raw steps (YXC Basic §5.1); the controller shows it on the scale the
         // zone's volume is shown on, so 161 next to a volume of −80.5…16.5 dB reads 0.0 dB (audit
         // 2026-09-29, C40). Unit only: the maximum's own range is not declared.
@@ -486,8 +453,7 @@ export function mapYxcToObjects(
           common.unit = scale.unit;
         }
       } else {
-        const rangeId = RANGE_BY_STATE[entry.state];
-        range = rangeId ? zone.ranges?.[rangeId] : undefined;
+        range = entry.range ? zone.ranges?.[entry.range] : undefined;
       }
       if (range) {
         common.min = range.min;

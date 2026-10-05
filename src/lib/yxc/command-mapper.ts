@@ -3,6 +3,7 @@ import type { StateValue } from "../types";
 import { splitZone, YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { I18nKey } from "../i18n";
 import { coerceBool, isWritableValue } from "../catalog/value-coerce";
+import { gateValue } from "./values";
 import { formatPlayTime } from "../catalog/play-time";
 import type { SlotField } from "../catalog/list-slots";
 import { YXC_AMP_CATALOG } from "./catalog";
@@ -88,13 +89,6 @@ const PLAYER_TRANSPORTS = ["play", "pause", "stop", "next", "prev", "repeatToggl
 
 /** A transport action of the unified player block. */
 export type PlayerTransport = (typeof PLAYER_TRANSPORTS)[number];
-
-/** Equalizer band state (without zone prefix) → the band of the declarative equalizer command. */
-const EQ_CHANNELS: Record<string, "low" | "mid" | "high"> = {
-  "sound.equalizer.low": "low",
-  "sound.equalizer.mid": "mid",
-  "sound.equalizer.high": "high",
-};
 
 /** The alarm detail fields a datapoint sets, by id segment → `detail` key (YXC Basic Rev 1.10 §9.5). */
 const ALARM_DETAIL_WRITES: Readonly<Record<string, "enable" | "time" | "beep">> = {
@@ -317,29 +311,29 @@ export function stateToYxc(stateId: string, value: unknown): YxcCommand | undefi
     const on = coerceBool(value);
     return on === undefined ? undefined : { kind: "playerMode", zone, shuffle: on ? "on" : "off" };
   }
-  // Volume is declarative because the datapoint carries what the receiver DISPLAYS while
-  // setVolume takes only the raw step count. Converting between the two needs the zone's declared
-  // scale and the display mode it currently reports, and both live in the controller.
-  if (name === "volume" && isWritableValue(value, true)) {
-    return { kind: "volume", zone, value: Number(value) };
-  }
-  const eqBand = EQ_CHANNELS[name];
-  if (eqBand && isWritableValue(value, true)) {
-    // The controller supplies the other two bands; the value carries only this band.
-    return { kind: "equalizer", zone, band: eqBand, value: Number(value) };
-  }
   const entry = YXC_AMP_CATALOG.find(e => e.state === name);
-  if (!entry?.write || !isWritableValue(value, entry.common.type === "number")) {
+  if (!entry?.write) {
     return undefined;
   }
-  // A switch reads the words a script writes ("false", "off", "0") for what they mean — the
-  // entry's Boolean() would send every non-empty string as on.
-  const input = entry.common.type === "boolean" ? coerceBool(value) : value;
+  // The one gate of a written value: a switch reads the words a script writes ("false", "off", "0") for what they
+  // mean, a number takes the strict number rule, a word is trimmed text.
+  const { value: input } = gateValue(entry.common.type, value);
   if (input === undefined) {
     return undefined;
   }
-  const { apply } = entry.write;
-  return { kind: "run", run: client => apply(client, input, zone) };
+  const write = entry.write;
+  switch (write.kind) {
+    case "volume":
+      // Declarative: the datapoint carries what the receiver DISPLAYS while setVolume takes only the raw step
+      // count. Converting between the two needs the zone's declared scale and the display mode it currently
+      // reports, and both live in the controller.
+      return { kind: "volume", zone, value: Number(input) };
+    case "equalizer":
+      // The controller supplies the other two bands; the value carries only this band.
+      return { kind: "equalizer", zone, band: write.band, value: Number(input) };
+    case "set":
+      return { kind: "run", run: client => write.apply(client, input, zone) };
+  }
 }
 
 /**

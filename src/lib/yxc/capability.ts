@@ -1,3 +1,6 @@
+import { YXC_AMP_CATALOG } from "./catalog";
+import { YXC_REMOTE_LISTS } from "./remote";
+
 /** One zone from a YXC getFeatures response. */
 export interface YxcZone {
   /** Zone id (`main`, `zone2`, …). */
@@ -182,25 +185,15 @@ function parseRanges(rangeStep: unknown): Record<string, { min: number; max: num
 }
 
 /**
- * The getFeatures zone list fields that carry a zone's allowed values, mapped to the
- * unified state id whose dropdown they feed (capture-verified field names).
+ * The getFeatures zone list fields that carry a zone's allowed values, mapped to the unified state id whose
+ * dropdown they feed (capture-verified field names) — read from the catalog entries and the remote's two lists,
+ * where each field is declared once. The parsed lists stay keyed by state id: that is the shape the probe memory
+ * persists.
  */
-const ZONE_VALUE_LISTS: Readonly<Record<string, string>> = {
-  sound_program_list: "soundProgram",
-  surr_decoder_type_list: "sound.surroundDecoder",
-  tone_control_mode_list: "sound.toneMode",
-  equalizer_mode_list: "sound.equalizer.mode",
-  audio_select_list: "sound.audioSelect",
-  link_control_list: "sound.linkControl",
-  link_audio_delay_list: "sound.linkAudioDelay",
-  link_audio_quality_list: "sound.linkAudioQuality",
-  // The on-screen remote words THIS zone accepts. Measured over 26 captures (2026-09-09): one
-  // cursor list everywhere, but three menu variants — 5, 9 and 12 words (help/home/mode and the
-  // four colour keys only on some models). The shared vocabulary is the maximum, the device's
-  // list is the truth; before this the dropdown offered all 12 on every zone.
-  cursor_list: "remote.cursor",
-  menu_list: "remote.menu",
-};
+const ZONE_VALUE_LISTS: ReadonlyArray<readonly [field: string, state: string]> = [
+  ...YXC_AMP_CATALOG.flatMap(entry => (entry.list ? [[entry.list, entry.state] as const] : [])),
+  ...Object.entries(YXC_REMOTE_LISTS).map(([state, field]) => [field, state] as const),
+];
 
 /**
  * Collect a zone's per-device value lists (sound programs, decoder types, …) from its
@@ -211,7 +204,7 @@ const ZONE_VALUE_LISTS: Readonly<Record<string, string>> = {
  */
 function parseValueLists(zone: Record<string, unknown>): Record<string, string[]> | undefined {
   const lists: Record<string, string[]> = {};
-  for (const [field, stateId] of Object.entries(ZONE_VALUE_LISTS)) {
+  for (const [field, stateId] of ZONE_VALUE_LISTS) {
     const values = stringList(zone[field]);
     if (values.length > 0) {
       lists[stateId] = values;

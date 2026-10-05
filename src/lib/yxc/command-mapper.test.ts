@@ -490,6 +490,16 @@ describe("stateToYxc", () => {
     expect(await ranCall("soundProgram", "stereo")).toEqual(["setSound", ["stereo", "main"]]);
   });
 
+  // The one gate (review 2026-10-05, KISS): a word datapoint takes text — trimmed — and a number's text; a switch
+  // value or an empty text names no word and went out as "true" or "".
+  test("a word datapoint takes trimmed text; a switch value or an empty text sends nothing", async () => {
+    expect(await ranCall("soundProgram", " stereo ")).toEqual(["setSound", ["stereo", "main"]]);
+    expect(await ranCall("input", 5)).toEqual(["setInput", ["5", "main"]]);
+    expect(stateToYxc("soundProgram", true)).toBeUndefined();
+    expect(stateToYxc("input", "")).toBeUndefined();
+    expect(stateToYxc("input", "   ")).toBeUndefined();
+  });
+
   test("returns undefined for an unmapped state or unknown zone", () => {
     expect(stateToYxc("nonsense", 1)).toBeUndefined();
     expect(stateToYxc("zone9.power", true)).toBeUndefined();
