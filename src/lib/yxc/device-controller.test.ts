@@ -3202,3 +3202,35 @@ describe("a recall goes to a switched-on zone (review 2026-10-05, A45)", () => {
     expect(s.client.calls.find(c => c.method === "recallPreset")?.args).toEqual([3, "zone2"]);
   });
 });
+
+// The YSP-1600 reports disable_flags 3 (volume and mute not operable) in standby. A script writing "power on, then
+// volume" had its volume dropped on the remembered standby flags — push working or not (review 2026-10-05, A18).
+describe("a stale standby flag is checked against the zone first (review 2026-10-05, A18)", () => {
+  test("power on, then volume: the volume goes out once the zone says it is operable", async () => {
+    const s = setup(wx10, ysp, {}, () => true);
+    await s.controller.start();
+    (s.client as unknown as Record<string, unknown>).power = (on: boolean): Promise<unknown> => {
+      s.client.status = on ? { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0 } : ysp;
+      s.client.calls.push({ method: "power", args: [on, "main"] });
+      return Promise.resolve({ response_code: 0 });
+    };
+    s.client.calls.length = 0;
+    const [power, volume] = await Promise.all([
+      s.controller.handleWrite("power", true),
+      s.controller.handleWrite("volume", 25),
+    ]);
+    expect([power, volume]).toEqual(["sent", "sent"]);
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [25, "main"] });
+    expect(s.debugs.some(line => line.includes("not operable"))).toBe(false);
+  });
+
+  test("a zone still in standby keeps the function closed — not sent, the device's value back", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    s.acks.length = 0;
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("volume", 25)).toBe("unavailable");
+    expect(s.client.calls.map(c => c.method)).toEqual(["getStatus"]);
+    expect(s.acks).toContainEqual({ id: "living.volume", value: 30 });
+  });
+});

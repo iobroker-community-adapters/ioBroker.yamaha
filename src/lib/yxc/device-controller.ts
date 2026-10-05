@@ -844,11 +844,15 @@ export class YxcDeviceController {
     // b1 mute, b2 link audio delay — a soundbar in standby reports 3) is not sent: the device would
     // refuse it with a warning; the datapoint gets the device's value back (audit 2026-09-24, C27).
     const bit = ({ volume: 0b1, mute: 0b10, "sound.linkAudioDelay": 0b100 } as Record<string, number>)[name];
-    if (bit !== undefined) {
-      const zone = zoneKey;
-      if (((this.disabledFlags.get(zone) ?? 0) & bit) !== 0) {
+    const disabled = (): boolean => bit !== undefined && ((this.disabledFlags.get(zoneKey) ?? 0) & bit) !== 0;
+    if (disabled()) {
+      // The flags are those of the zone's LAST status: a script's "power on, then volume" was judged on the
+      // standby flags and its volume dropped, push or not (YSP-1600, review 2026-10-05, A18). The zone is asked
+      // now — behind the power write in the command gate — and that answer decides; it also puts the device's
+      // value back on the datapoint when the function is still not operable.
+      await this.refreshZone(zoneKey);
+      if (disabled()) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} is not operable on the device right now — not sent`);
-        this.coalesced(`zone:${zone}`, () => this.refreshZone(zone));
         return "unavailable";
       }
     }
