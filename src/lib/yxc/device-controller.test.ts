@@ -1,6 +1,7 @@
 import { YxcRefusalError, YxcTransportError } from "./http-client";
 import { HttpStatusError } from "../util";
 import cdNt670d from "./__fixtures__/cd_nt670d.json";
+import wx30 from "./__fixtures__/WX30_317_208.json";
 import { nameTextLabels, YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
 import type { ObjectDef } from "../catalog/types";
@@ -3135,5 +3136,43 @@ describe("a scene write resolves the same way as on YNCA and XML (review 2026-10
       { method: "recallScene", args: [2, "main"] },
       { method: "recallScene", args: [3, "main"] },
     ]);
+  });
+});
+
+// A script linking kitchen and bath wrote multiroom.group.linkDevice twice in a row: both writes read "no group yet"
+// and drew their own random group id, so the kitchen ended in an orphaned group (review 2026-10-05, A14).
+describe("MusicCast Link changes wait for each other (review 2026-10-05, A14)", () => {
+  test("two linkDevice writes in a row build ONE group", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const kitchen = makeFakeClient(wx30, {});
+    const bath = makeFakeClient(wx30, {});
+    const s = setup(features, ysp, { "10.0.0.3": kitchen, "10.0.0.4": bath }, undefined, { host: "10.0.0.1" });
+    s.client.distRole = "none";
+    await s.controller.start();
+    let roster: string[] = [];
+    (s.client as unknown as Record<string, unknown>).setServerInfo = (info: {
+      group_id: string;
+      client_list?: string[];
+    }): Promise<unknown> => {
+      roster = [...roster, ...(info.client_list ?? [])];
+      s.client.distInfo = {
+        role: "server",
+        group_id: info.group_id,
+        client_list: roster.map(ip => ({ ip_address: ip })),
+        status: "working",
+      };
+      return Promise.resolve({ response_code: 0 });
+    };
+    const outcomes = await Promise.all([
+      s.controller.handleWrite("multiroom.group.linkDevice", "10.0.0.3"),
+      s.controller.handleWrite("multiroom.group.linkDevice", "10.0.0.4"),
+    ]);
+    await flush();
+    expect(outcomes).toEqual(["sent", "sent"]);
+    const groupOf = (device: FakeClient): unknown =>
+      (device.calls.find(c => c.method === "setClientInfo")?.args[0] as { group_id: string } | undefined)?.group_id;
+    expect(groupOf(kitchen)).toMatch(/^[0-9A-F]{32}$/);
+    expect(groupOf(bath)).toBe(groupOf(kitchen));
+    expect(roster).toEqual(["10.0.0.3", "10.0.0.4"]);
   });
 });

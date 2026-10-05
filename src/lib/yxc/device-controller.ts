@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { resolveIPv4 } from "../network-interfaces";
 import { parseYxcFeatures, type YxcCapabilities, type YxcTunerFeatures } from "./capability";
 import {
   mapYxcToObjects,
@@ -75,13 +73,6 @@ const KEEPALIVE_MS = 5 * 60 * 1000;
  * device changed the value without telling, counted against the events (see PushLiveness).
  */
 export const PUSH_EXPECT_MS = 5000;
-
-/** How often, and how far apart, a new group is read back until it works (YXC Advanced §9.1.8-3: up to 3 min). */
-const GROUP_BUILD_POLLS = 36;
-const GROUP_BUILD_POLL_MS = 5000;
-
-/** The longest group name the device takes, in UTF-8 bytes (YXC Advanced §5.6). */
-const GROUP_NAME_MAX_BYTES = 128;
 
 /** How long after a favourite recall the device's `preset_control` verdict is taken as its answer. */
 const PRESET_VERDICT_MS = 30_000;
@@ -196,6 +187,7 @@ export function zoneNameFrom(nameText: unknown): string | undefined {
 import type { YxcClientLike } from "./client-contract";
 import { MEMORY_KEY } from "../lifecycle/memory-keys";
 import { YxcPlayerRouting } from "./player-routing";
+import { LinkGroup } from "./link-group";
 
 /** Probe-memory key: per zone, the display scale (`db`/`numeric`) its `volume` datapoint was read in on. */
 const VOLUME_MODE_KEY = MEMORY_KEY.yxcVolumeMode;
@@ -310,6 +302,8 @@ export class YxcDeviceController {
   private hasDistribution = false;
   /** What the last getDistributionInfo said about this device's group (effective role, roster, status). */
   private dist: DistributionSummary = distributionSummary(undefined);
+  /** The MusicCast Link group: link, leave and rename, one change at a time. */
+  private readonly group: LinkGroup;
   /** The tuner features (bands + preset mode) — a preset recall needs the band. */
   private tunerFeatures: YxcTunerFeatures | undefined;
   /** Whether the device reports the clock/alarm block (gates the clock poll). */
@@ -368,7 +362,23 @@ export class YxcDeviceController {
   public constructor(
     private readonly deviceId: string,
     private readonly deps: YxcControllerDeps,
-  ) {}
+  ) {
+    this.group = new LinkGroup({
+      deviceId,
+      client: deps.client,
+      clientFor: deps.clientFor,
+      partnerIps: deps.partnerIps,
+      host: deps.host,
+      gate: deps.gate,
+      log: deps.log,
+      refresh: async () => {
+        await this.refreshDistribution();
+        return this.dist;
+      },
+      summary: () => this.dist,
+      features: () => this.capabilities?.distribution,
+    });
+  }
 
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
@@ -786,13 +796,13 @@ export class YxcDeviceController {
     }
     // Multiroom writes need controller state (the cached role), so they bypass the pure command map.
     if (stateId === "multiroom.group.leave") {
-      return this.leaveGroup();
+      return this.group.leave();
     }
     if (stateId === "multiroom.group.linkDevice") {
-      return this.linkClient(String(value));
+      return this.group.link(String(value));
     }
     if (stateId === "multiroom.group.name") {
-      return this.renameGroup(value);
+      return this.group.rename(value);
     }
     // Device-wide settings are not part of the zone command map — they carry their own setters.
     const systemEntry = this.systemEntries.find(entry => entry.state === stateId);
@@ -1509,246 +1519,6 @@ export class YxcDeviceController {
   }
 
   /**
-   * Name the MusicCast group (YXC Advanced §5.6): UTF-8 within 128 bytes, "" restores the default;
-   * then read the distribution back, so the datapoint shows what the device took (audit 2026-09-24, C8).
-   *
-   * @param value the written name
-   * @returns what the device made of the write
-   */
-  private async renameGroup(value: unknown): Promise<WriteOutcome> {
-    let outcome: WriteOutcome = "unavailable";
-    try {
-      const name = typeof value === "string" ? value : undefined;
-      if (name === undefined) {
-        this.deps.log.debug(`${this.deviceId}: a group name is text — ${typeof value} not sent`);
-      } else if (Buffer.byteLength(name, "utf8") > GROUP_NAME_MAX_BYTES) {
-        this.deps.log.debug(
-          `${this.deviceId}: group name "${name}" is longer than ${GROUP_NAME_MAX_BYTES} bytes — not sent`,
-        );
-      } else {
-        await this.deps.client.setGroupName(name);
-        outcome = "sent";
-      }
-    } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: renaming the group failed: ${errText(e)}`);
-      outcome = answeredByDevice(e) ? "refused" : "unavailable";
-    }
-    await this.refreshDistribution();
-    return outcome;
-  }
-
-  /**
-   * Leave the current MusicCast-Link group (YXC Advanced §9.1): a server stops distributing and
-   * clears its server setup (§5.5, §5.2 with group ""); a client leaves as {@link leaveAsClient}.
-   * Decided on the EFFECTIVE role (§9.2) — the role word flickers (audit 2026-09-24, C7).
-   *
-   * @returns what the devices made of it
-   */
-  private async leaveGroup(): Promise<WriteOutcome> {
-    try {
-      await this.refreshDistribution();
-      if (this.dist.role === "server") {
-        const clients = this.dist.clients;
-        await this.deps.client.stopDistribution();
-        await this.deps.client.setServerInfo({ group_id: "" });
-        // The clients are released too (YXC Advanced §9.1.3-1): before, they kept the group id and the
-        // MusicCast Link input (audit 2026-09-29, C43). A client this adapter does not run is left
-        // alone — it notices the lost server itself.
-        for (const ip of this.deps.partnerIps?.() ?? []) {
-          const partner = this.deps.clientFor?.(ip);
-          if (partner && clients.includes((await resolveIPv4(ip)) ?? ip)) {
-            await partner.setClientInfo({ group_id: "" });
-          }
-        }
-      } else if (this.dist.role === "client") {
-        await this.leaveAsClient();
-      } else {
-        await this.deps.client.setClientInfo({ group_id: "" });
-      }
-      await this.refreshDistribution();
-      return "sent";
-    } catch (e) {
-      // A user action failing must be visible — warn, like every other write command.
-      this.deps.log.warn(`${this.deviceId}: leaveGroup failed: ${errText(e)}`);
-      return answeredByDevice(e) ? "refused" : "unavailable";
-    }
-  }
-
-  /**
-   * Leave a group as a client (YXC Advanced §9.1.3): clear this device's client setup, then take it
-   * off its server's roster and — where clients remain — restart the distribution with the network's
-   * distribution number. The server is found among the configured devices; one this adapter does not
-   * know is left alone (it drops the client when it stops answering).
-   */
-  private async leaveAsClient(): Promise<void> {
-    const ownIp = await this.ownIp();
-    const num = await this.networkClientCount();
-    await this.deps.client.setClientInfo({ group_id: "" });
-    if (ownIp === undefined) {
-      return;
-    }
-    for (const ip of this.deps.partnerIps?.() ?? []) {
-      const partner = this.deps.clientFor?.(ip);
-      const summary = partner ? await this.summaryOf(partner) : undefined;
-      if (!partner || summary?.role !== "server" || !summary.clients.includes(ownIp)) {
-        continue;
-      }
-      await partner.setServerInfo({
-        group_id: summary.groupId,
-        zone: summary.serverZone,
-        type: "remove",
-        client_list: [ownIp],
-      });
-      if (summary.clients.length > 1) {
-        await partner.startDistribution(num);
-      } else {
-        // The last client gone: "If all clients are to be removed, set empty text to GroupID in
-        // setServerInfo" (YXC Advanced §9.1.3-2) — the server showed "server" with an empty roster (C43).
-        await partner.setServerInfo({ group_id: "" });
-      }
-      return;
-    }
-    this.deps.log.debug(`${this.deviceId}: the group's server is not a configured device — left its roster to it`);
-  }
-
-  /**
-   * A zone left the MusicCast Link input while this device is a client: it has to leave the group
-   * (YXC Advanced §9.1.6-1). Called without awaiting.
-   */
-  private async leaveAfterInputChange(): Promise<void> {
-    try {
-      this.deps.log.debug(`${this.deviceId}: the input left MusicCast Link — leaving the group`);
-      await this.leaveAsClient();
-      await this.refreshDistribution();
-    } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: leaving the group after the input change failed: ${errText(e)}`);
-    }
-  }
-
-  /**
-   * This device's IPv4 address, for a server's roster (`client_list` and `server_ip_address` take
-   * addresses, YXC Advanced §5.2/§5.3).
-   *
-   * @returns the address, or undefined when the configured host does not resolve
-   */
-  private async ownIp(): Promise<string | undefined> {
-    return this.deps.host === undefined ? undefined : resolveIPv4(this.deps.host);
-  }
-
-  /**
-   * A device's group summary, or undefined when it does not answer.
-   *
-   * @param client the device's client
-   * @returns its summary
-   */
-  private async summaryOf(client: YxcClientLike): Promise<DistributionSummary | undefined> {
-    try {
-      return distributionSummary(await client.getDistributionInfo());
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: a partner's getDistributionInfo failed: ${errText(e)}`);
-      return undefined;
-    }
-  }
-
-  /**
-   * The distribution number of the MusicCast network BEFORE a change: how many clients every server
-   * among the configured devices distributes to — `startDistribution?num=` (YXC Advanced §5.4, §9.1.2–
-   * §9.1.5: the first group 0, a third client joining a group of two 2). It was a fixed 0.
-   *
-   * @returns the number
-   */
-  private async networkClientCount(): Promise<number> {
-    let count = this.dist.role === "server" ? this.dist.clients.length : 0;
-    for (const ip of this.deps.partnerIps?.() ?? []) {
-      const partner = this.deps.clientFor?.(ip);
-      const summary = partner ? await this.summaryOf(partner) : undefined;
-      if (summary?.role === "server") {
-        count += summary.clients.length;
-      }
-    }
-    return count;
-  }
-
-  /**
-   * Form or extend a MusicCast-Link group with this device as server (YXC Advanced §9.1): check the
-   * two are compatible (§9.1.1), give the client the group, the server's address and the MusicCast
-   * Link input (§5.3, §9.1.6), add it to the roster, start the distribution with the network's
-   * distribution number (§5.4), and read the group back until it is working — which can take up to
-   * three minutes (§9.1.8-3). A group this device already serves is extended, not replaced; a new one
-   * gets a random id (§9.1.2) (audit 2026-09-24, C7).
-   *
-   * @param target the address of the client device (a configured device)
-   * @returns what the devices made of it
-   */
-  private async linkClient(target: string): Promise<WriteOutcome> {
-    try {
-      const clientIp = (await resolveIPv4(target)) ?? target;
-      const partner = this.deps.clientFor?.(clientIp) ?? this.deps.clientFor?.(target);
-      if (!partner) {
-        this.deps.log.warn(`${this.deviceId}: cannot link ${target} — not a known device`);
-        return "unavailable";
-      }
-      const master = this.capabilities?.distribution;
-      const joiningFeatures = parseYxcFeatures(await partner.getFeatures());
-      const joining = joiningFeatures.distribution;
-      // Zone A and Zone B join a group only together (YXC Advanced §9.1.7-2).
-      const joiningZones = joiningFeatures.zones.some(zone => zone.id === "zone2" && zone.zoneB === true)
-        ? ["main", "zone2"]
-        : ["main"];
-      if (master?.compatibleClients !== undefined) {
-        // No `version` means a 1.x network module (YXC Advanced §9.1.8-1/-2) — it was let through
-        // unchecked and the build failed silently after three minutes of polling (audit 2026-09-29, C43).
-        const version = joining?.version ?? 1;
-        if (!master.compatibleClients.includes(Math.floor(version))) {
-          this.deps.log.warn(
-            `${this.deviceId}: cannot link ${target} — its MusicCast Link version ${version} is not one this device takes (${master.compatibleClients.join(", ")}); a firmware update of either brings them together`,
-          );
-          return "unavailable";
-        }
-      }
-      await this.refreshDistribution();
-      const num = await this.networkClientCount();
-      const groupId =
-        this.dist.role === "server" && this.dist.inGroup
-          ? this.dist.groupId
-          : randomBytes(16).toString("hex").toUpperCase();
-      const serverIp = await this.ownIp();
-      await partner.setClientInfo({
-        group_id: groupId,
-        zone: joiningZones,
-        ...(serverIp !== undefined ? { server_ip_address: serverIp } : {}),
-      });
-      for (const zone of joiningZones) {
-        await partner.setInput("mc_link", zone);
-      }
-      await this.deps.client.setServerInfo({ group_id: groupId, zone: "main", type: "add", client_list: [clientIp] });
-      await this.deps.client.startDistribution(num);
-      await this.awaitGroupBuilt();
-      return "sent";
-    } catch (e) {
-      // A user action failing must be visible — warn, like every other write command.
-      this.deps.log.warn(`${this.deviceId}: linkClient(${target}) failed: ${errText(e)}`);
-      return answeredByDevice(e) ? "refused" : "unavailable";
-    }
-  }
-
-  /** Read the distribution until the group reports `working` — at most three minutes (§9.1.8-3). */
-  private async awaitGroupBuilt(): Promise<void> {
-    await this.refreshDistribution();
-    const gate = this.deps.gate;
-    for (let round = 0; gate && round < GROUP_BUILD_POLLS; round++) {
-      if (this.dist.status === undefined || this.dist.status === "working") {
-        return;
-      }
-      await gate.delay(GROUP_BUILD_POLL_MS);
-      if (gate.closed) {
-        return;
-      }
-      await this.refreshDistribution();
-    }
-  }
-
-  /**
    * Run a refresh at most once at a time per key, and once more after it when asked meanwhile — never
    * more. A knob turned twenty detents sends twenty events (YXC Basic Rev 1.10 §11.3); each was one
    * `getStatus` in the gate's queue, nineteen of them answering a state already gone (audit 2026-09-29,
@@ -1872,7 +1642,7 @@ export class YxcDeviceController {
       if (update.id === `${zonePrefix(zone)}input` && typeof update.value === "string") {
         const previous = this.routing.noteInput(zone, update.value);
         if (previous === "mc_link" && update.value !== "mc_link" && this.dist.role === "client") {
-          void this.leaveAfterInputChange();
+          this.group.leaveAfterInputChange();
         }
         if (previous !== update.value) {
           // The zone changed its input — re-target its player block NOW. Media
