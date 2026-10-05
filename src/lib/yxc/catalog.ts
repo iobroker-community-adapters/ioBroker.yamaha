@@ -1,6 +1,7 @@
 import type { ObjectDef } from "../catalog/types";
 import type { I18nKey } from "../i18n";
 import type { YxcClientLike } from "./client-contract";
+import type { YxcZone } from "./capability";
 import { readNumber, readSwitch, readWord, type YxcValue } from "./values";
 
 /**
@@ -79,6 +80,25 @@ export interface YxcAmpEntry {
    * dispatch switch and no "unknown command" runtime path.
    */
   write?: YxcAmpWrite;
+}
+
+/**
+ * Whether a zone declares a catalog entry — the one rule for its object (object mapper) AND its value (status parser):
+ * a status field of a function the zone does not declare (RX-A2070 zone 4 reports volume and mute without declaring
+ * them) has no object, so its value is not reported either (review 2026-10-05: no value without an object).
+ *
+ * @param entry the catalog entry
+ * @param zone the zone as getFeatures declares it
+ * @returns whether the zone has the datapoint
+ */
+export function declaredBy(entry: YxcAmpEntry, zone: YxcZone): boolean {
+  if (entry.create.kind === "always") {
+    return true;
+  }
+  if (entry.create.kind === "input") {
+    return zone.inputs.length > 0;
+  }
+  return zone.funcs.includes(entry.create.func);
 }
 
 /**

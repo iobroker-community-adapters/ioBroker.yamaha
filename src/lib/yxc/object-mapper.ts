@@ -12,7 +12,7 @@ import { remoteObjectDefs } from "../browse/objects";
 import { tName, type I18nKey } from "../i18n";
 import { ZONE_KEYS, zonePrefix } from "../catalog/zones";
 import type { YxcCapabilities, YxcZone } from "./capability";
-import { halfDb, YXC_AMP_CATALOG, type YxcAmpEntry } from "./catalog";
+import { declaredBy, halfDb, YXC_AMP_CATALOG, type YxcAmpEntry } from "./catalog";
 import { ALARM_DAYS } from "./clock";
 import { DAB_FIELDS } from "./play-info";
 
@@ -338,13 +338,7 @@ function belongsToZone(entry: (typeof YXC_AMP_CATALOG)[number], zoneId: string):
  * @returns whether the declaration carries the entry
  */
 function declares(entry: (typeof YXC_AMP_CATALOG)[number], zone: YxcZone): boolean {
-  if (entry.create.kind === "always") {
-    return true;
-  }
-  if (entry.create.kind === "input") {
-    return zone.inputs.length > 0;
-  }
-  return zone.funcs.includes(entry.create.func);
+  return declaredBy(entry, zone);
 }
 
 /** The RDS block of a tuner (YXC Basic §6.2 `rds`) — created only where the tuner declares `rds`. */

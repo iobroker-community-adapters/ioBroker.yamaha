@@ -52,7 +52,7 @@ import { coerceBool, selfMap } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
 import { answeredByDevice, YxcTransportError } from "./http-client";
 import { splitZone, zonePrefix } from "../catalog/zones";
-import { disableBitOf } from "./catalog";
+import { declaredBy, disableBitOf, YXC_AMP_CATALOG } from "./catalog";
 import { presentSystemEntries, systemWrite, YXC_SYSTEM_CATALOG, type YxcSystemEntry } from "./system-catalog";
 import { keyedCommon, parentChannels } from "../catalog/types";
 import { knownScenes, resolveSceneNumber, sceneListSurface, sceneRecallStates } from "../catalog/scene-titles";
@@ -1651,6 +1651,23 @@ export class YxcDeviceController {
   }
 
   /**
+   * The zone's catalog ids it does not declare (getFeatures) — they have no object.
+   *
+   * @param zone the zone key
+   * @returns the ids, empty before getFeatures was read
+   */
+  private undeclaredIds(zone: string): ReadonlySet<string> {
+    const declared = this.capabilities?.zones.find(candidate => candidate.id === zone);
+    if (!declared) {
+      return new Set();
+    }
+    const prefix = zonePrefix(zone);
+    return new Set(
+      YXC_AMP_CATALOG.filter(entry => !declaredBy(entry, declared)).map(entry => `${prefix}${entry.state}`),
+    );
+  }
+
+  /**
    * Fetch a zone's status and write its amp states with ack.
    *
    * @param zone the zone to refresh
@@ -1749,14 +1766,20 @@ export class YxcDeviceController {
     const otherScale = mode !== undefined && learned !== undefined && mode !== learned;
     const asShown = this.displayedVolumeIn(zone, status, otherScale);
     const updates = parseYxcStatus(status, zone);
+    // A field of a function the zone does not declare has no object (RX-A2070 zone 4 reports volume and mute without
+    // declaring them): its value is not reported — it would be dropped unseen — but the routing still reads it.
+    const undeclared = this.undeclaredIds(zone);
     for (const update of updates) {
+      const reported = !undeclared.has(update.id);
       // A zone can declare a display scale and still answer a status without `actual_volume` —
       // the RX-A2070 declares decibels for all three zones and reports them for main only. The
       // catalog then falls back to the raw step count, which would put 66 into a datapoint
       // bounded -80.5…0.0 dB: the js-controller warning on every poll, one zone over. The zone's
       // own declared step says what 66 reads as on the scale it declares.
       if (asShown !== undefined && update.id === `${zonePrefix(zone)}volume`) {
-        this.emit(update.id, asShown);
+        if (reported) {
+          this.emit(update.id, asShown);
+        }
         continue;
       }
       // On the other scale and without a raw step count to convert from: no value rather than one in the
@@ -1767,10 +1790,14 @@ export class YxcDeviceController {
       // The maximum on the same scale as the volume it limits (audit 2026-09-29, C40).
       if (update.id === `${zonePrefix(zone)}advanced.maxVolume` && typeof update.value === "number") {
         const scale = this.volumeScale(zone);
-        this.emit(update.id, scale ? shownVolumeFor(scale, update.value) : update.value);
+        if (reported) {
+          this.emit(update.id, scale ? shownVolumeFor(scale, update.value) : update.value);
+        }
         continue;
       }
-      this.emit(update.id, update.value);
+      if (reported) {
+        this.emit(update.id, update.value);
+      }
       // A zone in standby listens to nothing — a recall must not go there (review 2026-10-05, A45).
       if (update.id === `${zonePrefix(zone)}power` && typeof update.value === "boolean") {
         this.routing.notePower(zone, update.value);

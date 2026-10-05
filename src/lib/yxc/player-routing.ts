@@ -1,4 +1,10 @@
 import { PLAYER_CLEAR } from "../catalog/player-block";
+
+/**
+ * The player clear table as far as MusicCast's block has the datapoints: MusicCast reports no station name and no
+ * channel name (see `PLAYER_STATION_STATE`), so clearing them reported values for ids without an object.
+ */
+const CLEAR = PLAYER_CLEAR.filter(entry => entry.id !== "player.station" && entry.id !== "player.channelName");
 import type { DeviceValue, StateValue } from "../types";
 import type { YxcClientLike } from "./client-contract";
 import type { PlayerTransport } from "./command-mapper";
@@ -194,13 +200,13 @@ export class YxcPlayerRouting {
       if (previous === block && expected !== block) {
         // The zone left OUR source — clear; the new source's refresh fills its own values.
         this.zoneBlock.delete(zone);
-        this.emitBlock(zone, PLAYER_CLEAR);
+        this.emitBlock(zone, CLEAR);
       }
       if (expected === block) {
         if (previous !== block) {
           this.zoneBlock.set(zone, block);
           if (previous !== undefined) {
-            this.emitBlock(zone, PLAYER_CLEAR);
+            this.emitBlock(zone, CLEAR);
           }
         }
         this.emitBlock(zone, updates);
@@ -229,7 +235,7 @@ export class YxcPlayerRouting {
     }
     if (previous !== undefined) {
       this.zoneBlock.delete(zone);
-      this.emitBlock(zone, PLAYER_CLEAR);
+      this.emitBlock(zone, CLEAR);
     }
     // `route`, inside the read the caller starts, records the zone's new source.
     return expected;
@@ -247,7 +253,7 @@ export class YxcPlayerRouting {
     }
     for (const zone of this.deps.zones()) {
       if (!this.zoneBlock.has(zone)) {
-        this.emitBlock(zone, PLAYER_CLEAR);
+        this.emitBlock(zone, CLEAR);
       }
     }
   }
