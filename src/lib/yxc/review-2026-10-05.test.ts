@@ -6,6 +6,9 @@ import { ProbeMemory } from "../lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../lifecycle/discovery-schema";
 import { PushLiveness } from "./push-liveness";
 import type { ObjectDef } from "../catalog/types";
+import { TransportConnectionAdapter } from "../lifecycle/transport-connection-adapter";
+import { presentSystemEntries, systemWrite, YXC_SYSTEM_CATALOG } from "./system-catalog";
+import { tName } from "../i18n";
 
 /**
  * Regression tests of the MusicCast data layer's findings of the code review 2026-10-05 — each one the review's proof
@@ -120,5 +123,73 @@ describe("review 2026-10-05 — the MusicCast write mapping through the controll
     expect(calls[0]).toEqual(["setPlayPosition", [30]]);
     expect(calls.filter(([method, args]) => method === "getStatus" && args[0] === "main")).toEqual([]);
     controller.close();
+  });
+});
+
+// A16: `multiroom.zoneB.volumeSync` is a device-wide setting written in tree form; the transport adapter must hand the
+// write on under that id (CORE's part). The entry itself reads and writes the one getFuncStatus pair.
+describe("review 2026-10-05 — Zone B on MusicCast", () => {
+  test("multiroom.zoneB.volumeSync maps to zone_b_volume_sync both ways", async () => {
+    const entry = YXC_SYSTEM_CATALOG.find(candidate => candidate.state === "multiroom.zoneB.volumeSync");
+    expect(entry?.field).toBe("zone_b_volume_sync");
+    expect(presentSystemEntries({ zone_b_volume_sync: false }).map(e => e.state)).toEqual([
+      "multiroom.zoneB.volumeSync",
+    ]);
+    expect(entry?.fromStatus(true)).toBe(true);
+    const calls: Array<[string, unknown[]]> = [];
+    const client = new Proxy(
+      {},
+      {
+        get:
+          (_target, method: string) =>
+          (...args: unknown[]): Promise<unknown> => {
+            calls.push([method, args]);
+            return Promise.resolve({ response_code: 0 });
+          },
+      },
+    );
+    await systemWrite(entry!, "on").run?.(client as never);
+    expect(calls).toEqual([["setZoneBVolumeSync", [true]]]);
+  });
+
+  // An RX-V481 serves its Zone B as `zone2` (YXC Basic Rev 1.10 §4.2): under `multiroom.zoneB` its datapoints keep the
+  // zone form — the zone's power switch, named "Power" — as YNCA and XML build Zone B now (review, A27).
+  test("the RX-V481's Zone B keeps the zone form under multiroom.zoneB", async () => {
+    const answers = {
+      "system/getFeatures": JSON.parse(readFileSync(join(__dirname, "__fixtures__", "RX_V481_285_208.json"), "utf8")),
+      "system/getDeviceInfo": { response_code: 0, model_name: "RX-V481", api_version: 2.0 },
+      "main/getStatus": { response_code: 0, power: "on", volume: 60, mute: false, input: "hdmi1" },
+      "zone2/getStatus": { response_code: 0, power: "standby", volume: 40, mute: false, input: "net_radio" },
+    };
+    const { client } = fixtureClient(answers);
+    const adapter = new TransportConnectionAdapter("yxc", "rx", () => undefined);
+    adapter.bind(
+      new YxcDeviceController("rx", {
+        client,
+        aliasZone: (from, to) => adapter.aliasZone(from, to),
+        gate: new CommandGate({
+          minSpacingMs: 0,
+          timers: {
+            schedule: (h, ms) => setTimeout(h, ms),
+            cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>),
+          },
+        }),
+        probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
+        pushLiveness: new PushLiveness(),
+        registerPush: () => () => undefined,
+        scheduleKeepalive: () => () => undefined,
+        upsertObject: adapter.interceptUpsert,
+        setStateAck: adapter.interceptSetStateAck,
+        log: { debug: () => undefined, info: () => undefined, warn: () => undefined },
+      }),
+    );
+    expect(await adapter.connect()).toBe(true);
+    const objects = adapter.buildObjects();
+    const power = objects.find(o => o.id === "multiroom.zoneB.power");
+    expect(power?.common.role).toBe("switch.power.zone");
+    expect(power?.common.name).toEqual(tName("power"));
+    expect(objects.find(o => o.id === "multiroom.zoneB.volume")?.common.role).toBe("level.volume");
+    expect(objects.some(o => o.id.startsWith("multiroom.zone2."))).toBe(false);
+    adapter.close();
   });
 });
