@@ -8,6 +8,7 @@ import { selfMap } from "../catalog/value-coerce";
 import { MUSICCAST_INPUT_NAMES } from "../catalog/musiccast-vocabulary";
 import { channelCommon, keyedCommon, parentChannels, zoneRole, type ObjectDef } from "../catalog/types";
 import { YXC_CURSOR_VALUES, YXC_MENU_VALUES } from "./remote";
+import { remoteObjectDefs } from "../browse/objects";
 import { tName, type I18nKey } from "../i18n";
 import { YXC_ZONE_IDS, zonePrefix } from "./zones";
 import type { YxcCapabilities, YxcZone } from "./capability";
@@ -575,54 +576,24 @@ export function mapYxcToObjects(
         },
       });
     }
-    // The on-screen remote (cursor pad + menu keys) — declared as zone functions
-    // `cursor`/`menu`. The words come from the zone's own `cursor_list`/`menu_list` where the
-    // firmware declares them (declared); a zone that declares none keeps the shared vocabulary,
-    // which is the MAXIMUM any MusicCast device accepts (device-verified endpoints).
-    if (zone.funcs.includes("cursor") || zone.funcs.includes("menu")) {
-      zoneChannelHelper(`${zoneDef.prefix}remote`, channelCommon("remote"));
-      const wordsFor = (
-        id: "remote.cursor" | "remote.menu",
-        fallback: readonly string[],
-      ): { states: Record<string, string>; declared: boolean } => {
-        const declaredWords = zone.valueLists?.[id];
-        return declaredWords
-          ? { states: selfMap(declaredWords), declared: true }
-          : { states: selfMap([...fallback]), declared: false };
-      };
-      if (zone.funcs.includes("cursor")) {
-        const words = wordsFor("remote.cursor", YXC_CURSOR_VALUES);
-        objects.push({
-          id: `${zoneDef.prefix}remote.cursor`,
-          type: "state",
-          common: {
-            name: tName("cursorPad"),
-            desc: tName("descCursorPad"),
-            type: "string",
-            role: "state",
-            read: false,
-            write: true,
-            states: words.states,
-          },
-          ...(words.declared ? { declaredStates: true } : {}),
-        });
-      }
-      if (zone.funcs.includes("menu")) {
-        const words = wordsFor("remote.menu", YXC_MENU_VALUES);
-        objects.push({
-          id: `${zoneDef.prefix}remote.menu`,
-          type: "state",
-          common: {
-            name: tName("menuKey"),
-            desc: tName("descMenuKey"),
-            type: "string",
-            role: "state",
-            read: false,
-            write: true,
-            states: words.states,
-          },
-          ...(words.declared ? { declaredStates: true } : {}),
-        });
+    // The on-screen remote (cursor pad + menu keys) — declared as zone functions `cursor`/`menu`, built by the one
+    // remote builder every transport shares (review 2026-10-05, DRY: it stood here a second time). The words come from
+    // the zone's own `cursor_list`/`menu_list` where the firmware declares them (declared); a zone that declares none
+    // keeps the shared vocabulary, the MAXIMUM any MusicCast device accepts (device-verified endpoints).
+    const cursorWords = zone.valueLists?.["remote.cursor"];
+    const menuWords = zone.valueLists?.["remote.menu"];
+    for (const def of remoteObjectDefs(
+      zone.funcs.includes("cursor") ? (cursorWords ?? YXC_CURSOR_VALUES) : undefined,
+      zone.funcs.includes("menu") ? (menuWords ?? YXC_MENU_VALUES) : undefined,
+      zoneDef.prefix,
+    )) {
+      const declared =
+        (def.id.endsWith("remote.cursor") && cursorWords !== undefined) ||
+        (def.id.endsWith("remote.menu") && menuWords !== undefined);
+      if (def.type === "channel") {
+        zoneChannelHelper(def.id, def.common);
+      } else {
+        objects.push(declared ? { ...def, declaredStates: true } : def);
       }
     }
     // The audio-signal info (own endpoint, declared as `signal_info`): what the zone
