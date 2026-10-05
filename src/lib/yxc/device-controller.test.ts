@@ -3523,3 +3523,27 @@ describe("info.model reaches the tree on a MusicCast-only device (review 2026-10
     controller.close();
   });
 });
+
+// A renamed input reaches every zone's dropdown while the receiver runs (liveLabels, krobi 2026-10-05).
+describe("a rename in the MusicCast app reaches every zone's dropdown", () => {
+  test("main and zone 2 carry the new name after name_text_updated; the value stays the id", async () => {
+    const features = {
+      zone: [
+        { id: "main", func_list: ["power"], input_list: ["hdmi1", "net_radio"] },
+        { id: "zone2", func_list: ["power"], input_list: ["hdmi1", "net_radio"] },
+      ],
+    };
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    s.client.nameText = { zone_list: [{ id: "main", text: "Wohnzimmer" }], input_list: [{ id: "hdmi1", text: "TV" }] };
+    await s.controller.start();
+    s.client.nameText = {
+      zone_list: [{ id: "main", text: "Wohnzimmer" }],
+      input_list: [{ id: "hdmi1", text: "Beamer" }],
+    };
+    s.fire.push?.({ system: { name_text_updated: true } });
+    await flush();
+    await flush();
+    expect(s.defs.get("living.input")?.common.states).toMatchObject({ hdmi1: "Beamer" });
+    expect(s.defs.get("living.multiroom.zone2.input")?.common.states).toMatchObject({ hdmi1: "Beamer" });
+  });
+});

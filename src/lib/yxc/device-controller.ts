@@ -1351,21 +1351,26 @@ export class YxcDeviceController {
         return;
       }
       this.capabilities = { ...this.capabilities, names: nameTextLabels(nameText) };
+      // The dropdowns with the new names — their labels follow the receiver (`liveLabels`, set by the object
+      // mapper; the adapter relabels the existing keys and removes none). Every zone in ONE build of the tree:
+      // it was rebuilt once per zone to pick two dropdowns (review 2026-10-05, D).
+      const current: Record<string, Record<string, string>> = {};
       for (const zone of this.zones) {
-        const prefix = zonePrefix(zone);
-        const current: Record<string, string> = {};
+        const values: Record<string, string> = {};
         for (const field of ["input", "soundProgram"]) {
-          const value = this.deviceValues.get(`${prefix}${field}`);
+          const value = this.deviceValues.get(`${zonePrefix(zone)}${field}`);
           if (typeof value === "string") {
-            current[field] = value;
+            values[field] = value;
           }
         }
-        const defs = mapYxcToObjects(this.capabilities, { [zone]: current });
-        for (const id of [`${prefix}input`, `${prefix}soundProgram`]) {
-          const def = defs.find(object => object.id === id);
-          if (def) {
-            await this.deps.upsertObject(`${this.deviceId}.${id}`, def);
-          }
+        current[zone] = values;
+      }
+      const labelled = new Set(
+        this.zones.flatMap(zone => [`${zonePrefix(zone)}input`, `${zonePrefix(zone)}soundProgram`]),
+      );
+      for (const def of mapYxcToObjects(this.capabilities, current)) {
+        if (labelled.has(def.id)) {
+          await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
         }
       }
     } catch (e) {
