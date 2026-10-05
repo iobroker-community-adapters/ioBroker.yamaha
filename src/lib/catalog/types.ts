@@ -1,5 +1,6 @@
 import type { ValueSpec } from "./value-coerce";
 import { tName, type I18nKey } from "../i18n";
+import { ZONE_PREFIX } from "./zones";
 
 /**
  * One catalogued device function → one ioBroker state. The catalog is
@@ -254,12 +255,17 @@ export function keyedCommon<C extends { nameKey: I18nKey; descKey?: I18nKey }>({
  * roles), the main zone's stays `switch.power` (audit 2026-09-29, C41). One rule for the three
  * transports, so a zone's switch reads alike whichever owns it.
  *
+ * A zone is what the tree files as one — a zone folder in front ({@link ZONE_PREFIX}), Zone B included. YNCA
+ * and XML build Zone B's datapoints as main-zone entries, so they pass the state id: judged by a non-empty
+ * prefix, `multiroom.zoneB.power` was `switch.power` there and `switch.power.zone` on MusicCast (review
+ * 2026-10-05, A27), and a non-zone prefix (`tuner.`) made a zone of a tuner datapoint.
+ *
  * @param role the catalog role
- * @param zonePrefix the zone's id prefix ("" = the main zone)
+ * @param where the state id, or the zone's id prefix ("" = the main zone)
  * @returns the role to use
  */
-export function zoneRole<R extends string | undefined>(role: R, zonePrefix: string): R | "switch.power.zone" {
-  return role === "switch.power" && zonePrefix !== "" ? "switch.power.zone" : role;
+export function zoneRole<R extends string | undefined>(role: R, where: string): R | "switch.power.zone" {
+  return role === "switch.power" && ZONE_PREFIX.test(where) ? "switch.power.zone" : role;
 }
 
 /**
