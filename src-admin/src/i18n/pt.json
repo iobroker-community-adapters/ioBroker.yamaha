@@ -13,5 +13,8 @@
   "yd_exportFailed": "Não foi possível criar o relatório.",
   "yd_privacy": "Endereços, números de série, nomes de rede e de divisões são substituídos por marcadores antes de o ficheiro sair do adaptador. O adaptador não guarda cópia.",
   "yd_generating": "A gerar o relatório de diagnóstico — o recetor está a ser lido por todos os protocolos que fala. Demora até um minuto; depois o ficheiro é oferecido para transferência.",
-  "yd_elapsed": "%s s"
+  "yd_elapsed": "%s s",
+  "yd_notRunning": "A instância não está em execução. Inicie-a e depois abra este separador novamente.",
+  "yd_stopped": "A instância parou enquanto o relatório estava a ser criado (reinício ou falha). Tente novamente quando estiver em execução — o registo da instância mostra o que aconteceu.",
+  "yd_noAnswer": "O adaptador não respondeu em %s s. Verifique o registo da instância e tente novamente."
 }

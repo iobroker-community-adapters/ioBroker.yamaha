@@ -1,17 +1,36 @@
 import type { ObjectDef } from "../catalog/types";
 import type { I18nKey } from "../i18n";
 import type { YxcClientLike } from "./client-contract";
+import { readNumber, readSwitch, readWord, type YxcValue } from "./values";
+
+/**
+ * How a write of a zone datapoint reaches the device:
+ * - `set`: the entry's setter, called with the value the one gate made of the written one (`gateValue`: a switch's
+ *   boolean, a number on the zone's declared grid, a word) — no coercion of its own, so no `Boolean("false")`;
+ * - `volume`: the datapoint carries what the receiver DISPLAYS while setVolume takes the raw step count — only the
+ *   controller knows the zone's scale;
+ * - `equalizer`: the device sets the three bands in one call — the controller supplies the other two.
+ */
+export type YxcAmpWrite =
+  | { kind: "set"; apply: (client: YxcClientLike, value: YxcValue, zone: string) => Promise<unknown> }
+  | { kind: "volume" }
+  | { kind: "equalizer"; band: "low" | "mid" | "high" };
 
 /**
  * The single source for YXC (MusicCast) amplifier states: one entry per unified
  * state carries BOTH its ioBroker object (`common`) AND its getStatus read + write
  * mapping — replacing the former `YXC_STATES` (object-mapper) / `YXC_STATE_MAPPINGS`
  * (command-mapper) pair that had to be kept in sync by hand. The object-mapper reads
- * `create`/`common`, the command-mapper reads `read`/`fromStatus`/`write`.
+ * `create`/`common`/`range`/`list`/`scale`, the command-mapper reads `read`/`fromStatus`/`write`.
  *
  * Value types are verified against the bundled device captures
  * (`yamaha-yxc-nodejs/lib/data/*.json`): e.g. `adaptive_drc`/`extra_bass` are real
  * booleans, `sleep` is minutes, `link_control`/`surr_decoder_type` are strings.
+ *
+ * What a datapoint needs from the device's declarations stands on its entry: the `range_step` id of its bounds,
+ * the `*_list` field of its values, its `disable_flags` bit, the scale it is shown on. They stood in five side
+ * tables keyed by id strings — a range table and a list table in two modules, the equalizer bands, the disable
+ * bits in the controller and the volume special cases (review 2026-10-05, DRY).
  */
 export interface YxcAmpEntry {
   /** Unified state id, relative to the zone prefix. */
@@ -23,33 +42,72 @@ export interface YxcAmpEntry {
   common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
   /**
    * When the state is created: `func` = only if the zone's func_list advertises that
-   * feature key; `systemFunc` = only if the SYSTEM func_list does (a device-wide feature);
-   * `always` = a core status field created for every active zone; `input` = only if the zone
-   * offers inputs (from input_list, not func_list).
+   * feature key; `always` = a core status field created for every active zone; `input` = only if
+   * the zone offers inputs (from input_list, not func_list).
    */
-  create:
-    { kind: "func"; func: string } | { kind: "systemFunc"; func: string } | { kind: "always" } | { kind: "input" };
+  create: { kind: "func"; func: string } | { kind: "always" } | { kind: "input" };
   /**
    * Where to read the value in a getStatus response: a flat field, or a nested path with an
    * optional flat fallback for devices that do not report the nested one (`volume` reads the
    * displayed value where the device has one and its raw step count otherwise).
    */
   read: { field: string } | { path: string[]; fallbackField?: string };
-  /** Convert a raw getStatus value into the typed state value. */
-  fromStatus: (value: unknown) => boolean | number | string;
+  /** Convert a raw getStatus value into the typed state value — `null` where the answer names none. */
+  fromStatus: (value: unknown) => boolean | number | string | null;
   /**
-   * Write mapping — absent means either the state is read-only (`common.write: false`) or the
-   * controller owns its write path (volume, the equalizer bands — the value needs controller
-   * state). The entry
-   * calls the client DIRECTLY (value coercion inline), so there is no method-name string
-   * to keep in sync with a dispatch switch and no "unknown command" runtime path.
+   * The `range_step` id that declares the value's bounds and step (capture-verified across 25 models): the
+   * object's min/max/step, and the grid a written number is put on.
    */
-  write?: { apply: (client: YxcClientLike, value: unknown, zone: string) => Promise<unknown> };
+  range?: string;
+  /** The getFeatures field that lists the values the zone takes (`sound_program_list`) — its dropdown. */
+  list?: string;
+  /** The `disable_flags` bit (YXC Basic §5.1) the zone sets while it cannot operate the function. */
+  disableBit?: number;
+  /**
+   * The scale the value is shown on: `volume` = the zone's display scale (`volumePresentation` sets unit and
+   * bounds), `volumeLimit` = the unit of that scale (the maximum volume arrives in raw steps and is shown on it).
+   */
+  scale?: "volume" | "volumeLimit";
+  /**
+   * Write mapping — absent means the state is read-only (`common.write: false`). The entry
+   * calls the client DIRECTLY, so there is no method-name string to keep in sync with a
+   * dispatch switch and no "unknown command" runtime path.
+   */
+  write?: YxcAmpWrite;
 }
 
-const bool = (value: unknown): boolean => Boolean(value);
-const num = (value: unknown): number => Number(value);
-const str = (value: unknown): string => String(value);
+/**
+ * A switch's setter — the gate hands it a boolean.
+ *
+ * @param set the client call
+ * @returns the write mapping
+ */
+const onOff = (set: (client: YxcClientLike, on: boolean, zone: string) => Promise<unknown>): YxcAmpWrite => ({
+  kind: "set",
+  apply: (client, value, zone) => set(client, value === true, zone),
+});
+
+/**
+ * A number's setter — the gate hands it a number on the zone's grid.
+ *
+ * @param set the client call
+ * @returns the write mapping
+ */
+const numeric = (set: (client: YxcClientLike, value: number, zone: string) => Promise<unknown>): YxcAmpWrite => ({
+  kind: "set",
+  apply: (client, value, zone) => set(client, Number(value), zone),
+});
+
+/**
+ * A word's setter — the gate hands it trimmed text.
+ *
+ * @param set the client call
+ * @returns the write mapping
+ */
+const word = (set: (client: YxcClientLike, value: string, zone: string) => Promise<unknown>): YxcAmpWrite => ({
+  kind: "set",
+  apply: (client, value, zone) => set(client, String(value), zone),
+});
 
 /**
  * MusicCast's tone/equalizer numbers are DEVICE STEPS, not decibels — measured, not assumed:
@@ -78,8 +136,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     common: { nameKey: "power", type: "boolean", role: "switch.power", read: true, write: true },
     create: { kind: "func", func: "power" },
     read: { field: "power" },
-    fromStatus: value => value === "on",
-    write: { apply: (c, v, z) => c.power(Boolean(v), z) },
+    fromStatus: value => (typeof value === "string" ? value === "on" : null),
+    write: onOff((c, on, z) => c.power(on, z)),
   },
   {
     state: "volume",
@@ -97,25 +155,32 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     // belongs in the datapoint; speakers and soundbars report no display scale and keep their
     // step count. The object's unit and bounds follow in `volumePresentation`.
     read: { path: ["actual_volume", "value"], fallbackField: "volume" },
-    fromStatus: num,
-    // No `write` here: the controller owns the write path, because the value has to be
-    // translated from the displayed scale into the raw step count setVolume expects.
+    fromStatus: readNumber,
+    // The raw step range is the FALLBACK bounds: a zone that declares a display scale is shown on it
+    // (`volumePresentation`); a speaker, soundbar or CD receiver declares none and keeps its raw steps.
+    range: "volume",
+    scale: "volume",
+    disableBit: 0b1,
+    // Declarative: the value has to be translated from the displayed scale into the raw step count setVolume
+    // expects, and only the controller knows the zone's scale.
+    write: { kind: "volume" },
   },
   {
     state: "mute",
     common: { nameKey: "mute", type: "boolean", role: "media.mute", read: true, write: true },
     create: { kind: "func", func: "mute" },
     read: { field: "mute" },
-    fromStatus: bool,
-    write: { apply: (c, v, z) => c.mute(Boolean(v), z) },
+    fromStatus: readSwitch,
+    write: onOff((c, on, z) => c.mute(on, z)),
+    disableBit: 0b10,
   },
   {
     state: "input",
     common: { nameKey: "input", type: "string", role: "media.input", read: true, write: true },
     create: { kind: "input" },
     read: { field: "input" },
-    fromStatus: str,
-    write: { apply: (c, v, z) => c.setInput(String(v), z) },
+    fromStatus: readWord,
+    write: word((c, v, z) => c.setInput(v, z)),
   },
   {
     state: "soundProgram",
@@ -129,16 +194,17 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "sound_program" },
     read: { field: "sound_program" },
-    fromStatus: str,
-    write: { apply: (c, v, z) => c.setSound(String(v), z) },
+    fromStatus: readWord,
+    write: word((c, v, z) => c.setSound(v, z)),
+    list: "sound_program_list",
   },
   {
     state: "sound.enhancer",
     common: { nameKey: "enhancer", descKey: "descEnhancer", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "func", func: "enhancer" },
     read: { field: "enhancer" },
-    fromStatus: bool,
-    write: { apply: (c, v, z) => c.setEnhancer(Boolean(v), z) },
+    fromStatus: readSwitch,
+    write: onOff((c, on, z) => c.setEnhancer(on, z)),
   },
   {
     state: "sound.pureDirect",
@@ -152,8 +218,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "pure_direct" },
     read: { field: "pure_direct" },
-    fromStatus: bool,
-    write: { apply: (c, v, z) => c.setPureDirect(Boolean(v), z) },
+    fromStatus: readSwitch,
+    write: onOff((c, on, z) => c.setPureDirect(on, z)),
   },
   {
     state: "subwooferVolume",
@@ -171,8 +237,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "subwoofer_volume" },
     read: { field: "subwoofer_volume" },
-    fromStatus: num,
-    write: { apply: (c, v, z) => c.setSubwooferVolumeTo(Number(v), z) },
+    fromStatus: readNumber,
+    write: numeric((c, v, z) => c.setSubwooferVolumeTo(v, z)),
+    range: "subwoofer_volume",
   },
   {
     state: "sound.bass",
@@ -188,8 +255,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "bass"] },
-    fromStatus: num,
-    write: { apply: (c, v, z) => c.setBassTo(Number(v), z) },
+    fromStatus: readNumber,
+    write: numeric((c, v, z) => c.setBassTo(v, z)),
+    range: "tone_control",
   },
   {
     state: "sound.toneMode",
@@ -203,8 +271,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "mode"] },
-    fromStatus: str,
-    write: { apply: (c, v, z) => c.setToneMode(String(v), z) },
+    fromStatus: readWord,
+    write: word((c, v, z) => c.setToneMode(v, z)),
+    list: "tone_control_mode_list",
   },
   {
     state: "sound.treble",
@@ -219,8 +288,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "tone_control" },
     read: { path: ["tone_control", "treble"] },
-    fromStatus: num,
-    write: { apply: (c, v, z) => c.setTrebleTo(Number(v), z) },
+    fromStatus: readNumber,
+    write: numeric((c, v, z) => c.setTrebleTo(v, z)),
+    range: "tone_control",
   },
   {
     state: "sleep",
@@ -241,8 +311,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "sleep" },
     read: { field: "sleep" },
-    fromStatus: num,
-    write: { apply: (c, v, z) => c.sleep(Number(v), z) },
+    fromStatus: readNumber,
+    write: numeric((c, v, z) => c.sleep(v, z)),
   },
   {
     state: "sound.dialogueLevel",
@@ -256,8 +326,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "dialogue_level" },
     read: { field: "dialogue_level" },
-    fromStatus: num,
-    write: { apply: (c, v, z) => c.setDialogueLevel(Number(v), z) },
+    fromStatus: readNumber,
+    write: numeric((c, v, z) => c.setDialogueLevel(v, z)),
+    range: "dialogue_level",
   },
   {
     state: "sound.contentsDisplay",
@@ -271,7 +342,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "contents_display" },
     read: { field: "contents_display" },
-    fromStatus: bool,
+    fromStatus: readSwitch,
   },
   {
     state: "sound.surroundDecoder",
@@ -285,8 +356,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "surr_decoder_type" },
     read: { field: "surr_decoder_type" },
-    fromStatus: str,
-    write: { apply: (c, v, z) => c.setSurroundDecoderType(String(v), z) },
+    fromStatus: readWord,
+    write: word((c, v, z) => c.setSurroundDecoderType(v, z)),
+    list: "surr_decoder_type_list",
   },
   {
     state: "sound.audioSelect",
@@ -300,7 +372,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "audio_select" },
     read: { field: "audio_select" },
-    fromStatus: str,
+    fromStatus: readWord,
+    list: "audio_select_list",
   },
   {
     state: "sound.linkControl",
@@ -314,8 +387,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "link_control" },
     read: { field: "link_control" },
-    fromStatus: str,
-    write: { apply: (c, v, z) => c.setLinkControl(String(v), z) },
+    fromStatus: readWord,
+    write: word((c, v, z) => c.setLinkControl(v, z)),
+    list: "link_control_list",
   },
   {
     state: "sound.linkAudioDelay",
@@ -329,8 +403,10 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "link_audio_delay" },
     read: { field: "link_audio_delay" },
-    fromStatus: str,
-    write: { apply: (c, v, z) => c.setLinkAudioDelay(String(v), z) },
+    fromStatus: readWord,
+    write: word((c, v, z) => c.setLinkAudioDelay(v, z)),
+    list: "link_audio_delay_list",
+    disableBit: 0b100,
   },
   {
     state: "sound.linkAudioQuality",
@@ -344,16 +420,17 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "link_audio_quality" },
     read: { field: "link_audio_quality" },
-    fromStatus: str,
-    write: { apply: (c, v, z) => c.setLinkAudioQuality(String(v), z) },
+    fromStatus: readWord,
+    write: word((c, v, z) => c.setLinkAudioQuality(v, z)),
+    list: "link_audio_quality_list",
   },
   {
     state: "sound.direct",
     common: { nameKey: "direct", descKey: "descDirect", type: "boolean", role: "switch", read: true, write: true },
     create: { kind: "func", func: "direct" },
     read: { field: "direct" },
-    fromStatus: bool,
-    write: { apply: (c, v, z) => c.setDirect(Boolean(v), z) },
+    fromStatus: readSwitch,
+    write: onOff((c, on, z) => c.setDirect(on, z)),
   },
   {
     state: "sound.clearVoice",
@@ -367,8 +444,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "clear_voice" },
     read: { field: "clear_voice" },
-    fromStatus: bool,
-    write: { apply: (c, v, z) => c.setClearVoice(Boolean(v), z) },
+    fromStatus: readSwitch,
+    write: onOff((c, on, z) => c.setClearVoice(on, z)),
   },
   {
     state: "sound.bassExtension",
@@ -382,8 +459,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "bass_extension" },
     read: { field: "bass_extension" },
-    fromStatus: bool,
-    write: { apply: (c, v, z) => c.setBassExtension(Boolean(v), z) },
+    fromStatus: readSwitch,
+    write: onOff((c, on, z) => c.setBassExtension(on, z)),
   },
   {
     state: "sound.balance",
@@ -397,8 +474,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "balance" },
     read: { field: "balance" },
-    fromStatus: num,
-    write: { apply: (c, v, z) => c.setBalance(Number(v), z) },
+    fromStatus: readNumber,
+    write: numeric((c, v, z) => c.setBalance(v, z)),
+    range: "balance",
   },
   {
     state: "sound.adaptiveDrc",
@@ -412,8 +490,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "adaptive_drc" },
     read: { field: "adaptive_drc" },
-    fromStatus: bool,
-    write: { apply: (c, v, z) => c.setAdaptiveDrc(Boolean(v), z) },
+    fromStatus: readSwitch,
+    write: onOff((c, on, z) => c.setAdaptiveDrc(on, z)),
   },
   {
     state: "sound.adaptiveDspLevel",
@@ -427,7 +505,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "adaptive_dsp_level" },
     read: { field: "adaptive_dsp_level" },
-    fromStatus: bool,
+    fromStatus: readSwitch,
   },
   {
     state: "sound.extraBass",
@@ -441,8 +519,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "extra_bass" },
     read: { field: "extra_bass" },
-    fromStatus: bool,
-    write: { apply: (c, v, z) => c.setExtraBass(Boolean(v), z) },
+    fromStatus: readSwitch,
+    write: onOff((c, on, z) => c.setExtraBass(on, z)),
   },
   {
     state: "sound.monaural",
@@ -456,7 +534,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "mono" },
     read: { field: "mono" },
-    fromStatus: bool,
+    fromStatus: readSwitch,
   },
   {
     state: "sound.surround3d",
@@ -470,8 +548,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "surround_3d" },
     read: { field: "surround_3d" },
-    fromStatus: bool,
-    write: { apply: (c, v, z) => c.set3dSurround(Boolean(v), z) },
+    fromStatus: readSwitch,
+    write: onOff((c, on, z) => c.set3dSurround(on, z)),
   },
   {
     // Surround:AI — declared as `surround_ai` and reported in getStatus by the RX-A3080 capture
@@ -490,7 +568,7 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "surround_ai" },
     read: { field: "surround_ai" },
-    fromStatus: bool,
+    fromStatus: readSwitch,
   },
   {
     state: "sound.dialogueLift",
@@ -504,8 +582,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "dialogue_lift" },
     read: { field: "dialogue_lift" },
-    fromStatus: num,
-    write: { apply: (c, v, z) => c.setDialogueLift(Number(v), z) },
+    fromStatus: readNumber,
+    write: numeric((c, v, z) => c.setDialogueLift(v, z)),
+    range: "dialogue_lift",
   },
   {
     state: "sound.dtsDialogueControl",
@@ -519,8 +598,9 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "dts_dialogue_control" },
     read: { field: "dts_dialogue_control" },
-    fromStatus: num,
-    write: { apply: (c, v, z) => c.setDtsDialogueControl(Number(v), z) },
+    fromStatus: readNumber,
+    write: numeric((c, v, z) => c.setDtsDialogueControl(v, z)),
+    range: "dts_dialogue_control",
   },
   {
     state: "sound.equalizer.mode",
@@ -534,29 +614,36 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "mode"] },
-    fromStatus: str,
-    write: { apply: (c, v, z) => c.setEqualizerMode(String(v), z) },
+    fromStatus: readWord,
+    write: word((c, v, z) => c.setEqualizerMode(v, z)),
+    list: "equalizer_mode_list",
   },
   {
     state: "sound.equalizer.low",
     common: { nameKey: "equalizerLow", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "low"] },
-    fromStatus: num,
+    fromStatus: readNumber,
+    range: "equalizer",
+    write: { kind: "equalizer", band: "low" },
   },
   {
     state: "sound.equalizer.mid",
     common: { nameKey: "equalizerMid", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "mid"] },
-    fromStatus: num,
+    fromStatus: readNumber,
+    range: "equalizer",
+    write: { kind: "equalizer", band: "mid" },
   },
   {
     state: "sound.equalizer.high",
     common: { nameKey: "equalizerHigh", type: "number", role: "level", read: true, write: true },
     create: { kind: "func", func: "equalizer" },
     read: { path: ["equalizer", "high"] },
-    fromStatus: num,
+    fromStatus: readNumber,
+    range: "equalizer",
+    write: { kind: "equalizer", band: "high" },
   },
   {
     state: "advanced.maxVolume",
@@ -571,7 +658,8 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     // A zone without its own volume has no maximum either (RX-A2070 zone 4 — audit 2026-09-24, C10).
     create: { kind: "func", func: "volume" },
     read: { field: "max_volume" },
-    fromStatus: num,
+    fromStatus: readNumber,
+    scale: "volumeLimit",
   },
   // The device-global entry: its id starts with "multiroom." (no zone prefix ever applies),
   // so the mapper and the status parser emit it for the main zone only.
@@ -589,10 +677,22 @@ export const YXC_AMP_CATALOG: YxcAmpEntry[] = [
     },
     create: { kind: "always" },
     read: { field: "distribution_enable" },
-    fromStatus: bool,
+    fromStatus: readSwitch,
   },
   // Party mode is NOT read here: getStatus `party_enable` and getFuncStatus `party_mode` both fed
   // `multiroom.party`, refreshed at different moments, so the value could flip between the two. The
   // system catalog's documented pair (`party_mode` / setPartyMode — pyamaha; YXC Basic Rev 1.10 does not document the pair) is
   // the one source (audit 2026-09-29, C46).
 ];
+
+/**
+ * The `disable_flags` bit of a zone datapoint (YXC Basic §5.1: b0 volume, b1 mute, b2 link audio delay) — what the
+ * controller checks before it sends a write the zone cannot operate right now. The bits stood as a literal table in
+ * the controller (review 2026-10-05, DRY).
+ *
+ * @param name the zone-relative datapoint (`volume`, `mute`, …)
+ * @returns the bit, or undefined when the zone never disables the function
+ */
+export function disableBitOf(name: string): number | undefined {
+  return YXC_AMP_CATALOG.find(entry => entry.state === name)?.disableBit;
+}

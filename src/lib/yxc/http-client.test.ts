@@ -1,6 +1,7 @@
 import { createServer, type IncomingHttpHeaders } from "node:http";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
+import { CommandGate } from "../lifecycle/command-gate";
 import {
   isWriteCommand,
   requestTimeoutFor,
@@ -73,17 +74,12 @@ describe("YamahaYxcClient URL construction", () => {
     expect(last()).toBe("/main/setBassExtension?enable=true");
     await client.setBalance(-10, "main");
     expect(last()).toBe("/main/setBalance?value=-10");
-    await client.playNet();
-    expect(last()).toBe("/netusb/setPlayback?playback=play");
-    await client.pauseNet();
-    expect(last()).toBe("/netusb/setPlayback?playback=pause");
-    await client.stopNet();
-    expect(last()).toBe("/netusb/setPlayback?playback=stop");
-    await client.nextNet();
-    expect(last()).toBe("/netusb/setPlayback?playback=next");
-    await client.prevNet();
-    expect(last()).toBe("/netusb/setPlayback?playback=previous");
-    await client.setCDPlayback("play");
+    // One parametrised endpoint for both players (review 2026-10-05, F) — the same paths as before.
+    for (const playback of ["play", "pause", "stop", "next", "previous"] as const) {
+      await client.setPlayback("netusb", playback);
+      expect(last()).toBe(`/netusb/setPlayback?playback=${playback}`);
+    }
+    await client.setPlayback("cd", "play");
     expect(last()).toBe("/cd/setPlayback?playback=play");
   });
 
@@ -180,14 +176,16 @@ describe("YamahaYxcClient player and tuner commands", () => {
     const { client, last } = capture();
     // Each of these is a button in the object tree. A wrong path is a silent
     // no-op on the device — the state flips back and nothing happens.
-    await client.toggleNetRepeat();
+    await client.toggleRepeat("netusb");
     expect(last()).toBe("/netusb/toggleRepeat");
-    await client.toggleNetShuffle();
+    await client.toggleShuffle("netusb");
     expect(last()).toBe("/netusb/toggleShuffle");
-    await client.toggleCDRepeat();
+    await client.toggleRepeat("cd");
     expect(last()).toBe("/cd/toggleRepeat");
-    await client.toggleCDShuffle();
+    await client.toggleShuffle("cd");
     expect(last()).toBe("/cd/toggleShuffle");
+    await client.getPlayQueue();
+    expect(last()).toBe("/netusb/getPlayQueue?index=0&size=8");
     await client.toggleTray();
     expect(last()).toBe("/cd/toggleTray");
     await client.setBand("fm");
@@ -414,6 +412,14 @@ describe("gate priority classification", () => {
       expect(isWriteCommand(path), path).toBe(false);
     }
   });
+
+  // Only a read says so (`get...`): a verb the old list did not name - a later endpoint's - still counts as an
+  // action, instead of waiting behind the sweep at background priority (review 2026-10-05, F).
+  test("anything that is not a get is an action, whatever its verb", () => {
+    expect(isWriteCommand("/netusb/manageList?type=add")).toBe(true);
+    expect(isWriteCommand("/system/sendIrCode?code=1")).toBe(true);
+    expect(isWriteCommand("/netusb/getPlayQueue?index=0&size=8")).toBe(false);
+  });
 });
 
 describe("YamahaYxcClient transport failures (audit 2026-09-15)", () => {
@@ -503,5 +509,36 @@ describe("YamahaYxcClient.read (diagnostics)", () => {
       await expect(client.read(path), path).rejects.toThrow(/not a read/);
     }
     expect(sent).toEqual([]);
+  });
+});
+
+// The read-back of a user write is a read: from its verb it queued as background work and waited behind the poll
+// sweep, while YNCA reads back at user priority (review 2026-10-05, A58).
+describe("YamahaYxcClient.forUser — the read-back of a user write at user priority (review 2026-10-05, A58)", () => {
+  const timers = {
+    schedule: (handler: () => void, ms: number): ReturnType<typeof setTimeout> => setTimeout(handler, ms),
+    cancel: (handle: unknown): void => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  };
+
+  test("a read through the twin overtakes queued background reads; the twin is one and the same", async () => {
+    const gate = new CommandGate({ minSpacingMs: 0, timers });
+    const order: string[] = [];
+    const client = new YamahaYxcClient(
+      "1.2.3.4",
+      command => {
+        order.push(command);
+        return Promise.resolve({ response_code: 0 });
+      },
+      gate,
+    );
+    let release: () => void = () => undefined;
+    const sweep = gate.run(() => new Promise<void>(resolve => (release = resolve)));
+    const background = client.getStatus("zone2");
+    const readBack = client.forUser().getStatus("main");
+    release();
+    await Promise.all([sweep, background, readBack]);
+    expect(order).toEqual(["/main/getStatus", "/zone2/getStatus"]);
+    expect(client.forUser()).toBe(client.forUser());
+    expect(client.forUser().forUser()).toBe(client.forUser());
   });
 });

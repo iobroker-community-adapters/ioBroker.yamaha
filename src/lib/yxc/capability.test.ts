@@ -4,6 +4,7 @@ import rxV481 from "./__fixtures__/RX_V481_285_208.json";
 import rxV685 from "./__fixtures__/RX_V685_196_211.json";
 import wx10 from "./__fixtures__/WX10_216_208.json";
 import isx18d from "./__fixtures__/ISX_18D_216_208.json";
+import cdNt670d from "./__fixtures__/cd_nt670d.json";
 
 describe("parseYxcFeatures", () => {
   test("extracts all zones of a multi-zone AVR with their functions", () => {
@@ -68,6 +69,23 @@ describe("parseYxcFeatures", () => {
     });
     // A tuner block without range_step declares no ranges — undefined, not an empty object.
     expect(parseYxcFeatures({ zone: [{ id: "main" }], tuner: { func_list: ["fm"] } }).tuner?.ranges).toBeUndefined();
+  });
+
+  // `system.input_list[].play_info_type` (YXC Basic §4.2) — which zone gets a "now playing" block (review 2026-10-05,
+  // A48).
+  test("reads which player each input feeds", () => {
+    const types = parseYxcFeatures(rxV685).playInfoTypes;
+    expect(types).toMatchObject({ net_radio: "netusb", spotify: "netusb", tuner: "tuner", hdmi1: "none" });
+    expect(parseYxcFeatures({ zone: [{ id: "main" }], system: { input_list: [{ id: "x" }] } }).playInfoTypes).toBe(
+      undefined,
+    );
+  });
+
+  // The CD drive has no getFeatures block of its own — its input declares it (play_info_type "cd"). Read from the
+  // blocks alone, the CD-NT670D never had its CD surface.
+  test("a CD receiver's drive is declared by its input, not by a block", () => {
+    expect(parseYxcFeatures(cdNt670d).media).toEqual(["netusb", "tuner", "cd"]);
+    expect(parseYxcFeatures(rxV685).media).toEqual(["netusb", "tuner"]);
   });
 
   test("returns empty capabilities for a malformed response", () => {

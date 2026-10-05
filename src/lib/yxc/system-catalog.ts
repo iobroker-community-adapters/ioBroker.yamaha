@@ -1,6 +1,8 @@
 import type { ObjectDef } from "../catalog/types";
 import type { I18nKey } from "../i18n";
+import type { YxcCapabilities } from "./capability";
 import type { YxcClientLike } from "./client-contract";
+import { gateValue, readNumber, readSwitch, readWord } from "./values";
 
 /**
  * The device-WIDE MusicCast settings, from `/system/getFuncStatus`.
@@ -22,9 +24,13 @@ export interface YxcSystemEntry {
   field: string;
   /** ioBroker common, with its name and explanation as translation keys. */
   common: Omit<ObjectDef["common"], "name"> & { nameKey: I18nKey; descKey?: I18nKey };
-  /** Turn the raw field value into the state value. */
-  fromStatus: (value: unknown) => boolean | number | string;
-  /** Write mapping — absent means the device offers no documented setter. */
+  /** Turn the raw field value into the state value — `null` where the answer names none. */
+  fromStatus: (value: unknown) => boolean | number | string | null;
+  /**
+   * Write mapping — absent means the device offers no documented setter. The setter takes the value the one gate
+   * made of the written one ({@link systemWrite}): a switch's boolean, a number on the declared grid, a word. It
+   * coerces nothing of its own — a switch is on for `true` alone, never for the word "false".
+   */
   write?: { apply: (client: YxcClientLike, value: unknown) => Promise<unknown> };
   /** The `range_step` id in the system block that carries this state's bounds, if any. */
   rangeId?: string;
@@ -49,8 +55,8 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: true,
     },
-    fromStatus: value => Boolean(value),
-    write: { apply: (client, value) => client.setAutoPowerStandby(Boolean(value)) },
+    fromStatus: readSwitch,
+    write: { apply: (client, on) => client.setAutoPowerStandby(on === true) },
   },
   {
     state: "advanced.displayBrightness",
@@ -63,7 +69,7 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: true,
     },
-    fromStatus: value => Number(value),
+    fromStatus: readNumber,
     // YXC Basic §4.26: -1 is automatic, where the declared range includes it.
     write: { apply: (client, value) => client.setDimmer(Number(value)) },
     rangeId: "dimmer",
@@ -79,8 +85,8 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: true,
     },
-    fromStatus: value => Boolean(value),
-    write: { apply: (client, value) => client.setHdmiOut1(Boolean(value)) },
+    fromStatus: readSwitch,
+    write: { apply: (client, on) => client.setHdmiOut1(on === true) },
   },
   {
     state: "hdmi.out2",
@@ -93,8 +99,8 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: true,
     },
-    fromStatus: value => Boolean(value),
-    write: { apply: (client, value) => client.setHdmiOut2(Boolean(value)) },
+    fromStatus: readSwitch,
+    write: { apply: (client, on) => client.setHdmiOut2(on === true) },
   },
   // The four getFuncStatus fields YXC Basic Rev 1.10 §4.21 names together with their setters
   // (§4.23–4.25, §4.27). The field names come from the specification, not from a guess — the old
@@ -104,15 +110,15 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
     state: "advanced.speakers.speakerA",
     field: "speaker_a",
     common: { nameKey: "speakerA", type: "boolean", role: "switch", read: true, write: true },
-    fromStatus: value => Boolean(value),
-    write: { apply: (client, value) => client.setSpeakerA(Boolean(value)) },
+    fromStatus: readSwitch,
+    write: { apply: (client, on) => client.setSpeakerA(on === true) },
   },
   {
     state: "advanced.speakers.speakerB",
     field: "speaker_b",
     common: { nameKey: "speakerB", type: "boolean", role: "switch", read: true, write: true },
-    fromStatus: value => Boolean(value),
-    write: { apply: (client, value) => client.setSpeakerB(Boolean(value)) },
+    fromStatus: readSwitch,
+    write: { apply: (client, on) => client.setSpeakerB(on === true) },
   },
   {
     state: "advanced.irSensor",
@@ -125,8 +131,8 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: true,
     },
-    fromStatus: value => Boolean(value),
-    write: { apply: (client, value) => client.setIrSensor(Boolean(value)) },
+    fromStatus: readSwitch,
+    write: { apply: (client, on) => client.setIrSensor(on === true) },
   },
   {
     state: "multiroom.zoneB.volumeSync",
@@ -139,8 +145,8 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: true,
     },
-    fromStatus: value => Boolean(value),
-    write: { apply: (client, value) => client.setZoneBVolumeSync(Boolean(value)) },
+    fromStatus: readSwitch,
+    write: { apply: (client, on) => client.setZoneBVolumeSync(on === true) },
   },
   // The fields the captured getFuncStatus answers carry beyond those four (RX-V685, RX-A3080,
   // RX-V6A — coverage audit 2026-09-09). Read-only where no setter is known (HDMI OUT 3, HDMI
@@ -157,7 +163,7 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: false,
     },
-    fromStatus: value => Boolean(value),
+    fromStatus: readSwitch,
   },
   {
     state: "hdmi.standbyThrough",
@@ -170,7 +176,7 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: false,
     },
-    fromStatus: value => String(value),
+    fromStatus: readWord,
     listId: "hdmi_standby_through_list",
   },
   {
@@ -184,7 +190,7 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: false,
     },
-    fromStatus: value => Boolean(value),
+    fromStatus: readSwitch,
   },
   {
     state: "multiroom.party",
@@ -197,8 +203,8 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: true,
     },
-    fromStatus: value => Boolean(value),
-    write: { apply: (client, value) => client.setPartyMode(Boolean(value)) },
+    fromStatus: readSwitch,
+    write: { apply: (client, on) => client.setPartyMode(on === true) },
   },
   // Reported as a number (1, 2); shown in YNCA's spelling so the one datapoint reads alike on
   // every transport, with the declared count as its value list.
@@ -213,7 +219,10 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: true,
     },
-    fromStatus: value => `Pattern ${Number(value)}`,
+    fromStatus: (value: unknown): string | null => {
+      const slot = readNumber(value);
+      return slot === null ? null : `Pattern ${slot}`;
+    },
     // pyamaha's `setSpeakerPattern?num=` — no specification, no known caller; where YNCA is present
     // its documented SPPATTERN owns the datapoint (owner policy), so this serves a MusicCast-only
     // receiver, and a refusal is read back (audit 2026-09-24, C8/C20).
@@ -239,10 +248,38 @@ export const YXC_SYSTEM_CATALOG: YxcSystemEntry[] = [
       read: true,
       write: false,
     },
-    fromStatus: value => Number(value),
+    fromStatus: readNumber,
     countId: "video_preset_num",
   },
 ];
+
+/**
+ * A write to a device-wide setting through the one gate — the switch words, the strict number rule and the grid the
+ * system block declares, as on every zone datapoint: the client call to run, or why nothing is sent. The controller
+ * coerced the switches here on its own, and the setters a second time with `Boolean()` (review 2026-10-05, KISS).
+ *
+ * @param entry the system catalog entry
+ * @param value the written value
+ * @param capabilities the device's declarations (the system block's ranges), when known
+ * @returns the call, or the reason
+ */
+export function systemWrite(
+  entry: YxcSystemEntry,
+  value: unknown,
+  capabilities?: Pick<YxcCapabilities, "systemRanges">,
+): { run: (client: YxcClientLike) => Promise<unknown>; dropped?: never } | { dropped: string; run?: never } {
+  const write = entry.write;
+  if (!write) {
+    return { dropped: "it is read-only on MusicCast" };
+  }
+  const grid = entry.rangeId ? capabilities?.systemRanges?.[entry.rangeId] : undefined;
+  const gated = gateValue(entry.common.type, value, grid);
+  if (gated.dropped !== undefined) {
+    return { dropped: gated.dropped };
+  }
+  const input = gated.value;
+  return { run: client => write.apply(client, input) };
+}
 
 /**
  * The entries this device really answers, taken from its getFuncStatus response.

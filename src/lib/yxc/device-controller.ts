@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { resolveIPv4 } from "../network-interfaces";
 import { parseYxcFeatures, type YxcCapabilities, type YxcTunerFeatures } from "./capability";
 import {
   mapYxcToObjects,
@@ -7,7 +5,6 @@ import {
   rawVolumeFor,
   shownVolumeFor,
   volumeScaleOf,
-  yxcDeclaredAbsent,
   type VolumeScale,
 } from "./object-mapper";
 import { absoluteDeviceUrl } from "../catalog/device-url";
@@ -36,7 +33,6 @@ import {
   playQueueSlotEntries,
   STATION_SLOT_FIELDS,
   stationSlotEntries,
-  type PlayerTransport,
   type SlotEntry,
   type YxcCommand,
 } from "./command-mapper";
@@ -57,11 +53,11 @@ import type { ControllerDepsBase } from "../controller";
 import { errText } from "../err-text";
 import { coerceBool, selfMap } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
-import { YxcRefusalError, YxcTransportError } from "./http-client";
+import { answeredByDevice, YxcTransportError } from "./http-client";
 import { splitZone, zonePrefix } from "./zones";
 import { presentSystemEntries, YXC_SYSTEM_CATALOG, type YxcSystemEntry } from "./system-catalog";
 import { keyedCommon, parentChannels } from "../catalog/types";
-import { knownScenes, resolveSceneNumber, sceneListSurface } from "../catalog/scene-titles";
+import { knownScenes, resolveSceneNumber, sceneListSurface, sceneRecallStates } from "../catalog/scene-titles";
 import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
@@ -75,14 +71,7 @@ const KEEPALIVE_MS = 5 * 60 * 1000;
  * How long a changing write waits for the device's event before its effect is read back and, if the
  * device changed the value without telling, counted against the events (see PushLiveness).
  */
-export const PUSH_EXPECT_MS = 5000;
-
-/** How often, and how far apart, a new group is read back until it works (YXC Advanced §9.1.8-3: up to 3 min). */
-const GROUP_BUILD_POLLS = 36;
-const GROUP_BUILD_POLL_MS = 5000;
-
-/** The longest group name the device takes, in UTF-8 bytes (YXC Advanced §5.6). */
-const GROUP_NAME_MAX_BYTES = 128;
+const PUSH_EXPECT_MS = 5000;
 
 /** How long after a favourite recall the device's `preset_control` verdict is taken as its answer. */
 const PRESET_VERDICT_MS = 30_000;
@@ -196,7 +185,10 @@ export function zoneNameFrom(nameText: unknown): string | undefined {
 
 import type { YxcClientLike } from "./client-contract";
 import { MEMORY_KEY } from "../lifecycle/memory-keys";
-import { PLAYER_CLEAR } from "../catalog/player-block";
+import { YxcPlayerRouting } from "./player-routing";
+import { INFO_ENTRIES } from "../catalog/info-objects";
+import { catalogToObjects } from "../catalog/build-objects";
+import { LinkGroup } from "./link-group";
 
 /** Probe-memory key: per zone, the display scale (`db`/`numeric`) its `volume` datapoint was read in on. */
 const VOLUME_MODE_KEY = MEMORY_KEY.yxcVolumeMode;
@@ -250,8 +242,6 @@ export interface YxcControllerDeps extends ControllerDepsBase {
   scheduleKeepalive(handler: () => void, ms: number): () => void;
   /** Report the name the device carries for itself, for the device object's label. */
   reportDeviceName?(name: string): void;
-  /** Report the datapoints this device's getFeatures proves absent (see {@link yxcDeclaredAbsent}). */
-  reportDeclaredAbsent?(ids: string[]): void;
 }
 
 /**
@@ -290,8 +280,12 @@ export class YxcDeviceController {
   private readonly dropDetector = new PollDropDetector();
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   private lastTunerBand = "fm";
-  /** Each zone's currently selected input, from its status — see {@link zoneListeningTo}. */
-  private readonly lastZoneInput = new Map<string, string>();
+  /** Which media source feeds which zone's "now playing" block, and which zone a recall goes to. */
+  private readonly routing = new YxcPlayerRouting({
+    zones: () => this.zones,
+    media: () => this.mediaBlocks,
+    emit: (id, value) => this.emit(id, value),
+  });
   /** Each zone's declared value lists (getFeatures), for the on-screen remote's write guard. */
   private readonly zoneValueLists = new Map<string, Readonly<Record<string, string[]>>>();
   /**
@@ -301,16 +295,14 @@ export class YxcDeviceController {
    */
   private capabilities: YxcCapabilities | undefined;
   private readonly zoneVolumeMode = new Map<string, string | undefined>();
-  /** The source the network player is currently on (netusb `input`, e.g. "net_radio"). */
-  private lastNetusbInput = "";
-  /** Which source currently feeds each zone's "now playing" block (v2.0.0 routing). */
-  private readonly zonePlayerBlock = new Map<string, "netusb" | "cd">();
   /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
   private readonly lastEqualizer = new Map<string, { low: number; mid: number; high: number }>();
   /** Whether the device reports MusicCast-Link distribution (gates the dist poll and objects). */
   private hasDistribution = false;
   /** What the last getDistributionInfo said about this device's group (effective role, roster, status). */
   private dist: DistributionSummary = distributionSummary(undefined);
+  /** The MusicCast Link group: link, leave and rename, one change at a time. */
+  private readonly group: LinkGroup;
   /** The tuner features (bands + preset mode) — a preset recall needs the band. */
   private tunerFeatures: YxcTunerFeatures | undefined;
   /** Whether the device reports the clock/alarm block (gates the clock poll). */
@@ -369,7 +361,23 @@ export class YxcDeviceController {
   public constructor(
     private readonly deviceId: string,
     private readonly deps: YxcControllerDeps,
-  ) {}
+  ) {
+    this.group = new LinkGroup({
+      deviceId,
+      client: deps.client,
+      clientFor: deps.clientFor,
+      partnerIps: deps.partnerIps,
+      host: deps.host,
+      gate: deps.gate,
+      log: deps.log,
+      refresh: async () => {
+        await this.refreshDistribution(this.userClient);
+        return this.dist;
+      },
+      summary: () => this.dist,
+      features: () => this.capabilities?.distribution,
+    });
+  }
 
   /**
    * Read capabilities, create the object tree, seed state, and wire up push +
@@ -421,6 +429,12 @@ export class YxcDeviceController {
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errText(e)})`);
     }
+    // Registered for events NOW, not after the start's reads: those take a second or two, and an event in that
+    // window was lost — a volume turned while the adapter connected stood wrong until the next keepalive (review
+    // 2026-10-05, A47). Events that arrive before the start has written the device's values wait for it, so a
+    // refresh they trigger is never overwritten by the older answer the start is still writing.
+    this.earlyEvents = [];
+    this.cancelPush = this.deps.registerPush(event => this.onPush(event), this.pushDeviceId);
     // Capabilities and name are constant while the device runs, so on a reconnect —
     // and, persisted, on a restart — they come from the per-device memory instead of
     // costing more round-trips on a connection that is being (re-)established anyway.
@@ -512,32 +526,23 @@ export class YxcDeviceController {
     for (const object of objects) {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
-    this.deps.reportDeclaredAbsent?.(yxcDeclaredAbsent(this.capabilities));
-    await this.setupSceneLists(capabilities);
-    // The DAB scan counters are the one DAB detail the device reports only after a
-    // station scan (status stays not_ready before) — seed the documented start state
-    // (nothing scanned) so they are not left as valueless read states; a real scan
-    // result overwrites them via the tuner play info.
-    // Only where the tuner declares the scan (`dab_initial_scan`, YXC Basic §6.2 — audit 2026-09-29, C42).
-    if (
-      capabilities.media.includes("tuner") &&
-      (capabilities.tuner?.bands ?? []).includes("dab") &&
-      (capabilities.tuner?.funcs ?? []).includes("dab_initial_scan")
-    ) {
-      this.emit("tuner.dab.totalStations", 0);
-      this.emit("tuner.dab.scanProgress", 0);
+    await this.setupSceneLists(capabilities, objects);
+    // The model and the firmware as datapoints, from the ONE definition every transport builds them from. MusicCast
+    // reported the model but built no object for it, so the transport adapter dropped the value: a MusicCast-only
+    // device showed no model and no firmware, and the card, the icon and the remembered model stayed blank (review
+    // 2026-10-05, A5). Only what the device reported on this connection.
+    const info: Array<[string, string | undefined]> = [
+      ["info.model", model],
+      ["info.firmware", this.systemVersion],
+    ];
+    const infoEntries = INFO_ENTRIES.filter(entry => info.some(([id, value]) => id === entry.id && value));
+    for (const object of catalogToObjects([...infoEntries])) {
+      await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
-    // The network player's error and message come by push only — seeded to "none" so they never
-    // stand valueless (and are not purged as never filled) before the first report (C18).
-    if (capabilities.media.includes("netusb")) {
-      this.emit("player.netPlayer.playError", 0);
-      this.emit("player.netPlayer.playErrorText", "");
-      this.emit("player.netPlayer.playMessage", "");
-    }
-    if (model) {
-      // The info channel and info.model already exist — the adapter creates them for
-      // every device up front, so the card renders even while the device is offline.
-      this.emit("info.model", model);
+    for (const [id, value] of info) {
+      if (value) {
+        this.emit(id, value);
+      }
     }
     // The name the user gave the device in the MusicCast app. Best-effort like the model
     // above: an older device that does not answer getNameText simply keeps its label.
@@ -585,25 +590,46 @@ export class YxcDeviceController {
     this.hasMcPlaylist = capabilities.netusbFuncs?.includes("mc_playlist") ?? false;
     this.hasPlayQueue = capabilities.netusbFuncs?.includes("play_queue") ?? false;
     await this.setupBrowse(capabilities);
-    await this.refreshMedia();
-    // Seed the WHOLE player block with its cleared shape for every zone NOT playing a
-    // media source: the routing above only writes to listening zones, so on a device
-    // that starts on HDMI the block would sit valueless until the first media playback
-    // (live 2.0.0 deployment check — same gap the pre-release audit found for source).
-    if (this.mediaBlocks.includes("netusb") || this.mediaBlocks.includes("cd")) {
-      for (const zone of this.zones.length > 0 ? this.zones : ["main"]) {
-        if (!this.zonePlayerBlock.has(zone)) {
-          this.emitPlayerUpdates(zone, PLAYER_CLEAR);
-        }
-      }
+    const answered = await this.refreshMedia();
+    // The DAB scan counters are the one DAB detail the device reports only after a station scan (status stays
+    // not_ready before) — the documented start state (nothing scanned) where the tuner ANSWERED without them, so
+    // they are not left as valueless read states. Never before or over the tuner read: a reconnect wrote 0 over
+    // the 35 stations the read then wrote back (35 → 0 → 35 in the history; review 2026-10-05, A43). Only where
+    // the tuner declares the scan (`dab_initial_scan`, YXC Basic §6.2 — audit 2026-09-29, C42).
+    if (
+      answered.has("tuner") &&
+      (capabilities.tuner?.bands ?? []).includes("dab") &&
+      (capabilities.tuner?.funcs ?? []).includes("dab_initial_scan")
+    ) {
+      this.placeholders([
+        ["tuner.dab.totalStations", 0],
+        ["tuner.dab.scanProgress", 0],
+      ]);
     }
+    // The WHOLE player block of every zone NOT playing a media source gets its cleared shape.
+    this.routing.clearIdle();
     await this.refreshLists();
     this.hasDistribution = capabilities.hasDistribution ?? false;
     if (this.hasDistribution) {
       await this.refreshDistribution();
     }
     await this.setupSystemStates(capabilities);
-    this.cancelPush = this.deps.registerPush(event => this.onPush(event), this.pushDeviceId);
+    // The network player's error and message come by event only — "none" so they never stand valueless (and are
+    // not purged as never filled) before the first report (C18). Once per device and adapter run: a reconnect wrote
+    // "none" over an error an event had reported (review 2026-10-05, A43).
+    if (capabilities.media.includes("netusb") && this.deps.pushLiveness.claimStartValues()) {
+      this.placeholders([
+        ["player.netPlayer.playError", 0],
+        ["player.netPlayer.playErrorText", ""],
+        ["player.netPlayer.playMessage", ""],
+      ]);
+    }
+    // The events that came during the start, now that its own values are written.
+    const early = this.earlyEvents ?? [];
+    this.earlyEvents = undefined;
+    for (const event of early) {
+      this.handlePush(event);
+    }
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
@@ -719,34 +745,6 @@ export class YxcDeviceController {
   }
 
   /**
-   * The zone a recall should be routed to: recalling a favourite does not just start it, it
-   * also switches THAT zone to the source. Sending everything to the main zone (as this did
-   * before) means someone listening in zone 2 gets their favourite in the living room
-   * instead — and the main zone switched away from whatever it was playing.
-   *
-   * The zone actually listening to the source is the right target; the main zone is the
-   * fallback when nothing matches, which is also every single-zone device.
-   *
-   * @param source the input the recall belongs to (a network source, or "tuner")
-   * @returns the zone to route the recall to
-   */
-  private zoneListeningTo(source: string): string {
-    if (!source) {
-      return "main";
-    }
-    // Main first: on a device where several zones share the source, it is the natural target.
-    if (this.lastZoneInput.get("main") === source) {
-      return "main";
-    }
-    for (const [zone, input] of this.lastZoneInput) {
-      if (input === source) {
-        return zone;
-      }
-    }
-    return "main";
-  }
-
-  /**
    * Write a device-originated value — but never after the connection was closed. A poll
    * or a browse fetch that was already in flight when the adapter stopped would otherwise
    * still write into a tree that is being torn down.
@@ -768,6 +766,22 @@ export class YxcDeviceController {
 
   /** The MusicCast `device_id` this device reported — the events carry it too (see registerPush). */
   private pushDeviceId: string | undefined;
+  /** Events that arrived while the start was still writing the device's values — handled after it (A47). */
+  private earlyEvents: unknown[] | undefined;
+
+  /**
+   * Write start values only where this connection has not written a value yet — a placeholder never stands over
+   * one the device reported (review 2026-10-05, A43).
+   *
+   * @param values the ids and their start values
+   */
+  private placeholders(values: ReadonlyArray<readonly [string, number | string]>): void {
+    for (const [id, value] of values) {
+      if (!this.deviceValues.has(id)) {
+        this.emit(id, value);
+      }
+    }
+  }
 
   /** Per state id, the value the device last reported on THIS connection. */
   private readonly deviceValues = new Map<string, boolean | number | string | null>();
@@ -782,55 +796,62 @@ export class YxcDeviceController {
    * echoes and routed only the owner's ids here (audit 2026-09-29, A32: each controller re-checked
    * both, a path production never took).
    *
+   * Every path says what became of the write — never a forgotten `undefined`, which the handle reads as
+   * "unclear" and so never tries the next protocol (Y-04): a device-wide setting, a group change and a key
+   * stayed on MusicCast while YNCA could have carried them (review 2026-10-05, A3). A write this controller
+   * drops itself is `unavailable`, with a debug line naming the device, the datapoint and the reason (A46).
+   *
    * @param stateId the state id relative to the device
    * @param value the written value
+   * @returns what the device made of the write
    */
-  public handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome | void {
+  public async handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> {
     if (stateId.startsWith("player.browse.")) {
-      this.browseEngine?.handleWrite(stateId, value);
-      return;
+      if (!this.browseEngine) {
+        this.deps.log.debug(`${this.deviceId}: ${stateId} — this device has no menu, write dropped`);
+        return "unavailable";
+      }
+      // The engine says what became of a menu write — the same answer on all three protocols.
+      return this.browseEngine.handleWrite(stateId, value);
     }
-    // A scene TITLE resolves to its number via the shared device memory — the titles may
-    // have come over XML or YNCA while MusicCast owns the recall.
     const { zone: zoneKey, name } = splitZone(stateId);
-    if (name === "scene.recall" && typeof value === "string" && !/^\d+$/.test(value.trim())) {
+    // ONE resolution for every scene write, number or title, as on YNCA and XML: a whole number of 1 or more,
+    // or a title the zone reports (the titles may have come over XML or YNCA while MusicCast owns the recall).
+    // MusicCast recalled scene 2 for 1.5 and sent `recallScene(0)` for 0 (review 2026-10-05, A26).
+    if (name === "scene.recall") {
       const resolved = resolveSceneNumber(value, this.deps.probeMemory, zoneKey);
       if (resolved === undefined) {
-        // Same rule as the YNCA side: a write that goes nowhere leaves a trace.
+        // Same rule and words as the YNCA side: a write that goes nowhere leaves a trace.
         this.deps.log.debug(
-          `${this.deviceId}: scene "${value}" is unknown for ${zoneKey} — write dropped ` +
+          `${this.deviceId}: scene "${String(value)}" is not one this device declares — write dropped ` +
             `(known: ${
               knownScenes(this.deps.probeMemory, zoneKey)
                 .map(scene => scene.title)
                 .join(", ") || "none yet"
             })`,
         );
-        return;
+        return "unavailable";
       }
       value = resolved;
     }
     // Multiroom writes need controller state (the cached role), so they bypass the pure command map.
     if (stateId === "multiroom.group.leave") {
-      void this.leaveGroup();
-      return;
+      return this.group.leave();
     }
     if (stateId === "multiroom.group.linkDevice") {
-      void this.linkClient(String(value));
-      return;
+      return this.group.link(String(value));
     }
     if (stateId === "multiroom.group.name") {
-      void this.renameGroup(value);
-      return;
+      return this.group.rename(value);
     }
     // Device-wide settings are not part of the zone command map — they carry their own setters.
     const systemEntry = this.systemEntries.find(entry => entry.state === stateId);
     if (systemEntry) {
-      if (systemEntry.write) {
-        void this.applySystemWrite(systemEntry, value);
-      } else {
+      if (!systemEntry.write) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} is read-only on MusicCast — write dropped`);
+        return "unavailable";
       }
-      return;
+      return this.applySystemWrite(systemEntry, value);
     }
     // The on-screen remote: a word the zone DECLARES (cursor_list/menu_list) goes to the device
     // even where the shared vocabulary lacks it — help, mode and the four colour keys exist on
@@ -839,37 +860,55 @@ export class YxcDeviceController {
       const declared = this.zoneValueLists.get(zoneKey)?.[name];
       if (declared?.includes(value)) {
         const word = value;
-        void this.applyCommand(stateId, {
+        return this.applyCommand(stateId, {
           kind: "run",
           run: client =>
             name === "remote.cursor" ? client.controlCursor(word, zoneKey) : client.controlMenu(word, zoneKey),
         });
-        return;
       }
       // A zone that declares its keys takes those and no other — the shared vocabulary below is for a
       // zone without a list; before, a word the zone does not have still went out (audit 2026-09-29, C46).
       if (declared !== undefined) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} "${value}" is not a key this zone declares — not sent`);
-        return;
+        return "unavailable";
       }
     }
     const command = stateToYxc(stateId, value);
     if (!command) {
+      this.deps.log.debug(
+        `${this.deviceId}: ${stateId} — "${String(value)}" is no value MusicCast takes, write dropped`,
+      );
       return "unavailable";
     }
     // A function the zone reports not operable right now (YXC Basic §5.1 `disable_flags`: b0 volume,
     // b1 mute, b2 link audio delay — a soundbar in standby reports 3) is not sent: the device would
     // refuse it with a warning; the datapoint gets the device's value back (audit 2026-09-24, C27).
     const bit = ({ volume: 0b1, mute: 0b10, "sound.linkAudioDelay": 0b100 } as Record<string, number>)[name];
-    if (bit !== undefined) {
-      const zone = zoneKey;
-      if (((this.disabledFlags.get(zone) ?? 0) & bit) !== 0) {
+    const disabled = (): boolean => bit !== undefined && ((this.disabledFlags.get(zoneKey) ?? 0) & bit) !== 0;
+    if (disabled()) {
+      // The flags are those of the zone's LAST status: a script's "power on, then volume" was judged on the
+      // standby flags and its volume dropped, push or not (YSP-1600, review 2026-10-05, A18). The zone is asked
+      // now — behind the power write in the command gate — and that answer decides; it also puts the device's
+      // value back on the datapoint when the function is still not operable.
+      await this.refreshZone(zoneKey, this.userClient);
+      if (disabled()) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} is not operable on the device right now — not sent`);
-        this.coalesced(`zone:${zone}`, () => this.refreshZone(zone));
-        return;
+        return "unavailable";
       }
     }
-    return this.applyCommand(stateId, command, value).then(outcome => (outcome === "failed" ? "unavailable" : outcome));
+    return this.applyCommand(stateId, command, value);
+  }
+
+  /**
+   * The client at USER priority, for every read that belongs to a user's write: its read-back, the zone a
+   * stale standby flag is checked against, the group read inside a group change. From its verb a read is
+   * background work and waited behind the poll sweep, while YNCA reads back at user priority (review
+   * 2026-10-05, A58).
+   *
+   * @returns the user-priority twin of the device's client
+   */
+  private get userClient(): YxcClientLike {
+    return this.deps.client.forUser();
   }
 
   /** @returns the firmware (`system_version`) read on this connection, if any */
@@ -878,35 +917,49 @@ export class YxcDeviceController {
   }
 
   /**
-   * Apply a write to a device-wide setting and read the block back, so the state shows what
-   * the device actually took.
+   * Apply a write to a device-wide setting and read the block back — taken or refused — so the state shows
+   * what the device actually has.
    *
    * @param entry the system catalog entry
    * @param value the written value
+   * @returns what the device made of the write
    */
-  private async applySystemWrite(entry: YxcSystemEntry, value: unknown): Promise<void> {
+  private async applySystemWrite(entry: YxcSystemEntry, value: unknown): Promise<WriteOutcome> {
     // A switch reads the words a script writes ("false", "off", "0") for what they mean — the
     // entry's Boolean() would send every non-empty string as on.
     const input = entry.common.type === "boolean" ? coerceBool(value) : value;
     if (input === undefined) {
       this.deps.log.debug(`${this.deviceId}: ${entry.state} — "${String(value)}" is no switch value, write dropped`);
-      return;
+      return "unavailable";
     }
+    let outcome: WriteOutcome = "sent";
     try {
-      try {
-        await entry.write?.apply(this.deps.client, input);
-      } catch (e) {
-        this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errText(e)})`);
-        this.checkAliveAfter(e);
-        // A refused setting is read back like a taken one — the datapoint shows what the device
-        // kept (audit 2026-09-24, C28); a write nobody answered leaves it to the liveness check.
-        if (!(e instanceof YxcRefusalError)) {
-          return;
-        }
-      }
-      this.applySystemStatus(await this.deps.client.getFuncStatus());
+      await entry.write?.apply(this.deps.client, input);
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: reading ${entry.state} back failed (${errText(e)})`);
+      this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errText(e)})`);
+      this.checkAliveAfter(e);
+      // A write nobody answered leaves it to the liveness check (and to the next protocol).
+      if (!answeredByDevice(e)) {
+        return "unavailable";
+      }
+      // A refused setting is read back like a taken one — the datapoint shows what the device
+      // kept (audit 2026-09-24, C28).
+      outcome = "refused";
+    }
+    void this.readSystemBack(entry.state);
+    return outcome;
+  }
+
+  /**
+   * Read the device-wide settings back after a write to one of them.
+   *
+   * @param stateId the written setting, for the failure line
+   */
+  private async readSystemBack(stateId: string): Promise<void> {
+    try {
+      this.applySystemStatus(await this.userClient.getFuncStatus());
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: reading ${stateId} back failed (${errText(e)})`);
     }
   }
 
@@ -962,7 +1015,7 @@ export class YxcDeviceController {
       this.deps.client,
       inputs,
       this.cover,
-      input => this.zoneListeningTo(input),
+      input => this.routing.recallZone(input),
       yxcListLanguage(this.deps.systemLanguage),
     );
     this.browseDriver = driver;
@@ -1002,6 +1055,19 @@ export class YxcDeviceController {
     if (this.deps.pushLiveness.noteEvent()) {
       this.deps.log.info(`${this.deviceId}: MusicCast events arrive again`);
     }
+    if (this.earlyEvents !== undefined) {
+      this.earlyEvents.push(event);
+      return;
+    }
+    this.handlePush(event);
+  }
+
+  /**
+   * Act on one device event (see {@link onPush}).
+   *
+   * @param event the parsed push event
+   */
+  private handlePush(event: unknown): void {
     for (const zone of zonesToRefresh(event)) {
       if (this.zones.includes(zone)) {
         this.coalesced(`zone:${zone}`, () => this.refreshZone(zone));
@@ -1016,7 +1082,7 @@ export class YxcDeviceController {
     // states of the zone listening to that source, and nothing is asked of the device.
     for (const { block, info } of mediaTimeUpdates(event)) {
       if (this.mediaBlocks.includes(block)) {
-        this.routePlayerBlock(block, parseYxcPlayInfo(info, block, this.cover));
+        this.routing.route(block, parseYxcPlayInfo(info, block, this.cover));
       }
     }
     // The favourites/recently-played lists announce their changes as flags in the push.
@@ -1076,27 +1142,29 @@ export class YxcDeviceController {
     // below catches for itself today, so the guard is what makes that a guarantee instead
     // of something the next change has to remember.
     try {
+      const quiet = (): boolean => this.pushEvents === this.eventsAtLastKeepalive;
+      // A source playing to a switched-on zone ticks its play time every second: an interval without one event
+      // while it plays is judged too, not only the main zone's four fields — events taken by another client while
+      // titles changed were never judged, and the titles stood up to 30 minutes old (review 2026-10-05, A17).
+      const printsBefore = new Map((["netusb", "cd"] as const).map(block => [block, this.routing.printOf(block)]));
       // Zones in parallel: their writes are disjoint and one zone stuck in its timeout must
       // not delay the others (a four-zone receiver used to poll them strictly in series).
-      const zones = this.zones.length > 0 ? this.zones : ["main"];
       const announced = ANNOUNCED_MAIN_FIELDS.map(id => this.deviceValues.get(id));
-      const anyOk = (await Promise.all(zones.map(zone => this.refreshZone(zone)))).some(Boolean);
+      const anyOk = (await Promise.all(this.zones.map(zone => this.refreshZone(zone)))).some(Boolean);
       // A main-zone field that changed while no event came since the previous keepalive: the
       // device told nobody. Only a field that HAD a value counts — one reported for the first time
-      // is no change. An event during this refresh moves the counter and judges nothing.
+      // is no change. An event during this keepalive moves the counter and judges nothing.
       const unannounced = ANNOUNCED_MAIN_FIELDS.some((id, i) => {
         const before = announced[i];
         return before !== undefined && this.deviceValues.get(id) !== before;
       });
-      if (unannounced && this.pushEvents === this.eventsAtLastKeepalive) {
-        this.noteMiss();
-      }
-      this.eventsAtLastKeepalive = this.pushEvents;
       // Every request above already carried the subscription headers, so the push
       // registration is renewed either way. What still has to be polled depends on whether
       // push works: with push the device announces media, list and group changes itself, so
       // the full sweep only runs occasionally as a safety net (UDP can drop a packet);
       // without push it is the only way anything ever updates.
+      // Judged after the zones answered: a zone that just left its source listens to it no more.
+      const playing = this.pushWorking() ? this.routing.audible() : [];
       this.keepaliveRuns++;
       const fullSweep = !this.pushWorking() || this.keepaliveRuns % PUSH_MODE_FULL_SWEEP_EVERY === 0;
       if (fullSweep) {
@@ -1106,7 +1174,15 @@ export class YxcDeviceController {
         if (this.hasDistribution) {
           await this.refreshDistribution();
         }
+      } else if (playing.length > 0 && quiet()) {
+        // Only the playing sources, and only while no event came: the read the judgement needs.
+        await Promise.all(playing.map(block => this.refreshMediaSource(block)));
       }
+      const mediaChanged = playing.some(block => this.routing.printOf(block) !== printsBefore.get(block));
+      if ((unannounced || mediaChanged) && quiet()) {
+        this.noteMiss();
+      }
+      this.eventsAtLastKeepalive = this.pushEvents;
       this.dropDetector.record(anyOk);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errText(e)}`);
@@ -1275,21 +1351,26 @@ export class YxcDeviceController {
         return;
       }
       this.capabilities = { ...this.capabilities, names: nameTextLabels(nameText) };
+      // The dropdowns with the new names — their labels follow the receiver (`liveLabels`, set by the object
+      // mapper; the adapter relabels the existing keys and removes none). Every zone in ONE build of the tree:
+      // it was rebuilt once per zone to pick two dropdowns (review 2026-10-05, D).
+      const current: Record<string, Record<string, string>> = {};
       for (const zone of this.zones) {
-        const prefix = zonePrefix(zone);
-        const current: Record<string, string> = {};
+        const values: Record<string, string> = {};
         for (const field of ["input", "soundProgram"]) {
-          const value = this.deviceValues.get(`${prefix}${field}`);
+          const value = this.deviceValues.get(`${zonePrefix(zone)}${field}`);
           if (typeof value === "string") {
-            current[field] = value;
+            values[field] = value;
           }
         }
-        const defs = mapYxcToObjects(this.capabilities, { [zone]: current });
-        for (const id of [`${prefix}input`, `${prefix}soundProgram`]) {
-          const def = defs.find(object => object.id === id);
-          if (def) {
-            await this.deps.upsertObject(`${this.deviceId}.${id}`, def);
-          }
+        current[zone] = values;
+      }
+      const labelled = new Set(
+        this.zones.flatMap(zone => [`${zonePrefix(zone)}input`, `${zonePrefix(zone)}soundProgram`]),
+      );
+      for (const def of mapYxcToObjects(this.capabilities, current)) {
+        if (labelled.has(def.id)) {
+          await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
         }
       }
     } catch (e) {
@@ -1329,10 +1410,14 @@ export class YxcDeviceController {
     }
   }
 
-  /** Fetch the stored netusb favourites and write the JSON list state. */
-  private async refreshNetusbPresets(): Promise<void> {
+  /**
+   * Fetch the stored netusb favourites and write the JSON list state.
+   *
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
+   */
+  private async refreshNetusbPresets(via: YxcClientLike = this.deps.client): Promise<void> {
     try {
-      const info = await this.deps.client.getPresetInfo();
+      const info = await via.getPresetInfo();
       const update = parseYxcPresetList(info);
       if (update) {
         this.emit(update.id, update.value);
@@ -1379,15 +1464,17 @@ export class YxcDeviceController {
   /**
    * Fetch the tuner preset lists — the shared `common` list, or one per band on
    * devices with separate lists — and write the JSON state.
+   *
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
    */
-  private async refreshTunerPresets(): Promise<void> {
+  private async refreshTunerPresets(via: YxcClientLike = this.deps.client): Promise<void> {
     try {
       const common = this.tunerFeatures?.presetType === "common";
       const bands = common ? ["common"] : (this.tunerFeatures?.bands ?? ["fm"]);
       const byBand: Record<string, unknown> = {};
       for (const band of bands) {
         try {
-          byBand[band] = await this.deps.client.getTunerPresetInfo(band);
+          byBand[band] = await via.getTunerPresetInfo(band);
         } catch (e) {
           this.deps.log.debug(`${this.deviceId}: getTunerPresetInfo(${band}) failed: ${errText(e)}`);
         }
@@ -1426,10 +1513,14 @@ export class YxcDeviceController {
     }
   }
 
-  /** Fetch the clock/alarm settings and write the clock states. */
-  private async refreshClock(): Promise<void> {
+  /**
+   * Fetch the clock/alarm settings and write the clock states.
+   *
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
+   */
+  private async refreshClock(via: YxcClientLike = this.deps.client): Promise<void> {
     try {
-      for (const update of parseYxcClock(await this.deps.client.getClockSettings())) {
+      for (const update of parseYxcClock(await via.getClockSettings())) {
         this.emit(update.id, update.value);
       }
     } catch (e) {
@@ -1437,10 +1528,15 @@ export class YxcDeviceController {
     }
   }
 
-  /** Refresh every player source the device offers (network player, cd, tuner). */
-  private async refreshMedia(): Promise<void> {
+  /**
+   * Refresh every player source the device offers (network player, cd, tuner).
+   *
+   * @returns the sources that answered
+   */
+  private async refreshMedia(): Promise<Set<string>> {
     // The three sources (netusb/cd/tuner) write disjoint states — fetch them together.
-    await Promise.all(this.mediaBlocks.map(block => this.refreshMediaSource(block)));
+    const answers = await Promise.all(this.mediaBlocks.map(block => this.refreshMediaSource(block)));
+    return new Set(this.mediaBlocks.filter((_block, i) => answers[i]));
   }
 
   /**
@@ -1449,11 +1545,13 @@ export class YxcDeviceController {
    * play-info shape (different channel), the tuner has its own band/frequency/RDS.
    *
    * @param block the media block (`netusb`, `cd`, `tuner`)
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
+   * @returns whether the device answered
    */
-  private async refreshMediaSource(block: string): Promise<void> {
+  private async refreshMediaSource(block: string, via: YxcClientLike = this.deps.client): Promise<boolean> {
     const arg = block === "netusb" ? undefined : block;
     try {
-      const info = await this.deps.client.getPlayInfo(arg);
+      const info = await via.getPlayInfo(arg);
       if (block === "tuner") {
         for (const update of parseYxcTunerInfo(info)) {
           this.emit(update.id, update.value);
@@ -1461,75 +1559,15 @@ export class YxcDeviceController {
             this.lastTunerBand = String(update.value);
           }
         }
-        return;
+        return true;
       }
       const source: "netusb" | "cd" = block === "cd" ? "cd" : "netusb";
-      const updates = parseYxcPlayInfo(info, source, this.cover);
-      if (source === "netusb") {
-        // The id, not the datapoint: `player.source` shows the input's name (C40), the zones match ids.
-        const active = (info as { input?: unknown } | null)?.input;
-        if (typeof active === "string") {
-          this.lastNetusbInput = active;
-        }
-      }
-      this.routePlayerBlock(source, updates);
+      this.routing.notePlayInfo(source, info);
+      this.routing.route(source, parseYxcPlayInfo(info, source, this.cover));
+      return true;
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${errText(e)}`);
-    }
-  }
-
-  /**
-   * Which player source a zone's input feeds into its "now playing" block: `cd` for
-   * the disc input, `netusb` when the zone's input IS the network player's active
-   * source. Anything else (HDMI, analog, tuner) plays no media block.
-   *
-   * @param input the zone's currently selected input
-   * @returns the feeding source, or undefined when the input is no media player
-   */
-  private playerBlockFor(input: string | undefined): "netusb" | "cd" | undefined {
-    if (input === "cd" && this.mediaBlocks.includes("cd")) {
-      return "cd";
-    }
-    if (input !== undefined && input !== "" && input === this.lastNetusbInput && this.mediaBlocks.includes("netusb")) {
-      return "netusb";
-    }
-    return undefined;
-  }
-
-  /**
-   * Route one source's play info into the "now playing" block of every zone listening
-   * to it (v2.0.0): main flat, the other zones under their multiroom folder. A zone
-   * that LEFT the source gets its block cleared once — the previous program's metadata
-   * must not linger under a zone that no longer plays it. Drive-own `player.cd.*`
-   * extras are device-global and emitted once, unprefixed.
-   *
-   * @param block the source the updates came from
-   * @param updates the parsed flat player updates
-   */
-  private routePlayerBlock(block: "netusb" | "cd", updates: StateValue[]): void {
-    const zones = this.zones.length > 0 ? this.zones : ["main"];
-    for (const zone of zones) {
-      const expected = this.playerBlockFor(this.lastZoneInput.get(zone));
-      const previous = this.zonePlayerBlock.get(zone);
-      if (previous === block && expected !== block) {
-        // The zone left OUR source — clear; the new source's refresh fills its own values.
-        this.zonePlayerBlock.delete(zone);
-        this.emitPlayerUpdates(zone, PLAYER_CLEAR);
-      }
-      if (expected === block) {
-        if (previous !== block) {
-          this.zonePlayerBlock.set(zone, block);
-          if (previous !== undefined) {
-            this.emitPlayerUpdates(zone, PLAYER_CLEAR);
-          }
-        }
-        this.emitPlayerUpdates(zone, updates);
-      }
-    }
-    for (const update of updates) {
-      if (update.id.startsWith("player.cd.")) {
-        this.emit(update.id, update.value);
-      }
+      return false;
     }
   }
 
@@ -1541,9 +1579,14 @@ export class YxcDeviceController {
    * the COUNT is what its getFeatures declares (review finding: the promised list was
    * missing entirely on devices whose only transport is MusicCast).
    *
+   * The recall datapoint gets the same title dropdown YNCA and XML give it: the titles another transport
+   * reported, the number where there is none — names the user gives in the receiver, so `liveLabels` (review
+   * 2026-10-05, parity: MusicCast's recall carried no states).
+   *
    * @param capabilities the device's parsed getFeatures capabilities
+   * @param objects the objects built for the device, the zones' recall datapoints among them
    */
-  private async setupSceneLists(capabilities: YxcCapabilities): Promise<void> {
+  private async setupSceneLists(capabilities: YxcCapabilities, objects: readonly ObjectDef[]): Promise<void> {
     for (const zone of capabilities.zones) {
       if (!zone.funcs.includes("scene") || zone.sceneNum === undefined || zone.sceneNum <= 0) {
         continue;
@@ -1553,6 +1596,14 @@ export class YxcDeviceController {
         num: i + 1,
         title: titles.get(i + 1) ?? "",
       }));
+      const recall = objects.find(object => object.id === `${zonePrefix(zone.id)}scene.recall`);
+      if (recall) {
+        await this.deps.upsertObject(`${this.deviceId}.${recall.id}`, {
+          ...recall,
+          common: { ...recall.common, states: sceneRecallStates(list) },
+          liveLabels: true,
+        });
+      }
       const surface = sceneListSurface(`${zonePrefix(zone.id)}scene`, list);
       for (const object of surface.objects) {
         await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
@@ -1564,51 +1615,14 @@ export class YxcDeviceController {
   }
 
   /**
-   * Re-evaluate which source feeds a zone's player block after ITS input changed:
-   * clear the block when the zone left a media source, and fetch the joined source's
-   * play info right away so the block fills now, not at the next sweep.
-   *
-   * @param zone the zone whose input just changed
-   */
-  private retargetZonePlayer(zone: string): void {
-    const expected = this.playerBlockFor(this.lastZoneInput.get(zone));
-    const previous = this.zonePlayerBlock.get(zone);
-    if (previous === expected) {
-      return;
-    }
-    if (previous !== undefined) {
-      this.zonePlayerBlock.delete(zone);
-      this.emitPlayerUpdates(zone, PLAYER_CLEAR);
-    }
-    if (expected !== undefined) {
-      // routePlayerBlock (inside this refresh) records the zone's new source.
-      void this.refreshMediaSource(expected);
-    }
-  }
-
-  /**
-   * Emit flat player updates into one zone's block (main flat, zones prefixed),
-   * skipping the device-global drive extras.
-   *
-   * @param zone the target zone
-   * @param updates the flat player updates
-   */
-  private emitPlayerUpdates(zone: string, updates: readonly StateValue[]): void {
-    const prefix = zonePrefix(zone);
-    for (const update of updates) {
-      if (!update.id.startsWith("player.cd.")) {
-        this.emit(`${prefix}${update.id}`, update.value);
-      }
-    }
-  }
-
-  /**
    * Fetch the MusicCast-Link distribution info and write the parsed dist states with ack,
    * caching the role for the leave-group path.
+   *
+   * @param via the client to ask through — the user-priority one inside a user's group change
    */
-  private async refreshDistribution(): Promise<void> {
+  private async refreshDistribution(via: YxcClientLike = this.deps.client): Promise<void> {
     try {
-      const info = await this.deps.client.getDistributionInfo();
+      const info = await via.getDistributionInfo();
       this.dist = distributionSummary(info);
       for (const update of parseYxcDistribution(info)) {
         this.emit(update.id, update.value);
@@ -1619,235 +1633,6 @@ export class YxcDeviceController {
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDistributionInfo failed: ${errText(e)}`);
-    }
-  }
-
-  /**
-   * Name the MusicCast group (YXC Advanced §5.6): UTF-8 within 128 bytes, "" restores the default;
-   * then read the distribution back, so the datapoint shows what the device took (audit 2026-09-24, C8).
-   *
-   * @param value the written name
-   */
-  private async renameGroup(value: unknown): Promise<void> {
-    try {
-      const name = typeof value === "string" ? value : undefined;
-      if (name === undefined) {
-        this.deps.log.debug(`${this.deviceId}: a group name is text — ${typeof value} not sent`);
-      } else if (Buffer.byteLength(name, "utf8") > GROUP_NAME_MAX_BYTES) {
-        this.deps.log.debug(
-          `${this.deviceId}: group name "${name}" is longer than ${GROUP_NAME_MAX_BYTES} bytes — not sent`,
-        );
-      } else {
-        await this.deps.client.setGroupName(name);
-      }
-      await this.refreshDistribution();
-    } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: renaming the group failed: ${errText(e)}`);
-      await this.refreshDistribution();
-    }
-  }
-
-  /**
-   * Leave the current MusicCast-Link group (YXC Advanced §9.1): a server stops distributing and
-   * clears its server setup (§5.5, §5.2 with group ""); a client leaves as {@link leaveAsClient}.
-   * Decided on the EFFECTIVE role (§9.2) — the role word flickers (audit 2026-09-24, C7).
-   */
-  private async leaveGroup(): Promise<void> {
-    try {
-      await this.refreshDistribution();
-      if (this.dist.role === "server") {
-        const clients = this.dist.clients;
-        await this.deps.client.stopDistribution();
-        await this.deps.client.setServerInfo({ group_id: "" });
-        // The clients are released too (YXC Advanced §9.1.3-1): before, they kept the group id and the
-        // MusicCast Link input (audit 2026-09-29, C43). A client this adapter does not run is left
-        // alone — it notices the lost server itself.
-        for (const ip of this.deps.partnerIps?.() ?? []) {
-          const partner = this.deps.clientFor?.(ip);
-          if (partner && clients.includes((await resolveIPv4(ip)) ?? ip)) {
-            await partner.setClientInfo({ group_id: "" });
-          }
-        }
-      } else if (this.dist.role === "client") {
-        await this.leaveAsClient();
-      } else {
-        await this.deps.client.setClientInfo({ group_id: "" });
-      }
-      await this.refreshDistribution();
-    } catch (e) {
-      // A user action failing must be visible — warn, like every other write command.
-      this.deps.log.warn(`${this.deviceId}: leaveGroup failed: ${errText(e)}`);
-    }
-  }
-
-  /**
-   * Leave a group as a client (YXC Advanced §9.1.3): clear this device's client setup, then take it
-   * off its server's roster and — where clients remain — restart the distribution with the network's
-   * distribution number. The server is found among the configured devices; one this adapter does not
-   * know is left alone (it drops the client when it stops answering).
-   */
-  private async leaveAsClient(): Promise<void> {
-    const ownIp = await this.ownIp();
-    const num = await this.networkClientCount();
-    await this.deps.client.setClientInfo({ group_id: "" });
-    if (ownIp === undefined) {
-      return;
-    }
-    for (const ip of this.deps.partnerIps?.() ?? []) {
-      const partner = this.deps.clientFor?.(ip);
-      const summary = partner ? await this.summaryOf(partner) : undefined;
-      if (!partner || summary?.role !== "server" || !summary.clients.includes(ownIp)) {
-        continue;
-      }
-      await partner.setServerInfo({
-        group_id: summary.groupId,
-        zone: summary.serverZone,
-        type: "remove",
-        client_list: [ownIp],
-      });
-      if (summary.clients.length > 1) {
-        await partner.startDistribution(num);
-      } else {
-        // The last client gone: "If all clients are to be removed, set empty text to GroupID in
-        // setServerInfo" (YXC Advanced §9.1.3-2) — the server showed "server" with an empty roster (C43).
-        await partner.setServerInfo({ group_id: "" });
-      }
-      return;
-    }
-    this.deps.log.debug(`${this.deviceId}: the group's server is not a configured device — left its roster to it`);
-  }
-
-  /**
-   * A zone left the MusicCast Link input while this device is a client: it has to leave the group
-   * (YXC Advanced §9.1.6-1). Called without awaiting.
-   */
-  private async leaveAfterInputChange(): Promise<void> {
-    try {
-      this.deps.log.debug(`${this.deviceId}: the input left MusicCast Link — leaving the group`);
-      await this.leaveAsClient();
-      await this.refreshDistribution();
-    } catch (e) {
-      this.deps.log.warn(`${this.deviceId}: leaving the group after the input change failed: ${errText(e)}`);
-    }
-  }
-
-  /**
-   * This device's IPv4 address, for a server's roster (`client_list` and `server_ip_address` take
-   * addresses, YXC Advanced §5.2/§5.3).
-   *
-   * @returns the address, or undefined when the configured host does not resolve
-   */
-  private async ownIp(): Promise<string | undefined> {
-    return this.deps.host === undefined ? undefined : resolveIPv4(this.deps.host);
-  }
-
-  /**
-   * A device's group summary, or undefined when it does not answer.
-   *
-   * @param client the device's client
-   * @returns its summary
-   */
-  private async summaryOf(client: YxcClientLike): Promise<DistributionSummary | undefined> {
-    try {
-      return distributionSummary(await client.getDistributionInfo());
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: a partner's getDistributionInfo failed: ${errText(e)}`);
-      return undefined;
-    }
-  }
-
-  /**
-   * The distribution number of the MusicCast network BEFORE a change: how many clients every server
-   * among the configured devices distributes to — `startDistribution?num=` (YXC Advanced §5.4, §9.1.2–
-   * §9.1.5: the first group 0, a third client joining a group of two 2). It was a fixed 0.
-   *
-   * @returns the number
-   */
-  private async networkClientCount(): Promise<number> {
-    let count = this.dist.role === "server" ? this.dist.clients.length : 0;
-    for (const ip of this.deps.partnerIps?.() ?? []) {
-      const partner = this.deps.clientFor?.(ip);
-      const summary = partner ? await this.summaryOf(partner) : undefined;
-      if (summary?.role === "server") {
-        count += summary.clients.length;
-      }
-    }
-    return count;
-  }
-
-  /**
-   * Form or extend a MusicCast-Link group with this device as server (YXC Advanced §9.1): check the
-   * two are compatible (§9.1.1), give the client the group, the server's address and the MusicCast
-   * Link input (§5.3, §9.1.6), add it to the roster, start the distribution with the network's
-   * distribution number (§5.4), and read the group back until it is working — which can take up to
-   * three minutes (§9.1.8-3). A group this device already serves is extended, not replaced; a new one
-   * gets a random id (§9.1.2) (audit 2026-09-24, C7).
-   *
-   * @param target the address of the client device (a configured device)
-   */
-  private async linkClient(target: string): Promise<void> {
-    try {
-      const clientIp = (await resolveIPv4(target)) ?? target;
-      const partner = this.deps.clientFor?.(clientIp) ?? this.deps.clientFor?.(target);
-      if (!partner) {
-        this.deps.log.warn(`${this.deviceId}: cannot link ${target} — not a known device`);
-        return;
-      }
-      const master = this.capabilities?.distribution;
-      const joiningFeatures = parseYxcFeatures(await partner.getFeatures());
-      const joining = joiningFeatures.distribution;
-      // Zone A and Zone B join a group only together (YXC Advanced §9.1.7-2).
-      const joiningZones = joiningFeatures.zones.some(zone => zone.id === "zone2" && zone.zoneB === true)
-        ? ["main", "zone2"]
-        : ["main"];
-      if (master?.compatibleClients !== undefined) {
-        // No `version` means a 1.x network module (YXC Advanced §9.1.8-1/-2) — it was let through
-        // unchecked and the build failed silently after three minutes of polling (audit 2026-09-29, C43).
-        const version = joining?.version ?? 1;
-        if (!master.compatibleClients.includes(Math.floor(version))) {
-          this.deps.log.warn(
-            `${this.deviceId}: cannot link ${target} — its MusicCast Link version ${version} is not one this device takes (${master.compatibleClients.join(", ")}); a firmware update of either brings them together`,
-          );
-          return;
-        }
-      }
-      await this.refreshDistribution();
-      const num = await this.networkClientCount();
-      const groupId =
-        this.dist.role === "server" && this.dist.inGroup
-          ? this.dist.groupId
-          : randomBytes(16).toString("hex").toUpperCase();
-      const serverIp = await this.ownIp();
-      await partner.setClientInfo({
-        group_id: groupId,
-        zone: joiningZones,
-        ...(serverIp !== undefined ? { server_ip_address: serverIp } : {}),
-      });
-      for (const zone of joiningZones) {
-        await partner.setInput("mc_link", zone);
-      }
-      await this.deps.client.setServerInfo({ group_id: groupId, zone: "main", type: "add", client_list: [clientIp] });
-      await this.deps.client.startDistribution(num);
-      await this.awaitGroupBuilt();
-    } catch (e) {
-      // A user action failing must be visible — warn, like every other write command.
-      this.deps.log.warn(`${this.deviceId}: linkClient(${target}) failed: ${errText(e)}`);
-    }
-  }
-
-  /** Read the distribution until the group reports `working` — at most three minutes (§9.1.8-3). */
-  private async awaitGroupBuilt(): Promise<void> {
-    await this.refreshDistribution();
-    const gate = this.deps.gate;
-    for (let round = 0; gate && round < GROUP_BUILD_POLLS; round++) {
-      if (this.dist.status === undefined || this.dist.status === "working") {
-        return;
-      }
-      await gate.delay(GROUP_BUILD_POLL_MS);
-      if (gate.closed) {
-        return;
-      }
-      await this.refreshDistribution();
     }
   }
 
@@ -1888,15 +1673,17 @@ export class YxcDeviceController {
    * Fetch a zone's status and write its amp states with ack.
    *
    * @param zone the zone to refresh
+   * @param via the client to ask through — the user-priority one for the read-back of a user write
    * @returns true if the device answered (with its status, or refusing it — it is there), false if
    *   nothing answered
    */
-  private async refreshZone(zone: string): Promise<boolean> {
-    const answer = await this.fetchZoneStatus(zone);
+  private async refreshZone(zone: string, via: YxcClientLike = this.deps.client): Promise<boolean> {
+    const answer = await this.fetchZoneStatus(zone, via);
     if (answer.kind !== "ok") {
       return answer.kind === "refused";
     }
     try {
+      await this.learnVolumeMode(zone, answer.status);
       this.applyZoneStatus(zone, answer.status);
     } catch (e) {
       // A push handler calls this without awaiting it, so a rejection here would have no
@@ -1909,17 +1696,53 @@ export class YxcDeviceController {
   }
 
   /**
+   * Learn a zone's display scale at the first status that reports one. The scale was decided only in `start`, so a
+   * zone whose status did not answer then stayed without one until the next reconnect: its datapoint showed the
+   * DISPLAYED value (40.5 on the numeric scale) while a write went out as the raw step count — writing 45 sent
+   * `setVolume(45)`, 22.5 instead of 90 steps, and −40 on the decibel scale was refused (review 2026-10-05, A15).
+   * Learned once and remembered with the others, never replaced (a read-in receiver keeps its scale, krobi
+   * 2026-10-02); until a status reports one, both directions stay on the raw step count the zone reports. The zone's
+   * volume datapoint follows the learned scale, as it would have at `start`.
+   *
+   * @param zone the zone the status belongs to
+   * @param status the raw getStatus answer
+   */
+  private async learnVolumeMode(zone: string, status: unknown): Promise<void> {
+    const mode = actualVolumeModeOf(status);
+    if (mode === undefined || this.zoneVolumeMode.get(zone) !== undefined) {
+      return;
+    }
+    this.zoneVolumeMode.set(zone, mode);
+    const learned = this.deps.probeMemory.remembered<Record<string, string>>(VOLUME_MODE_KEY) ?? {};
+    if (learned[zone] === undefined) {
+      this.deps.probeMemory.set(VOLUME_MODE_KEY, { ...learned, [zone]: mode });
+    }
+    if (this.capabilities === undefined) {
+      return;
+    }
+    const prefix = zonePrefix(zone);
+    for (const def of mapYxcToObjects(this.capabilities, { [zone]: { actualVolumeMode: mode } })) {
+      if (def.id === `${prefix}volume` || def.id === `${prefix}advanced.maxVolume`) {
+        await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+      }
+    }
+  }
+
+  /**
    * Fetch a zone's status, swallowing the failure of an absent zone or an offline device.
    *
    * @param zone the zone to ask
+   * @param via the client to ask through
    * @returns the answer: the raw status, the device's refusal, or none
    */
-  private async fetchZoneStatus(zone: string): Promise<ZoneAnswer> {
+  private async fetchZoneStatus(zone: string, via: YxcClientLike = this.deps.client): Promise<ZoneAnswer> {
     try {
-      return { kind: "ok", status: await this.deps.client.getStatus(zone) };
+      return { kind: "ok", status: await via.getStatus(zone) };
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errText(e)}`);
-      return e instanceof YxcRefusalError ? { kind: "refused", reason: errText(e) } : { kind: "unreachable" };
+      // An answer that says no — its `response_code`, or an HTTP error status of a booting web server — is
+      // proof the device is there; only silence is unreachable.
+      return answeredByDevice(e) ? { kind: "refused", reason: errText(e) } : { kind: "unreachable" };
     }
   }
 
@@ -1967,21 +1790,28 @@ export class YxcDeviceController {
         continue;
       }
       this.emit(update.id, update.value);
+      // A zone in standby listens to nothing — a recall must not go there (review 2026-10-05, A45).
+      if (update.id === `${zonePrefix(zone)}power` && typeof update.value === "boolean") {
+        this.routing.notePower(zone, update.value);
+      }
       // The EXACT id, not a suffix: this value decides which source a zone's player block
       // and its transport buttons follow. A future status field ending in "input" would
       // have bent that routing silently.
       if (update.id === `${zonePrefix(zone)}input` && typeof update.value === "string") {
-        const previous = this.lastZoneInput.get(zone);
-        this.lastZoneInput.set(zone, update.value);
+        const previous = this.routing.noteInput(zone, update.value);
         if (previous === "mc_link" && update.value !== "mc_link" && this.dist.role === "client") {
-          void this.leaveAfterInputChange();
+          this.group.leaveAfterInputChange();
         }
         if (previous !== update.value) {
           // The zone changed its input — re-target its player block NOW. Media
           // pushes alone cannot cover this: a zone leaving a still-playing source
           // (or joining one another zone already plays) changes nothing about the
-          // source itself, so no netusb/cd push ever arrives (2.0.0 review finding).
-          this.retargetZonePlayer(zone);
+          // source itself, so no netusb/cd push ever arrives (2.0.0 review finding). The joined
+          // source's play info is read right away, so the block fills now, not at the next sweep.
+          const joined = this.routing.retarget(zone);
+          if (joined !== undefined) {
+            void this.refreshMediaSource(joined);
+          }
         }
       }
     }
@@ -2071,20 +1901,12 @@ export class YxcDeviceController {
    * @param stateId the written state id, for the failure log line
    * @param command the YXC command to apply
    * @param written the value that was written, when the state mirrors a device value
+   * @returns what the device made of the command
    */
-  private async applyCommand(
-    stateId: string,
-    command: YxcCommand,
-    written?: unknown,
-  ): Promise<"sent" | "refused" | "failed"> {
-    // Dropped with `void` by most callers: nothing may reject out of here.
-    let outcome: "sent" | "refused" | "failed" = "failed";
-    try {
-      outcome = await this.sendCommand(stateId, command);
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: write to ${stateId} failed: ${errText(e)}`);
-      return outcome;
-    }
+  private async applyCommand(stateId: string, command: YxcCommand, written?: unknown): Promise<WriteOutcome> {
+    // `sendCommand` answers every failure itself, so nothing rejects out of here (the outer guard that
+    // stood here could not be reached — review 2026-10-05, G).
+    const outcome = await this.sendCommand(stateId, command);
     // Confirmed behind the answer, so the caller learns at once what the device made of the command.
     void (async () => {
       try {
@@ -2107,9 +1929,10 @@ export class YxcDeviceController {
    *
    * @param stateId the written state id, for the failure log line
    * @param command the YXC command to apply
-   * @returns whether the device took it, refused it, or never answered (a failure is logged here)
+   * @returns whether the device took it, refused it (an answer: its `response_code` or an HTTP error status),
+   *   or it could not be sent — nobody answered, or this controller dropped it (a failure is logged here)
    */
-  private async sendCommand(stateId: string, command: YxcCommand): Promise<"sent" | "refused" | "failed"> {
+  private async sendCommand(stateId: string, command: YxcCommand): Promise<WriteOutcome> {
     try {
       switch (command.kind) {
         case "run":
@@ -2123,14 +1946,14 @@ export class YxcDeviceController {
           const { zone, band, value } = command;
           let current = this.lastEqualizer.get(zone);
           if (!current) {
-            await this.refreshZone(zone);
+            await this.refreshZone(zone, this.userClient);
             current = this.lastEqualizer.get(zone);
           }
           if (!current) {
             this.deps.log.warn(
               `${this.deviceId}: not writing ${stateId} — the device has not reported its equalizer bands yet`,
             );
-            break;
+            return "unavailable";
           }
           const next = { ...current, [band]: value };
           // Cache BEFORE the round-trip: a second band written straight afterwards
@@ -2153,16 +1976,16 @@ export class YxcDeviceController {
           if (this.lastTunerBand === "dab") {
             this.deps.log.debug(`${this.deviceId}: ${stateId} — DAB is tuned by service, not by frequency; not sent`);
             if (this.mediaBlocks.includes("tuner")) {
-              await this.refreshMediaSource("tuner");
+              await this.refreshMediaSource("tuner", this.userClient);
             }
-            return "failed";
+            return "unavailable";
           }
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
         case "tunerPreset": {
           // Shared-list devices recall on `common`; separate-list devices on the current band.
           const band = this.tunerFeatures?.presetType === "common" ? "common" : this.lastTunerBand;
-          await this.deps.client.recallTunerPreset(band, command.value, this.zoneListeningTo("tuner"));
+          await this.deps.client.recallTunerPreset(band, command.value, this.routing.recallZone("tuner"));
           break;
         }
         case "tunerClear": {
@@ -2184,10 +2007,10 @@ export class YxcDeviceController {
           break;
         case "netusbPreset":
           this.lastPresetRecall = { num: command.value, at: Date.now() };
-          await this.deps.client.recallPreset(command.value, this.zoneListeningTo(this.lastNetusbInput));
+          await this.deps.client.recallPreset(command.value, this.routing.recallZone(this.routing.networkSource));
           break;
         case "netusbRecent":
-          await this.deps.client.recallRecentItem(command.value, this.zoneListeningTo(this.lastNetusbInput));
+          await this.deps.client.recallRecentItem(command.value, this.routing.recallZone(this.routing.networkSource));
           break;
         case "volume": {
           // A zone without a settled display scale carries the device's own step count already
@@ -2198,38 +2021,25 @@ export class YxcDeviceController {
           await this.deps.client.setVolumeTo(raw, command.zone);
           break;
         }
-        case "playerTransport": {
-          // The unified block's buttons act on whatever the ZONE is playing (v2.0.0) —
-          // derived FRESH from the zone's input, never from the routing map: a stale
-          // map entry would send the command to the source the zone just left.
-          const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
-          if (block === undefined) {
-            this.deps.log.debug(`${this.deviceId}: ${stateId} ignored — ${command.zone} is not playing a media source`);
-            break;
-          }
-          await this.runTransport(block, command.action);
-          break;
-        }
+        case "playerTransport":
         case "playerMode": {
-          // Only the network player takes the modes directly (API 1.19+); a CD keeps its toggles.
-          const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
-          if (block !== "netusb" || this.apiVersion === undefined || this.apiVersion < 1.19) {
-            this.deps.log.debug(`${this.deviceId}: ${stateId} ignored — only the network player sets it directly`);
-            break;
+          // The unified block's keys and modes act on whatever the ZONE is playing (v2.0.0).
+          const call =
+            command.kind === "playerTransport"
+              ? this.routing.transport(command.zone, command.action)
+              : this.routing.mode(command.zone, this.apiVersion, command);
+          if ("notSent" in call) {
+            this.deps.log.debug(`${this.deviceId}: ${stateId} not sent — ${call.notSent}`);
+            return "unavailable";
           }
-          if (command.repeat !== undefined) {
-            await this.deps.client.setNetRepeat(command.repeat);
-          }
-          if (command.shuffle !== undefined) {
-            await this.deps.client.setNetShuffle(command.shuffle);
-          }
+          await call.run(this.deps.client);
           break;
         }
       }
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errText(e)}`);
       this.checkAliveAfter(e);
-      return e instanceof YxcRefusalError ? "refused" : "failed";
+      return answeredByDevice(e) ? "refused" : "unavailable";
     }
     return "sent";
   }
@@ -2297,95 +2107,62 @@ export class YxcDeviceController {
    * @param command the command that was just applied
    */
   private async readBackAfter(stateId: string, command: YxcCommand): Promise<void> {
+    const via = this.userClient;
     switch (command.kind) {
       case "tunerFreq":
       case "tunerPreset":
       case "tunerBand":
       case "tunerSearch":
         if (this.mediaBlocks.includes("tuner")) {
-          await this.refreshMediaSource("tuner");
+          await this.refreshMediaSource("tuner", via);
         }
         return;
       case "tunerClear":
-        await this.refreshTunerPresets();
+        await this.refreshTunerPresets(via);
         return;
       case "netusbPreset":
       case "netusbRecent":
         if (this.mediaBlocks.includes("netusb")) {
-          await this.refreshMediaSource("netusb");
+          await this.refreshMediaSource("netusb", via);
         }
         return;
       case "playerTransport":
       case "playerMode": {
-        const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
+        const block = this.routing.blockOf(command.zone);
         if (block !== undefined) {
-          await this.refreshMediaSource(block);
+          await this.refreshMediaSource(block, via);
         }
         return;
       }
       case "volume":
       case "equalizer":
-        await this.refreshZone(command.zone);
+        await this.refreshZone(command.zone, via);
         return;
       case "run": {
         if (command.source === "clock") {
-          await this.refreshClock();
+          await this.refreshClock(via);
           return;
         }
         if (command.source === "favourites") {
-          await this.refreshNetusbPresets();
+          await this.refreshNetusbPresets(via);
           return;
         }
         if (command.source === "stations") {
-          await this.refreshTunerPresets();
+          await this.refreshTunerPresets(via);
           return;
         }
         if (command.source !== undefined) {
           if (this.mediaBlocks.includes(command.source)) {
-            await this.refreshMediaSource(command.source);
+            await this.refreshMediaSource(command.source, via);
           }
           return;
         }
         const { zone } = splitZone(stateId);
         if (this.zones.includes(zone)) {
-          await this.refreshZone(zone);
+          await this.refreshZone(zone, via);
         }
         return;
       }
     }
-  }
-
-  /**
-   * Run one transport action on the given player source. The CD transport goes through
-   * the one `setCDPlayback(action)` endpoint, repeat and shuffle through their toggles.
-   *
-   * @param block the source the zone is playing
-   * @param action the transport action
-   */
-  private async runTransport(block: "netusb" | "cd", action: PlayerTransport): Promise<void> {
-    const client = this.deps.client;
-    if (block === "netusb") {
-      const net: Record<PlayerTransport, () => Promise<unknown>> = {
-        play: () => client.playNet(),
-        pause: () => client.pauseNet(),
-        stop: () => client.stopNet(),
-        next: () => client.nextNet(),
-        prev: () => client.prevNet(),
-        repeatToggle: () => client.toggleNetRepeat(),
-        shuffleToggle: () => client.toggleNetShuffle(),
-      };
-      await net[action]();
-      return;
-    }
-    const cd: Record<PlayerTransport, () => Promise<unknown>> = {
-      play: () => client.setCDPlayback("play"),
-      pause: () => client.setCDPlayback("pause"),
-      stop: () => client.setCDPlayback("stop"),
-      next: () => client.setCDPlayback("next"),
-      prev: () => client.setCDPlayback("previous"),
-      repeatToggle: () => client.toggleCDRepeat(),
-      shuffleToggle: () => client.toggleCDShuffle(),
-    };
-    await cd[action]();
   }
 }

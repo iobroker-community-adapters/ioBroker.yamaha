@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it, vi } from "vitest";
 import { Pseudonymiser } from "./pseudonymiser";
 
 function scrub(report: unknown, teach?: (p: Pseudonymiser) => void): string {
@@ -80,5 +82,69 @@ describe("Pseudonymiser", () => {
     const p = new Pseudonymiser();
     p.teach("name", "TV");
     expect(p.walk({ n: 41.5, b: true, s: "TV on" })).toEqual({ n: 41.5, b: true, s: "TV on" });
+  });
+
+  // Review 2026-10-05, B8: every string compiled every known value's pattern anew (~400 ms per report here,
+  // seconds on a Pi). The patterns are built once per set of known values.
+  it("compiles the known values once, not per string, and again only after a new value", () => {
+    const p = new Pseudonymiser();
+    const compile = vi.spyOn(p as unknown as { compile(): unknown }, "compile");
+    for (let i = 0; i < 30; i++) {
+      p.teach("name", `Raumname ${i}`);
+    }
+    p.teach("serial", "0A1B2B3C");
+    const strings = Array.from({ length: 500 }, (_, i) => `line ${i}: Raumname ${i % 30} at 0a1b2b3c`);
+    const out = p.walk(strings) as string[];
+    expect(compile).toHaveBeenCalledTimes(1);
+    expect(out[7]).toMatch(/^line 7: name-\d+ at serial-1-…2B3C$/);
+    p.teach("name", "Wintergarten");
+    p.text("Wintergarten");
+    expect(compile).toHaveBeenCalledTimes(2);
+  });
+
+  it("replaces the longest known value first, in one pass", () => {
+    const out = scrub({ a: "Kinderzimmer and Kinderzimmer Nord" }, p => {
+      p.teach("name", "Kinderzimmer");
+      p.teach("name", "Kinderzimmer Nord");
+    });
+    expect(out).toBe('{"a":"name-1 and name-2"}');
+  });
+
+  it("replaces a UUID, but keeps one that is all zeros (not set)", () => {
+    const out = scrub({
+      analytics_info: { uuid: "5F0C7C2E-1D1B-4C55-9F3E-2B9C1A7D8E11" },
+      again: "app 5f0c7c2e-1d1b-4c55-9f3e-2b9c1a7d8e11",
+      unset: "00000000-0000-0000-0000-000000000000",
+    });
+    expect(out).not.toMatch(/5f0c7c2e/i);
+    expect(out.match(/uuid-1/g)).toHaveLength(2);
+    expect(out).toContain("00000000-0000-0000-0000-000000000000");
+  });
+
+  it("takes MusicCast's device_id for the MAC it is — one marker with the MAC of the network status", () => {
+    const out = scrub({
+      "system/getDeviceInfo": { device_id: "00A0DED4F504" },
+      "system/getNetworkStatus": { mac_address: { wired_lan: "00a0ded4f504" } },
+      line: "MAC 00:A0:DE:D4:F5:04",
+    });
+    expect(out).not.toMatch(/00a0ded4f504/i);
+    expect(out.match(/mac-1/g)).toHaveLength(3);
+    expect(out).not.toContain("serial-");
+  });
+
+  it("gives the raw and the decoded spelling of an XML name one marker", () => {
+    const out = scrub({
+      body: "<Name><Zone>Bad &amp; WC</Zone></Name>",
+      val: "Bad & WC",
+    });
+    expect(out).toBe('{"body":"<Name><Zone>name-1</Zone></Name>","val":"name-1"}');
+  });
+
+  // The name patterns of the log lines follow two lines of main.ts — a changed wording there must fail here, or
+  // the names in those lines would silently leave in clear.
+  it("knows the log lines of main.ts that carry a device's name", () => {
+    const main = readFileSync(join(__dirname, "../../main.ts"), "utf8");
+    expect(main).toMatch(/`SSDP alive from \$\{address\}: \$\{found\.name[^`]*\} announced itself`/);
+    expect(main).toContain('`${deviceId}: device name set to "${label}"`');
   });
 });
