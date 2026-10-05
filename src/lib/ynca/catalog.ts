@@ -9,7 +9,10 @@ import {
   formatWireNumber,
   isWritableValue,
   selfMap,
+  slotNumber,
   textWriteProblem,
+  writableNumber,
+  type NumberGrid,
   type ValueSpec,
 } from "../catalog/value-coerce";
 import type { StateValue } from "../types";
@@ -72,6 +75,12 @@ export interface YncaEntry extends CatalogEntry {
    * the value itself (the readable playback times).
    */
   derive?: (wire: string) => boolean | number | string;
+  /**
+   * The value is a stored-station or favourite SLOT: `recall` takes a whole number from 1 to the declared last slot,
+   * `store` (MEM) also 0 = the first free slot. Checked by the one shared rule (`slotNumber`) — 2.5 is no slot on any
+   * protocol (review 2026-10-05, A26).
+   */
+  slot?: "recall" | "store";
 }
 
 /**
@@ -450,17 +459,19 @@ interface FuncDef {
   derived?: boolean;
   /** How the derived value is read from the wire (see {@link YncaEntry.derive}). */
   derive?: (wire: string) => boolean | number | string;
+  /** A stored-station slot (see {@link YncaEntry.slot}). */
+  slot?: "recall" | "store";
 }
 
 /**
  * A MEM write: a slot number stores the current station there, 0 stores to the first free slot
- * (`Auto`, ynca-python `MemFunctionMixin`).
+ * (`Auto`, ynca-python `MemFunctionMixin`). The slot rule ran before (`yncaWrite`): the value is a whole number.
  *
  * @param value the written slot
  * @returns the wire word
  */
 function memSlotWire(value: boolean | number | string): string {
-  return Number(value) === 0 ? "Auto" : String(Math.round(Number(value)));
+  return Number(value) === 0 ? "Auto" : String(value);
 }
 
 /**
@@ -478,13 +489,14 @@ function fmFrequencyKhz(wire: string): string {
  * A stored-station slot, read and recalled by number (TUN, DAB, FM, HD Radio). `No Preset` — GET Only in
  * every list — reads 0, and a write of 0 recalls nothing, so it is never sent (audit 2026-09-29, B7).
  */
-const PRESET_SLOT: Pick<FuncDef, "nameKey" | "descKey" | "spec" | "write" | "role" | "wireDecode"> = {
+const PRESET_SLOT: Pick<FuncDef, "nameKey" | "descKey" | "spec" | "write" | "role" | "wireDecode" | "slot"> = {
   nameKey: "presetRecallByNumber",
   descKey: "descPresetRecallByNumber",
   spec: { kind: "number", min: 0, max: 40, step: 1, decimals: 0, readOnly: ["No Preset"] },
   write: true,
   role: "level",
   wireDecode: wire => (wire === "No Preset" ? "0" : wire),
+  slot: "recall",
 };
 
 /** Amplifier functions shared by MAIN and each zone: state id + YNCA func + value spec. */
@@ -1391,6 +1403,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     readFunc: "PRESET",
     writeOnly: true,
     wireEncode: memSlotWire,
+    slot: "store",
   },
   // The 2012 generation moved the HDMI video settings and the TV audio return input from MAIN to
   // SYS. Measured over the 21 official command lists: HDMIASPECT and HDMIRESOL sit on MAIN in 12
@@ -2155,6 +2168,7 @@ const DAB_FUNCS: FuncDef[] = [
     readAliases: ["FMPRESET"],
     writeOnly: true,
     wireEncode: memSlotWire,
+    slot: "store",
   },
   {
     func: "DABPRGTYPE",
@@ -2367,6 +2381,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
     readFunc: "PRESET",
     writeOnly: true,
     wireEncode: memSlotWire,
+    slot: "store",
   },
   {
     func: "SEARCHMODE",
@@ -2552,13 +2567,14 @@ const REPEAT_WIRE: Record<number, string> = { 0: "Off", 2: "All" };
 
 /**
  * The repeat encoder of one device: code 1 goes out in the word the device speaks — `Single`
- * on the 2010/2011 generation, `One` on the iPod sources and from 2012 on.
+ * on the 2010/2011 generation, `One` on the iPod sources and from 2012 on. Only the list's codes reach it — a code
+ * without a word is refused before (`yncaWrite`; review 2026-10-05, A36), so every code but 0 and 2 is the 1.
  *
  * @param one the device's word for "repeat one"
  * @returns the wire encoder for the repeat entry
  */
 function repeatWriter(one: string): (value: boolean | number | string) => string {
-  return value => REPEAT_WIRE[Number(value)] ?? (Number(value) === 1 ? one : String(value));
+  return value => REPEAT_WIRE[Number(value)] ?? one;
 }
 
 /**
@@ -2913,6 +2929,7 @@ function fnEntries(fns: readonly FuncDef[], subunit: string, prefix = ""): YncaE
     ...(fn.derived ? { derived: true, derive: fn.derive } : {}),
     ...(fn.nameArgs ? { nameArgs: fn.nameArgs } : {}),
     ...(fn.readAliases ? { readAliases: fn.readAliases } : {}),
+    ...(fn.slot ? { slot: fn.slot } : {}),
   }));
 }
 
@@ -3091,6 +3108,7 @@ export function buildYncaCatalog(): YncaEntry[] {
         func: "PRESET",
         readFunc: source.proof ?? "PLAYBACKINFO",
         writeOnly: true,
+        slot: "recall",
       });
     }
     // Favourite STORE (#613 companion): save the current station/item to a preset
@@ -3108,6 +3126,7 @@ export function buildYncaCatalog(): YncaEntry[] {
         readFunc: source.proof ?? "PLAYBACKINFO",
         writeOnly: true,
         wireEncode: memSlotWire,
+        slot: "store",
       });
     }
   }
@@ -3599,93 +3618,142 @@ export function yncaGenerationEvidence(subunits: Readonly<Record<string, unknown
   return { returnWords: !older, display: !older, pad: !first };
 }
 
+/** A user write as it goes on the YNCA wire. */
+export interface YncaWire {
+  /** The subunit. */
+  subunit: string;
+  /** The function. */
+  func: string;
+  /** The wire value. */
+  value: string;
+  /** `latin1` for a function the specification declares Latin-1 (zone names). */
+  charset?: "latin1";
+}
+
 /**
- * Why a written value must not go on the wire, or undefined when it may. A control character
- * would end the line early and inject a second command (`ZONENAME=A\r\n@MAIN:PWR=Standby`); a
- * name longer than the declared 9 characters, or with a character Latin-1 cannot carry, is not
- * what the device accepts (ynca-python `StrConverter(max_len=9)`, the official lists' `Latin-1`;
- * audit 2026-09-24, B13/B5).
+ * The slot a write names on a slot entry (see {@link YncaEntry.slot}): a whole number from 1 to the declared last slot
+ * through the one shared rule (`slotNumber`), and on a store also 0 = the first free slot. 2.5 is no slot on any
+ * protocol — YNCA and XML rounded it, MusicCast sent it raw (review 2026-10-05, A26).
+ *
+ * @param entry the slot entry
+ * @param value the written value
+ * @returns the slot, or undefined when the value names none
+ */
+function slotOf(entry: YncaEntry, value: unknown): number | undefined {
+  const max = entry.spec.kind === "number" ? entry.spec.max : undefined;
+  return entry.slot === "store" && writableNumber(value) === 0 ? 0 : slotNumber(value, max);
+}
+
+/**
+ * Turn a user write into its YNCA line — or say why it does not go out. ONE place decides both, so the debug line of
+ * a dropped write names the real reason (a read-only function, a word that is no switch word, a slot that does not
+ * exist, a code without a word …) instead of guessing.
+ *
+ * - A control character would end the line early and inject a second command (`ZONENAME=A\r\n@MAIN:PWR=Standby`); a
+ *   name longer than the declared 9 characters, or with a character Latin-1 cannot carry, is not what the device
+ *   accepts (ynca-python `StrConverter(max_len=9)`, the official lists' `Latin-1`; audit 2026-09-24, B13/B5).
+ * - A null or non-number never becomes a bogus command (`@TUN:AMFREQ=null`); a CODED entry is a number state too.
+ * - A code this source has no word for never goes on the wire, whether or not the entry encodes its own words: a
+ *   repeat of 3 went out as `@SERVER:REPEAT=3` because the check stopped at a `wireEncode` (review 2026-10-05, A36).
+ * - A word the device only reports ("GET Only") is never written — nor the value it is read as (`No Preset` reads 0).
+ *
+ * @param entry the catalog entry written to
+ * @param value the written value
+ * @returns the wire command, or the reason it is not sent
+ */
+export function yncaWrite(entry: YncaEntry, value: unknown): YncaWire | { problem: string } {
+  if (!entry.write) {
+    return { problem: "it is a read-only function" };
+  }
+  const textProblem =
+    entry.spec.kind === "text"
+      ? textWriteProblem(typeof value === "string" ? value : String(value), entry.spec)
+      : textWriteProblem(value);
+  if (textProblem) {
+    return { problem: textProblem };
+  }
+  if (!isWritableValue(value, entry.spec.kind === "number" || entry.spec.kind === "code")) {
+    return { problem: `"${String(value)}" is no value it takes` };
+  }
+  let input: boolean | number | string;
+  if (entry.slot) {
+    const slot = slotOf(entry, value);
+    if (slot === undefined) {
+      const max = entry.spec.kind === "number" ? entry.spec.max : undefined;
+      return {
+        problem: `"${String(value)}" names no slot (${entry.slot === "store" ? "0 = first free, " : ""}1…${max ?? "n"})`,
+      };
+    }
+    input = slot;
+  } else if (entry.spec.kind === "onoff") {
+    // A switch reads the words a script writes ("false", "off", "0") for what they mean — the encoder's truthiness
+    // test would put every non-empty string on the wire as On.
+    const on = coerceBool(value);
+    if (on === undefined) {
+      return { problem: `"${String(value)}" is no switch word` };
+    }
+    input = on;
+  } else {
+    input = value as boolean | number | string;
+  }
+  if (entry.spec.kind === "code" && !Object.values(entry.spec.codes).includes(Number(input))) {
+    return { problem: `${String(value)} is no value of this list` };
+  }
+  const wire = entry.wireEncode ? entry.wireEncode(input) : encode(entry.spec, input);
+  const reported = entry.spec.kind === "enum" || entry.spec.kind === "number" ? entry.spec.readOnly : undefined;
+  if (reported?.some(word => wire === word || wire === entry.wireDecode?.(word))) {
+    return { problem: `"${wire}" is a word the device only reports` };
+  }
+  const charset = entry.spec.kind === "text" ? entry.spec.charset : undefined;
+  return { subunit: entry.subunit, func: entry.func, value: wire, ...(charset ? { charset } : {}) };
+}
+
+/**
+ * Why a written value must not go on the wire, or undefined when it may (see {@link yncaWrite}).
  *
  * @param entry the catalog entry written to
  * @param value the written value
  * @returns the reason, or undefined when the value may be sent
  */
 export function writeProblem(entry: YncaEntry, value: unknown): string | undefined {
-  if (entry.spec.kind !== "text") {
-    return textWriteProblem(value);
-  }
-  return textWriteProblem(typeof value === "string" ? value : String(value), entry.spec);
+  const wire = yncaWrite(entry, value);
+  return "problem" in wire ? wire.problem : undefined;
 }
 
 /**
- * Snap a written tuner frequency onto the grid the device DECLARES (`@SYS:FREQSTEP`, six 2011 lists:
- * `FM50/AM9` … `FM200/AM10`). The band anchors are the lower ends of the official ranges — FM 87.50 MHz,
- * AM 531 kHz on the 9 kHz grid and 530 kHz on the 10 kHz grid. A device that declares no step keeps
- * the written value: an invented grid would be worse than the device's own rounding, which the
- * read-back shows (audit 2026-09-24, B15).
+ * The grid of a tuner band the device DECLARES (`@SYS:FREQSTEP`, six 2011 lists: `FM50/AM9` … `FM200/AM10`), counted
+ * from the lower end of the official range — FM 87.50 MHz, AM 531 kHz on the 9 kHz grid and 530 kHz on the 10 kHz
+ * grid — for the one shared snapping rule (`snapToGrid`, review 2026-10-05, A26). A device that declares no step has
+ * no grid: an invented one would be worse than the device's own rounding, which the read-back shows (audit
+ * 2026-09-24, B15).
  *
- * @param khz the written frequency in kHz
- * @param band the band it is written to
+ * @param band the band written to
  * @param freqStep the device's `FREQSTEP` answer, if it gave one
- * @returns the frequency on the declared grid, in kHz
+ * @returns the grid in kHz, or undefined
  */
-export function snapTunerFrequency(khz: number, band: "AM" | "FM", freqStep: string | undefined): number {
+export function tunerGrid(band: "AM" | "FM", freqStep: string | undefined): NumberGrid | undefined {
   const declared = /^FM(\d+)\/AM(\d+)$/.exec(freqStep ?? "");
   if (!declared) {
-    return khz;
+    return undefined;
   }
   const step = Number(band === "FM" ? declared[1] : declared[2]);
-  const anchor = band === "FM" ? 87500 : step === 9 ? 531 : 530;
-  return anchor + Math.round((khz - anchor) / step) * step;
+  return { min: band === "FM" ? 87500 : step === 9 ? 531 : 530, step };
 }
 
 /**
- * Turn a user write into a YNCA subunit/func/value triple via the id map, or
- * undefined when the state is not catalogued.
+ * Turn a user write into a YNCA subunit/func/value triple via the id map, or undefined when the state is not
+ * catalogued or the value is not sent (see {@link yncaWrite} for why).
  *
  * @param stateId the state id relative to the device
  * @param value the value written to the state
  * @param map the `idToEntry` map
  * @returns the triple to send, or undefined
  */
-export function yncaCommand(
-  stateId: string,
-  value: unknown,
-  map: Map<string, YncaEntry>,
-): { subunit: string; func: string; value: string; charset?: "latin1" } | undefined {
+export function yncaCommand(stateId: string, value: unknown, map: Map<string, YncaEntry>): YncaWire | undefined {
   const entry = map.get(stateId);
-  // A read-only entry maps no write: without this check a script writing e.g. the
-  // (deliberately read-only) YNCA port state would still put a PUT on the wire.
-  if (!entry?.write) {
+  if (!entry) {
     return undefined;
   }
-  // Guard the write value: a null/undefined or non-finite-number write must not be
-  // turned into a bogus command (e.g. `@TUN:AMFREQ=null`). A CODED entry is a number
-  // state too (playback/repeat carry 0/1/2), so it is held to the same check — that is
-  // also what lets `encode` accept a numeric string for it.
-  if (!isWritableValue(value, entry.spec.kind === "number" || entry.spec.kind === "code")) {
-    return undefined;
-  }
-  // A switch reads the words a script writes ("false", "off", "0") for what they mean — the
-  // encoder's truthiness test would put every non-empty string on the wire as On.
-  const input = entry.spec.kind === "onoff" ? coerceBool(value) : value;
-  if (input === undefined) {
-    return undefined;
-  }
-  // A code this subunit has no word for never goes on the wire — the encoder would have sent the bare
-  // digit (audit 2026-09-29, B7).
-  if (entry.spec.kind === "code" && !entry.wireEncode && !Object.values(entry.spec.codes).includes(Number(input))) {
-    return undefined;
-  }
-  const wire = entry.wireEncode
-    ? entry.wireEncode(input as boolean | number | string)
-    : encode(entry.spec, input as boolean | number | string);
-  // A word the device only reports ("GET Only") is never written — nor the value it is read as (`No
-  // Preset` reads 0; a PUT of 0 recalls nothing) (audit 2026-09-29, B7).
-  const reported = entry.spec.kind === "enum" || entry.spec.kind === "number" ? entry.spec.readOnly : undefined;
-  if (reported?.some(word => wire === word || wire === entry.wireDecode?.(word))) {
-    return undefined;
-  }
-  const charset = entry.spec.kind === "text" ? entry.spec.charset : undefined;
-  return { subunit: entry.subunit, func: entry.func, value: wire, ...(charset ? { charset } : {}) };
+  const wire = yncaWrite(entry, value);
+  return "problem" in wire ? undefined : wire;
 }

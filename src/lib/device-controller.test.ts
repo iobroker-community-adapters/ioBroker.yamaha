@@ -265,9 +265,11 @@ describe("YncaDeviceController", () => {
     // with the same line as any unproven one.
     const client = new FakeClient();
     const { deps, log } = makeDeps(client);
-    void new YncaDeviceController("living", deps).handleWrite("power", true);
+    const outcome = new YncaDeviceController("living", deps).handleWrite("power", true);
     expect(client.sent).toEqual([]);
-    expect(log.debug).toHaveBeenCalledWith(expect.stringContaining("living: power is not writable on this device"));
+    // Its own drop says so and lets the handle try another protocol (review 2026-10-05, A3).
+    expect(outcome).toBe("unavailable");
+    expect(log.debug).toHaveBeenCalledWith("living: power not written — this device did not report the function");
   });
 
   test("close closes the client", () => {
@@ -2446,5 +2448,89 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     void s.controller.handleWrite("multiroom.zone3.remote.cursor", "up");
     void s.controller.handleWrite("multiroom.zone2.remote.cursor", "up");
     expect(s.client.sent.map(m => m.subunit)).toEqual(["ZONE3", "ZONE2"]);
+  });
+});
+
+describe("every YNCA write says what became of it (review 2026-10-05, A3/A26)", () => {
+  async function connected(subunits: YncaCapabilities["subunits"]): Promise<{
+    controller: YncaDeviceController;
+    client: FakeClient;
+    log: ReturnType<typeof makeDeps>["log"];
+  }> {
+    const client = new FakeClient();
+    client.capabilities = { model: "RX-V475", subunits: { SYS: { MODELNAME: "RX-V475", VERSION: "1" }, ...subunits } };
+    const { deps, log } = makeDeps(client);
+    const controller = new YncaDeviceController("rx", deps);
+    expect(await controller.start()).toBe(true);
+    client.sent.length = 0;
+    return { controller, client, log };
+  }
+
+  test("band-routed tuner and zone-routed player writes answer with the device's verdict, not with nothing", async () => {
+    // Before: the tuner router and the player router sent and returned undefined — the handle read "unclear" and a
+    // refusal never reached the next protocol (Y-04).
+    const s = await connected({
+      MAIN: { PWR: "On", INP: "NET RADIO", VOL: "-40.0" },
+      TUN: { BAND: "FM", FMFREQ: "98.10", AMFREQ: "1080" },
+      NETRADIO: { PLAYBACKINFO: "Play" },
+    });
+    s.client.sendVerdict = "restricted";
+    expect(await s.controller.handleWrite("volume", -30)).toBe("refused");
+    expect(await s.controller.handleWrite("tuner.frequency", 98500)).toBe("refused");
+    expect(await s.controller.handleWrite("tuner.band", "AM")).toBe("refused");
+    expect(await s.controller.handleWrite("player.playback", 1)).toBe("refused");
+    s.client.sendVerdict = "ok";
+    expect(await s.controller.handleWrite("player.playback", 1)).toBe("sent");
+  });
+
+  test("a write the controller drops itself is `unavailable` with one debug line naming device, datapoint and reason", async () => {
+    const s = await connected({ MAIN: { PWR: "On", INP: "HDMI1" }, NETRADIO: { PLAYBACKINFO: "Play" } });
+    // The zone plays HDMI — no media source to route playback to.
+    expect(await s.controller.handleWrite("player.playback", 1)).toBe("unavailable");
+    // NETRADIO never reported a shuffle function.
+    s.client.emit({ subunit: "MAIN", func: "INP", value: "NET RADIO" });
+    expect(await s.controller.handleWrite("player.shuffle", true)).toBe("unavailable");
+    // No tuner at all.
+    expect(await s.controller.handleWrite("tuner.frequency", 98500)).toBe("unavailable");
+    expect(s.client.sent).toEqual([]);
+    expect(s.log.debug).toHaveBeenCalledWith("rx: player.playback not written — main is not playing a media source");
+    expect(s.log.debug).toHaveBeenCalledWith("rx: player.shuffle not written — NETRADIO did not report it");
+  });
+
+  test("the frequency picks its band from its magnitude — a band write followed at once by an FM frequency is FM", async () => {
+    // Before: "band FM, then 98100" went out as AMFREQ=98100 while the BAND push was still on its way.
+    const s = await connected({ MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1080", FMFREQ: "98.10" } });
+    expect(await s.controller.handleWrite("tuner.band", "FM")).toBe("unclear");
+    expect(await s.controller.handleWrite("tuner.frequency", 98100)).toBe("unclear");
+    expect(s.client.sent).toEqual([
+      { subunit: "TUN", func: "BAND", value: "FM" },
+      { subunit: "TUN", func: "FMFREQ", value: "98.10" },
+    ]);
+  });
+
+  test("the frequency snaps onto the device's grid like XML and MusicCast; a value below the band is not sent", async () => {
+    const s = await connected({
+      SYS: { MODELNAME: "RX-V475", VERSION: "1", FREQSTEP: "FM50/AM9" },
+      MAIN: { PWR: "On" },
+      TUN: { BAND: "FM", AMFREQ: "1080", FMFREQ: "98.10" },
+    });
+    void s.controller.handleWrite("tuner.frequency", 98120);
+    void s.controller.handleWrite("tuner.frequency", 1085);
+    expect(s.client.sent).toEqual([
+      { subunit: "TUN", func: "FMFREQ", value: "98.10" },
+      { subunit: "TUN", func: "AMFREQ", value: "1089" },
+    ]);
+    s.client.sent.length = 0;
+    expect(await s.controller.handleWrite("tuner.frequency", 50000)).toBe("unavailable");
+    expect(await s.controller.handleWrite("tuner.frequency", 300)).toBe("unavailable");
+    expect(s.client.sent).toEqual([]);
+  });
+
+  test("a preset slot is a whole number — 2.5 is no slot and is not rounded onto one (shared slot rule, A26)", async () => {
+    const s = await connected({ MAIN: { PWR: "On" }, TUN: { BAND: "FM", FMFREQ: "98.10", PRESET: "3" } });
+    expect(await s.controller.handleWrite("tuner.preset", 2.5)).toBe("unavailable");
+    expect(s.client.sent).toEqual([]);
+    void s.controller.handleWrite("tuner.preset", 4);
+    expect(s.client.sent).toEqual([{ subunit: "TUN", func: "PRESET", value: "4" }]);
   });
 });

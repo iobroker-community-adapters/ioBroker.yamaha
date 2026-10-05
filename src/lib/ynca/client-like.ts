@@ -1,7 +1,27 @@
 import type { YncaCapabilities } from "./capability";
+import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 
 /** What the device made of a PUT: the bracket's verdict, or `skipped` when the line never went out. */
 export type YncaSendVerdict = "ok" | "restricted" | "undefined" | "unclear" | "skipped";
+
+/**
+ * The write outcome a PUT's verdict means — the one mapping for every YNCA write path (review 2026-10-05, A3: the
+ * band-routed tuner writes, the zone-routed player writes and the pads dropped it, the handle read "unclear" and never
+ * tried another protocol).
+ *
+ * @param verdict what the client reported (nothing from a client that cannot say)
+ * @returns `sent`, `refused` (the device said no), `unavailable` (never went out) or `unclear`
+ */
+export async function outcomeOf(verdict: void | YncaSendVerdict | Promise<YncaSendVerdict>): Promise<WriteOutcome> {
+  const said = await verdict;
+  return said === "ok"
+    ? "sent"
+    : said === "restricted" || said === "undefined"
+      ? "refused"
+      : said === "skipped"
+        ? "unavailable"
+        : "unclear";
+}
 
 /**
  * The subset of the YNCA client the controller and its parts (shape reader, menus) use — one definition, so tests

@@ -318,6 +318,33 @@ describe("YNCA catalog", () => {
     expect(yncaCommand("advanced.audioSelect", "Unavailable", main)).toBeUndefined();
   });
 
+  test("a repeat code without a word is not sent — the code check runs for entries with their own wire form too", () => {
+    // Before: `wireEncode` bypassed the code check, so repeat=3 and repeat=1.5 reached the wire as the "One"/"Single"
+    // word (review 2026-10-05, A36).
+    const caps: YncaCapabilities = {
+      model: "RX",
+      subunits: { SERVER: { PLAYBACKINFO: "Play", REPEAT: "Off" }, NETRADIO: { PLAYBACKINFO: "Play" } },
+    };
+    const present = presentYncaEntries(caps, YNCA_CATALOG);
+    const repeat = idToEntry(present.filter(e => e.subunit === "SERVER" && e.id === "player.repeat"));
+    expect(yncaCommand("player.repeat", 3, repeat)).toBeUndefined();
+    expect(yncaCommand("player.repeat", 1.5, repeat)).toBeUndefined();
+    expect(writeProblem(repeat.get("player.repeat")!, 3)).toBeDefined();
+    expect(yncaCommand("player.repeat", 1, repeat)).toMatchObject({ func: "REPEAT", value: "One" });
+    expect(yncaCommand("player.repeat", 2, repeat)).toMatchObject({ func: "REPEAT", value: "All" });
+    const playback = idToEntry(present.filter(e => e.subunit === "SERVER" && e.id === "player.playback"));
+    expect(yncaCommand("player.playback", 7, playback)).toBeUndefined();
+  });
+
+  test("a preset slot follows the shared slot rule: whole numbers only, never rounded (review 2026-10-05, A26)", () => {
+    const tun = idToEntry(buildYncaCatalog().filter(e => e.subunit === "TUN"));
+    expect(yncaCommand("tuner.preset", 2.5, tun)).toBeUndefined();
+    expect(yncaCommand("tuner.preset", "4", tun)).toMatchObject({ func: "PRESET", value: "4" });
+    const server = idToEntry(buildYncaCatalog().filter(e => e.subunit === "SERVER"));
+    expect(yncaCommand("player.server.preset", 1.5, server)).toBeUndefined();
+    expect(yncaCommand("player.server.preset", 0, server)).toBeUndefined();
+  });
+
   // The lists declare these writable; they stood read-only under a "write structure unconfirmed" note (B8).
   test("dialogue level, contents display and the AirPlay volume interlock are written as the lists declare", () => {
     const main = idToEntry(buildYncaCatalog().filter(e => e.subunit === "MAIN"));

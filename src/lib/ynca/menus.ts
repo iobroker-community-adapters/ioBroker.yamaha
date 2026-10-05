@@ -1,6 +1,7 @@
 import type { YncaCapabilities } from "./capability";
 import { yncaGenerationEvidence, YNCA_ZONES } from "./catalog";
-import type { YncaClientLike } from "./client-like";
+import { outcomeOf, type YncaClientLike } from "./client-like";
+import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import type { YncaMessage } from "./protocol";
 import type { ControllerDepsBase } from "../controller";
 import { splitZone } from "../catalog/zones";
@@ -161,23 +162,31 @@ export class YncaMenus {
    *
    * @param stateId the state id relative to the device
    * @param value the written value
-   * @returns true when the id was a menu datapoint (handled here)
+   * @returns what became of the write, or undefined when the id is no menu datapoint
    */
-  public handleWrite(stateId: string, value: unknown): boolean {
+  public handleWrite(stateId: string, value: unknown): WriteOutcome | Promise<WriteOutcome> | undefined {
     if (stateId.startsWith("remote.")) {
-      this.browseEngine?.handleRemoteWrite(stateId, value);
-      return true;
+      return this.browseEngine?.handleRemoteWrite(stateId, value) ?? this.noSurface(stateId);
     }
     const zoned = splitZone(stateId);
     if (zoned.zone !== "main" && (zoned.name === "remote.cursor" || zoned.name === "remote.menu")) {
-      this.handleZonePadWrite(zoned.zone, zoned.name === "remote.cursor" ? "cursor" : "menu", value);
-      return true;
+      return this.handleZonePadWrite(zoned.zone, zoned.name === "remote.cursor" ? "cursor" : "menu", value);
     }
     if (stateId.startsWith("player.browse.")) {
-      this.browseEngine?.handleWrite(stateId, value);
-      return true;
+      return this.browseEngine?.handleWrite(stateId, value) ?? this.noSurface(stateId);
     }
-    return false;
+    return undefined;
+  }
+
+  /**
+   * A menu write while no surface stands (no source proved its list, or the playback group is off).
+   *
+   * @param stateId the written id
+   * @returns `unavailable`, with its trace in the log
+   */
+  private noSurface(stateId: string): WriteOutcome {
+    this.deps.log.debug(`${this.deviceId}: ${stateId} not written — no YNCA menu surface on this device`);
+    return "unavailable";
   }
 
   /**
@@ -479,16 +488,21 @@ export class YncaMenus {
    * @param zoneKey the zone (`zone2`, `zone3`)
    * @param pad which pad the key belongs to
    * @param value the written key word
+   * @returns what became of the key press
    */
-  private handleZonePadWrite(zoneKey: string, pad: "cursor" | "menu", value: unknown): void {
+  private handleZonePadWrite(
+    zoneKey: string,
+    pad: "cursor" | "menu",
+    value: unknown,
+  ): WriteOutcome | Promise<WriteOutcome> {
     const zone = this.zonePads.get(zoneKey);
     const word = typeof value === "string" ? value : "";
     const wire = zone ? wireFor<CursorValue | MenuValue>(pad === "cursor" ? zone.cursor : zone.menu, word) : undefined;
     if (!zone || wire === undefined) {
       this.deps.log.debug(`${this.deviceId}: ${zoneKey} ${pad} key "${word}" is none this zone has — not sent`);
-      return;
+      return "unavailable";
     }
-    void this.deps.client.send(zone.subunit, pad === "cursor" ? "LISTCURSOR" : "LISTMENU", wire);
+    return outcomeOf(this.deps.client.send(zone.subunit, pad === "cursor" ? "LISTCURSOR" : "LISTMENU", wire));
   }
 
   /**

@@ -1,6 +1,6 @@
 import { splitZone } from "./catalog/zones";
 import type { YncaCapabilities } from "./ynca/capability";
-import { formatWireNumber, selfMap, writableNumber } from "./catalog/value-coerce";
+import { selfMap } from "./catalog/value-coerce";
 import { playTimeTwin } from "./catalog/play-time";
 import type { ObjectDef } from "./catalog/types";
 import { tName } from "./i18n";
@@ -14,18 +14,18 @@ import {
   funcToEntry,
   idToEntry,
   presentYncaEntries,
-  snapTunerFrequency,
-  writeProblem,
-  yncaCommand,
+  yncaWrite,
   yncaObjectsFor,
   yncaStateUpdate,
   YNCA_ZONES,
   type InputEvidence,
   type YncaEntry,
+  type YncaWire,
 } from "./ynca/catalog";
+import { routeTunerWrite } from "./ynca/tuner-route";
 import type { StatesResolver } from "./catalog/build-objects";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
-import type { YncaClientLike } from "./ynca/client-like";
+import { outcomeOf, type YncaClientLike } from "./ynca/client-like";
 import { YncaShapeReader } from "./ynca/shape-reader";
 import { POWER_ON_SETTLED_MS, YncaMenus } from "./ynca/menus";
 import type { YncaMessage } from "./ynca/protocol";
@@ -185,7 +185,7 @@ export class YncaDeviceController {
   /** The tuner's current band (AM/FM/DAB), for the band-dependent frequency/preset writes. */
   private tunerBand = "";
 
-  /** The tuner grid the device declares (`@SYS:FREQSTEP`), when it declares one — see snapTunerFrequency. */
+  /** The tuner grid the device declares (`@SYS:FREQSTEP`), when it declares one — see `tunerGrid` and `routeTunerWrite`. */
   private freqStep: string | undefined;
   /** Whether the device carries the DAB subunit (its FM half shares the flat tuner ids). */
   private hasDab = false;
@@ -608,10 +608,12 @@ export class YncaDeviceController {
    *
    * @param stateId the state id relative to the device
    * @param value the written value
+   * @returns what became of the write — on every path, so the handle can try another protocol (review 2026-10-05, A3)
    */
-  public handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome | void {
-    if (this.menus.handleWrite(stateId, value)) {
-      return;
+  public handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome {
+    const menu = this.menus.handleWrite(stateId, value);
+    if (menu !== undefined) {
+      return menu;
     }
     const zoned = splitZone(stateId);
     // A scene TITLE is as valid a recall write as its number ("Movie Viewing" → 1) — on the
@@ -620,57 +622,33 @@ export class YncaDeviceController {
     if (sceneTitles !== undefined) {
       const num = sceneNumber(value, sceneTitles);
       if (num === undefined) {
-        // A dead button has to leave a trace — this was the one write path in the adapter
-        // that dropped a user action without a word (#615's lesson, applied to itself).
-        this.deps.log.debug(
-          `${this.deviceId}: scene "${String(value)}" is not one this device declares — write dropped ` +
+        // A dead button has to leave a trace (#615's lesson).
+        return this.dropped(
+          stateId,
+          `scene "${String(value)}" is not one this device declares ` +
             `(known: ${sceneTitles.map(scene => scene.title).join(", ") || "none yet"})`,
         );
-        return;
       }
       value = num;
     }
     // The unified player writes go to the subunit the ZONE is listening to (v2.0.0) —
     // routed here, BEFORE the generic path.
     if (/^player\.(playback|repeat|shuffle|next|prev)$/.test(zoned.name)) {
-      this.handlePlayerWrite(zoned.zone, zoned.name, value);
-      return;
+      return this.handlePlayerWrite(zoned.zone, zoned.name, value);
     }
     // The unified tuner writes are band-dependent (v2.0.0) and routed here, BEFORE the
-    // generic path — one state, the right wire function for the active band.
-    if (this.handleTunerWrite(stateId, value)) {
-      return;
+    // generic path — one state, the right wire function for the band.
+    const tuner = this.handleTunerWrite(stateId, value);
+    if (tuner !== undefined) {
+      return tuner;
     }
+    // The generic path carries the majority of the writes — power, volume, input, sound programme. A function this
+    // device never reported is not written (claim with proof), and says so (audit 2026-09-06).
     const target = this.writeMap.get(stateId);
-    const problem = target ? writeProblem(target, value) : undefined;
-    if (problem) {
-      this.deps.log.debug(`${this.deviceId}: ${stateId} not written — ${problem}`);
-      return "unavailable";
+    if (!target) {
+      return this.dropped(stateId, "this device did not report the function");
     }
-    const triple = yncaCommand(stateId, value, this.writeMap);
-    if (!triple) {
-      // The one write path that still dropped a user action without a word. The special
-      // routes above (scene, player, tuner, sendProven) handle their own ids; this is the
-      // generic one, and it carries the majority of the writes — power, volume, input, sound
-      // programme. `yncaCommand` returns nothing when this device never reported the function
-      // or when the entry is read-only, and both are worth a line (audit 2026-09-06).
-      this.deps.log.debug(
-        `${this.deviceId}: ${stateId} is not writable on this device — write dropped ` +
-          `(not reported in the sweep, or a read-only function)`,
-      );
-      return "unavailable";
-    }
-    const sent = this.deps.client.send(triple.subunit, triple.func, triple.value, triple.charset);
-    this.readBack(target);
-    return Promise.resolve(sent).then(verdict =>
-      verdict === "ok"
-        ? "sent"
-        : verdict === "restricted" || verdict === "undefined"
-          ? "refused"
-          : verdict === "skipped"
-            ? "unavailable"
-            : "unclear",
-    );
+    return this.sendEntry(target, value, stateId);
   }
 
   /**
@@ -826,142 +804,91 @@ export class YncaDeviceController {
    * @param zoneKey the zone the write belongs to
    * @param flatId the flat player state id
    * @param value the written value
+   * @returns what became of the write
    */
-  private handlePlayerWrite(zoneKey: string, flatId: string, value: unknown): void {
+  private handlePlayerWrite(zoneKey: string, flatId: string, value: unknown): WriteOutcome | Promise<WriteOutcome> {
     const subunit = playerSubunitForInput(this.zoneInputs.get(zoneKey));
     if (subunit === undefined) {
-      this.deps.log.debug(`${this.deviceId}: ${flatId} ignored — ${zoneKey} is not playing a media source`);
-      return;
+      return this.dropped(flatId, `${zoneKey} is not playing a media source`);
     }
     const entry = this.presentEntries.find(e => e.id === flatId && e.subunit === subunit);
     if (entry === undefined) {
-      this.deps.log.debug(`${this.deviceId}: ${flatId} ignored — ${subunit} did not report it`);
-      return;
+      return this.dropped(flatId, `${subunit} did not report it`);
     }
-    const problem = writeProblem(entry, value);
-    if (problem) {
-      this.deps.log.debug(`${this.deviceId}: ${flatId} not written — ${problem}`);
-      return;
-    }
-    const triple = yncaCommand(flatId, value, new Map([[flatId, entry]]));
-    if (triple) {
-      void this.deps.client.send(triple.subunit, triple.func, triple.value, triple.charset);
-      this.readBack(entry);
-    }
+    return this.sendEntry(entry, value, flatId);
   }
 
   /**
-   * Route the band-dependent tuner writes (v2.0.0 unification): ONE frequency state
-   * in kHz and ONE preset state, sent to the wire function of the ACTIVE band —
-   * AM/FM on the classic TUN subunit (HDRADIO on the US models), FM/DAB on the DAB subunit (whose FM half
-   * shares the flat ids). A DAB frequency write is dropped: DAB tunes by service,
-   * the device has no frequency command there.
+   * Send a write through one catalog entry: encoded by the catalog (or dropped with the reason it gives), read back,
+   * and answered with what the device made of it.
+   *
+   * @param entry the entry written to
+   * @param value the written value
+   * @param stateId the written id, for the log
+   * @returns what became of the write
+   */
+  private sendEntry(entry: YncaEntry, value: unknown, stateId: string): WriteOutcome | Promise<WriteOutcome> {
+    const wire = yncaWrite(entry, value);
+    if ("problem" in wire) {
+      return this.dropped(stateId, wire.problem);
+    }
+    return this.sendWire(wire, entry);
+  }
+
+  /**
+   * Put one PUT on the wire and read the function back: the receiver answers a PUT only when the value changed — a
+   * frequency snapped onto the station already playing, or the band already set, stood unacknowledged for good (audit
+   * 2026-09-29, B10; audit 2026-09-24, B4).
+   *
+   * @param wire the line
+   * @param readBack the entry to read back, if readable
+   * @returns what the device made of it (review 2026-10-05, A3)
+   */
+  private sendWire(wire: YncaWire, readBack: YncaEntry | undefined): Promise<WriteOutcome> {
+    const verdict = this.deps.client.send(wire.subunit, wire.func, wire.value, wire.charset);
+    this.readBack(readBack);
+    return outcomeOf(verdict);
+  }
+
+  /**
+   * A write this controller drops itself: the same trace on every path — device, datapoint and reason — and the
+   * outcome that lets the handle try another protocol (review 2026-10-05, A3).
+   *
+   * @param stateId the written id
+   * @param reason why it is not sent
+   * @returns `unavailable`
+   */
+  private dropped(stateId: string, reason: string): WriteOutcome {
+    this.deps.log.debug(`${this.deviceId}: ${stateId} not written — ${reason}`);
+    return "unavailable";
+  }
+
+  /**
+   * A band-routed tuner write (see `routeTunerWrite`).
    *
    * @param stateId the state id relative to the device
    * @param value the written value
-   * @returns true when the id was a band-routed tuner write (handled here)
+   * @returns what became of the write, or undefined when the id is no band-routed tuner write
    */
-  private handleTunerWrite(stateId: string, value: unknown): boolean {
-    if (stateId === "tuner.frequency") {
-      const written = writableNumber(value);
-      if (written === undefined) {
-        return true;
-      }
-      const khz = snapTunerFrequency(written, this.tunerBand === "AM" ? "AM" : "FM", this.freqStep);
-      if (this.hasDab) {
-        if (this.tunerBand === "FM") {
-          this.sendProven("DAB", "FMFREQ", formatWireNumber(khz / 1000, 2));
-        } else {
-          this.deps.log.debug(`${this.deviceId}: DAB tunes by service — frequency write ignored`);
-        }
-        return true;
-      }
-      // The HD Radio subunit carries the AM/FM tuner of the US models — with TUN beside it or
-      // (six of the seven official lists) alone.
-      const amFm = this.hasHdRadio ? "HDRADIO" : "TUN";
-      if (this.tunerBand === "AM") {
-        this.sendProven(amFm, "AMFREQ", String(Math.round(khz)));
-      } else {
-        this.sendProven(amFm, "FMFREQ", formatWireNumber(khz / 1000, 2));
-      }
-      return true;
-    }
-    if (stateId === "tuner.band") {
-      // Up to three subunits feed this one dropdown: on an HD Radio model every band goes to
-      // HDRADIO; otherwise AM lives only on TUN, DAB only on DAB, and FM on both — on a device that has DAB its FM half lives there too (that is where its FM
-      // frequency and presets are). Routing by the written VALUE keeps a dual-subunit device
-      // honest instead of sending every band to whichever entry happened to be mapped last.
-      const band = typeof value === "string" ? value : "";
-      const subunit = this.hasHdRadio
-        ? "HDRADIO"
-        : band === "AM"
-          ? "TUN"
-          : band === "DAB" || this.hasDab
-            ? "DAB"
-            : "TUN";
-      const entry = this.presentEntries.find(
-        candidate => candidate.id === "tuner.band" && candidate.subunit === subunit,
-      );
-      const triple = entry ? yncaCommand(stateId, value, new Map([[stateId, entry]])) : undefined;
-      if (triple) {
-        this.sendProven(triple.subunit, triple.func, triple.value);
-      } else {
-        this.deps.log.debug(`${this.deviceId}: band "${band}" is not available on this device — write dropped`);
-      }
-      return true;
-    }
-    if (stateId === "tuner.preset" && this.hasDab) {
-      const slot = Math.round(writableNumber(value) ?? Number.NaN);
-      if (Number.isFinite(slot) && slot >= 1) {
-        this.sendProven("DAB", this.tunerBand === "DAB" ? "DABPRESET" : "FMPRESET", String(slot));
-      }
-      return true;
-    }
-    if (stateId === "tuner.preset" && this.hasHdRadio) {
-      const slot = Math.round(writableNumber(value) ?? Number.NaN);
-      if (Number.isFinite(slot) && slot >= 1) {
-        this.sendProven("HDRADIO", "PRESET", String(slot));
-      }
-      return true;
-    }
-    if (stateId === "tuner.presetSave" || stateId === "tuner.presetUp" || stateId === "tuner.presetDown") {
-      // The preset keys follow the preset itself: HD Radio's bank replaces TUN's, DAB stores its DAB and
-      // FM stations (`@DAB:MEM`) and has no step keys — before, whichever entry was mapped last took the
-      // write (audit 2026-09-29, B9).
-      const subunit = this.hasHdRadio ? "HDRADIO" : this.hasDab && stateId === "tuner.presetSave" ? "DAB" : "TUN";
-      const entry = this.presentEntries.find(candidate => candidate.id === stateId && candidate.subunit === subunit);
-      const triple = entry ? yncaCommand(stateId, value, new Map([[stateId, entry]])) : undefined;
-      if (triple) {
-        this.sendProven(triple.subunit, triple.func, triple.value);
-      } else {
-        this.deps.log.debug(`${this.deviceId}: ${stateId} is not available on ${subunit} — write dropped`);
-      }
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Send a band-routed write ONLY with a function THIS device reported in its sweep —
-   * the same claim-with-proof rule every generic write obeys (#615 class). Without it
-   * the router put a blind TUN:FMFREQ on the wire for any device, tuner or not, and
-   * each write surfaced as a "device refused" warning (test-audit finding).
-   *
-   * @param subunit the target subunit
-   * @param func the wire function
-   * @param wire the encoded wire value
-   */
-  private sendProven(subunit: string, func: string, wire: string): void {
-    if (!this.presentEntries.some(entry => entry.subunit === subunit && entry.func === func)) {
-      this.deps.log.debug(`${this.deviceId}: ${subunit}:${func} not reported by this device — write dropped`);
-      return;
-    }
-    void this.deps.client.send(subunit, func, wire);
-    // The receiver answers a PUT only when the value changed — a frequency snapped onto the station
-    // already playing, or the band already set, stood unacknowledged for good (audit 2026-09-29, B10).
-    this.readBack(
-      this.presentEntries.find(entry => !entry.derived && entry.subunit === subunit && entry.func === func),
+  private handleTunerWrite(stateId: string, value: unknown): WriteOutcome | Promise<WriteOutcome> | undefined {
+    const route = routeTunerWrite(
+      stateId,
+      value,
+      { band: this.tunerBand, hasDab: this.hasDab, hasHdRadio: this.hasHdRadio, freqStep: this.freqStep },
+      this.presentEntries,
     );
+    if (route === undefined) {
+      return undefined;
+    }
+    if ("problem" in route) {
+      return this.dropped(stateId, route.problem);
+    }
+    if (route.band !== undefined) {
+      // The band a script just wrote decides its next frequency or preset write, before the device's BAND line
+      // arrives; the read-back puts the device's word back if it refused (review 2026-10-05, A20 on XML, the same here).
+      this.tunerBand = route.band;
+    }
+    return this.sendWire(route.wire, route.readBack);
   }
 
   /**
