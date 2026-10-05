@@ -3107,10 +3107,11 @@ describe("every write says what became of it (review 2026-10-05, A3/A46)", () =>
     expect(s.debugs.filter(line => line.includes("not sent") || line.includes("write dropped"))).toHaveLength(5);
   });
 
-  test("a menu key is handed to the menu engine — its outcome cannot be said, so it is never repeated elsewhere", async () => {
+  test("a menu write answers with what the menu engine made of it", async () => {
     const s = setup({ zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio"] }], netusb: {} }, ysp);
     await s.controller.start();
-    expect(await s.controller.handleWrite("player.browse.source", "netRadio")).toBe("unclear");
+    expect(await s.controller.handleWrite("player.browse.source", "netRadio")).toBe("sent");
+    expect(await s.controller.handleWrite("player.browse.source", "noSuchSource")).not.toBe("sent");
   });
 
   test("the group writes say what became of them", async () => {
@@ -3354,5 +3355,28 @@ describe("the volume scale is learned at the first status that reports one (revi
     await flush();
     expect(s.acks.filter(a => a.id === "living.multiroom.zone2.volume").at(-1)?.value).toBe(45);
     expect(probeMemory.remembered("yxcVolumeMode")).toEqual({ main: "numeric", zone2: "numeric" });
+  });
+});
+
+// YNCA and XML give scene.recall a dropdown of the scene titles; MusicCast's recall carried no states — the same
+// datapoint looked different by owner (review 2026-10-05, parity). Titles another transport reported, the number
+// otherwise; names the user gives in the receiver follow at runtime (liveLabels).
+describe("scene.recall carries the title dropdown on MusicCast too", () => {
+  test("titles where another transport reported them, numbers otherwise, labels that follow the receiver", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power", "scene"], scene_num: 3 }], netusb: {} };
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    const memory = new ProbeMemory();
+    memory.set(
+      "xmlScenes:main",
+      `<YAMAHA_AV rsp="GET" RC="0"><Scene><Scene_Sel_Item>` +
+        `<Item_1><Param>Scene 1</Param><RW>W</RW><Title>Movie</Title></Item_1>` +
+        `</Scene_Sel_Item></Scene></YAMAHA_AV>`,
+    );
+    (s.controller as unknown as { deps: { probeMemory?: ProbeMemory } }).deps.probeMemory = memory;
+    await s.controller.start();
+    const recall = s.defs.get("living.scene.recall");
+    expect(recall?.common.states).toEqual({ 1: "Movie", 2: "2", 3: "3" });
+    expect(recall?.liveLabels).toBe(true);
+    expect(recall?.common).toMatchObject({ type: "number", min: 1, max: 3, write: true });
   });
 });

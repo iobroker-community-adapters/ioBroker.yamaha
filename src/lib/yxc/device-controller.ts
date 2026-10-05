@@ -58,7 +58,7 @@ import { answeredByDevice, YxcTransportError } from "./http-client";
 import { splitZone, zonePrefix } from "./zones";
 import { presentSystemEntries, YXC_SYSTEM_CATALOG, type YxcSystemEntry } from "./system-catalog";
 import { keyedCommon, parentChannels } from "../catalog/types";
-import { knownScenes, resolveSceneNumber, sceneListSurface } from "../catalog/scene-titles";
+import { knownScenes, resolveSceneNumber, sceneListSurface, sceneRecallStates } from "../catalog/scene-titles";
 import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
 import type { BrowseEngine } from "../browse/browse-engine";
 import { createBrowseSurface } from "../browse/surface";
@@ -522,7 +522,7 @@ export class YxcDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
     }
     this.deps.reportDeclaredAbsent?.(yxcDeclaredAbsent(this.capabilities));
-    await this.setupSceneLists(capabilities);
+    await this.setupSceneLists(capabilities, objects);
     // The DAB scan counters are the one DAB detail the device reports only after a
     // station scan (status stays not_ready before) — seed the documented start state
     // (nothing scanned) so they are not left as valueless read states; a real scan
@@ -769,10 +769,8 @@ export class YxcDeviceController {
         this.deps.log.debug(`${this.deviceId}: ${stateId} — this device has no menu, write dropped`);
         return "unavailable";
       }
-      // The engine runs a menu key on its own and tells nobody what became of it, and a menu key sent
-      // twice acts twice — so nothing may be sent again through another protocol.
-      this.browseEngine.handleWrite(stateId, value);
-      return "unclear";
+      // The engine says what became of a menu write — the same answer on all three protocols.
+      return this.browseEngine.handleWrite(stateId, value);
     }
     const { zone: zoneKey, name } = splitZone(stateId);
     // ONE resolution for every scene write, number or title, as on YNCA and XML: a whole number of 1 or more,
@@ -1503,9 +1501,14 @@ export class YxcDeviceController {
    * the COUNT is what its getFeatures declares (review finding: the promised list was
    * missing entirely on devices whose only transport is MusicCast).
    *
+   * The recall datapoint gets the same title dropdown YNCA and XML give it: the titles another transport
+   * reported, the number where there is none — names the user gives in the receiver, so `liveLabels` (review
+   * 2026-10-05, parity: MusicCast's recall carried no states).
+   *
    * @param capabilities the device's parsed getFeatures capabilities
+   * @param objects the objects built for the device, the zones' recall datapoints among them
    */
-  private async setupSceneLists(capabilities: YxcCapabilities): Promise<void> {
+  private async setupSceneLists(capabilities: YxcCapabilities, objects: readonly ObjectDef[]): Promise<void> {
     for (const zone of capabilities.zones) {
       if (!zone.funcs.includes("scene") || zone.sceneNum === undefined || zone.sceneNum <= 0) {
         continue;
@@ -1515,6 +1518,14 @@ export class YxcDeviceController {
         num: i + 1,
         title: titles.get(i + 1) ?? "",
       }));
+      const recall = objects.find(object => object.id === `${zonePrefix(zone.id)}scene.recall`);
+      if (recall) {
+        await this.deps.upsertObject(`${this.deviceId}.${recall.id}`, {
+          ...recall,
+          common: { ...recall.common, states: sceneRecallStates(list) },
+          liveLabels: true,
+        });
+      }
       const surface = sceneListSurface(`${zonePrefix(zone.id)}scene`, list);
       for (const object of surface.objects) {
         await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
