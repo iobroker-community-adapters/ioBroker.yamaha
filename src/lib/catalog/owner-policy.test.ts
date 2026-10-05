@@ -1,4 +1,4 @@
-import { canonicalIdOf, capabilityKeyOf, OWNER_OVERRIDES, pickOwner } from "./owner-policy";
+import { canonicalIdOf, capabilityKeyOf, OWNER_OVERRIDES, ownerOnlyWrite, pickOwner } from "./owner-policy";
 
 describe("pickOwner — which transport owns a shared capability", () => {
   test("a capability only one transport offers is owned by that transport", () => {
@@ -160,5 +160,16 @@ describe("scene.list ownership (audit 2026-09-02 — title sources before the co
     expect(pickOwner("scene.list", ["yxc", "xml"])).toBe("xml");
     expect(pickOwner("scene.list", ["yxc", "ynca", "xml"])).toBe("xml");
     expect(pickOwner("scene.list", ["yxc"])).toBe("yxc");
+  });
+});
+
+describe("ownerOnlyWrite — the menu and the remote keys stay with their owner", () => {
+  test("player.browse.* and remote.* in every zone; nothing else", () => {
+    expect(ownerOnlyWrite(capabilityKeyOf("ynca", "player.browse.selectLine"))).toBe(true);
+    expect(ownerOnlyWrite(capabilityKeyOf("yxc", "multiroom.zone2.remote.cursor"))).toBe(true);
+    expect(ownerOnlyWrite("remote")).toBe(true);
+    expect(ownerOnlyWrite("player.playback")).toBe(false);
+    expect(ownerOnlyWrite("remoteness")).toBe(false);
+    expect(ownerOnlyWrite("power")).toBe(false);
   });
 });

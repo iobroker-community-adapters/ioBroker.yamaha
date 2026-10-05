@@ -6,7 +6,7 @@ import {
   type DatapointForm,
   type TransportObjects,
 } from "../catalog/object-tree-coordinator";
-import { capabilityKeyOf, pickOwner, type Transport } from "../catalog/owner-policy";
+import { capabilityKeyOf, ownerOnlyWrite, pickOwner, type Transport } from "../catalog/owner-policy";
 import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errText } from "../err-text";
 import { readyLine } from "../ready-line";
@@ -749,8 +749,12 @@ export class MultiTransportHandle implements ConnectionHandle {
       // and no write ever fell back: with YNCA held by another client at a restart, `power` never went out over
       // XML (review 2026-10-05, A4).
       const ownerForm = this.built.get(owner)?.get(canonicalId) ?? this.deps.existing?.(canonicalId);
-      // A datapoint that cannot be read is a key or a step: sent twice it would act twice.
-      const repeatable = ownerForm !== undefined && ownerForm.common.read !== false;
+      // A datapoint that cannot be read is a key or a step: sent twice it would act twice. The menu and the remote
+      // keys act on the owner's menu, the one on screen — never on another transport's (see ownerOnlyWrite).
+      const repeatable =
+        ownerForm !== undefined &&
+        ownerForm.common.read !== false &&
+        !ownerOnlyWrite(capabilityKeyOf(owner, canonicalId));
       const others = (this.tree.shared[canonicalId] ?? []).filter(transport => transport !== owner);
       let reason = "offline";
       for (const transport of [owner, ...others]) {

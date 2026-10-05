@@ -151,6 +151,19 @@ export function canonicalIdOf(transport: Transport, stateId: string): string {
 }
 
 /**
+ * Whether a write to a capability belongs to its owner alone and never falls back to another transport (Y-04): the
+ * on-screen menu (`player.browse.*`) and the remote keys (`remote.*`, in every zone). Another transport's menu is not
+ * the one on screen — its states are filtered as a non-owner's, so a line it selected or a key it pressed acted on a
+ * window the user never saw (review 2026-10-05, SHARED report).
+ *
+ * @param key the transport-neutral capability key ({@link capabilityKeyOf})
+ * @returns true when only the owner may carry the write
+ */
+export function ownerOnlyWrite(key: string): boolean {
+  return key.startsWith("player.browse.") || key === "remote" || key.startsWith("remote.");
+}
+
+/**
  * Decide which transport owns a capability, given the transports that actually offer it on
  * this device. Default is the most modern; a census-driven override wins where the modern
  * transport would be lossy. An override that lists none of the present candidates falls back

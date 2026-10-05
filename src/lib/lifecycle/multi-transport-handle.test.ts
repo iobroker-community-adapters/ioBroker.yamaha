@@ -904,6 +904,24 @@ describe("MultiTransportHandle — learned owners and the write fallback in deta
     });
   });
 
+  // Another transport's menu is not the one on screen: its browse states are filtered as a non-owner's, so a line it
+  // selected or a key it pressed would act on a window the user never saw.
+  test("a menu or remote-key write never falls back to another transport, in no zone", async () => {
+    const readable = (id: string): ObjectDef => state(id, id, { type: "string", role: "state" });
+    const ids = ["player.browse.selectLine", "remote.cursor", "multiroom.zone2.remote.menu"];
+    const ynca = fakeConn("ynca", ids.map(readable));
+    const xml = fakeConn("xml", ids.map(readable));
+    const s = learnSetup([ynca, xml]);
+    await s.handle.start();
+    ynca.outcome = "refused";
+    for (const id of ids) {
+      s.handle.handleStateChange(`living.${id}`, false, "1");
+    }
+    await flush();
+    expect(ynca.writes.map(w => w.id)).toEqual(ids);
+    expect(xml.writes).toEqual([]);
+  });
+
   test("a returning transport whose objects cannot be built is not taken in — its retry goes on", async () => {
     const ynca = fakeConn("ynca", [power]);
     const yxc = fakeConn("yxc", [state("dist.role", "Role")]);
