@@ -27,6 +27,25 @@ import { MEMORY_KEY } from "../lifecycle/memory-keys";
  * - the shape (`yncaCapabilities`): the subunit → function → value map the object tree is built from, with whether it
  *   was read from a switched-on receiver;
  * - the names the user gives in the receiver (`yncaStaticValues`): input and scene names.
+ *
+ * The rules — what is kept and what is let go (Y-01/Y-02: a receiver that was read in stays as it is):
+ * 1. The identity is model + firmware. An empty model is no identity: nothing remembered is trusted, nothing is
+ *    dropped. An empty firmware — read now or remembered — is unknown, never a change: a lost `SYS:VERSION` answer
+ *    voided the menu proof and the pad dialect, and the menus went back to XML (review 2026-10-05, A39).
+ * 2. Another identity (another model, or another known firmware) voids every YNCA answer remembered: the shape, the
+ *    names, the observed values, the pad and zone-pad verdicts, the menu proof.
+ * 3. A subunit is present only when it answered `AVAIL=?`. The sweep's closing marker answers `@SYS:VERSION=` and a
+ *    receiver pushes what changes meanwhile — counted as presence, every probe held SYS, and the blind sweep for a
+ *    device that answers no AVAIL never ran (A1).
+ * 4. A probe nobody answered is no probe: the blind sweep runs, no source is judged absent, no snapshot is kept — kept,
+ *    it held only SYS and every later start read SYS alone (A1).
+ * 5. The snapshot of the same receiver only grows; one of another identity is not used for narrowing; one that names
+ *    no subunit (the A1 rump `["SYS"]`) is no snapshot.
+ * 6. The shape of the same receiver only grows — every sweep and refresh unions into it — and once read from a
+ *    switched-on receiver it stays complete. A shape with nothing but SYS (the A1 rump) is no shape: swept anew.
+ * 7. A subunit the snapshot never asked (the catalog gained it with an update) is asked: before the sweep on the slow
+ *    path, by the background refresh on the fast path — before A25 only the slow path asked, and an installation on
+ *    the fast path never saw the new subunit.
  */
 
 /** Memory key for the remembered names (input and scene names). */
@@ -96,6 +115,66 @@ function isCachedCapabilities(value: unknown): value is CachedCapabilities {
     typeof candidate.subunits === "object" &&
     candidate.subunits !== null
   );
+}
+
+/** The identity a remembered answer is valid for (rule 1). */
+export interface YncaIdentity {
+  /** SYS MODELNAME — empty when the device did not answer it. */
+  model: string;
+  /** SYS VERSION — empty when unknown. */
+  firmware: string;
+}
+
+/**
+ * Whether a remembered identity is THIS receiver (rule 1): the same model, and the same firmware where both are
+ * known — an empty firmware on either side is unknown, never a change.
+ *
+ * @param live the identity read now
+ * @param remembered the identity something was remembered under
+ * @returns true when the remembered answers hold for this receiver
+ */
+export function sameReceiver(live: YncaIdentity, remembered: YncaIdentity): boolean {
+  return (
+    live.model !== "" &&
+    live.model === remembered.model &&
+    (live.firmware === "" || remembered.firmware === "" || live.firmware === remembered.firmware)
+  );
+}
+
+/**
+ * The subunits that answered `AVAIL=?` in a report — the only proof of presence (rule 3). The closing marker's
+ * `@SYS:VERSION=` and whatever the receiver pushed meanwhile are in the same report and prove nothing; SYS never
+ * answers AVAIL.
+ *
+ * @param report what a probe collected
+ * @returns the subunits that answered AVAIL
+ */
+export function answeredAvail(report: YncaCapabilities): Set<string> {
+  return new Set(
+    Object.entries(report.subunits)
+      .filter(([subunit, funcs]) => subunit !== "SYS" && funcs.AVAIL !== undefined)
+      .map(([subunit]) => subunit),
+  );
+}
+
+/**
+ * Whether a shape names a subunit besides SYS — one that does not is the rump an unanswered probe left (rule 6).
+ *
+ * @param subunits the shape's subunit → function map
+ * @returns true when it carries a real subunit
+ */
+function hasSubunit(subunits: Record<string, unknown>): boolean {
+  return Object.keys(subunits).some(subunit => subunit !== "SYS");
+}
+
+/** What a remembered AVAIL snapshot says for this receiver (rule 5). */
+interface Snapshot {
+  /** The subunits that answered AVAIL (SYS never among them). */
+  present: Set<string>;
+  /** The subunits the probe asked — only those can be judged absent. */
+  probed: Set<string>;
+  /** The firmware it was taken under (may be empty). */
+  firmware: string;
 }
 
 /**
@@ -189,46 +268,52 @@ export class YncaShapeReader {
     // The first command after the receiver's power-save state can be lost (ynca-python `protocol.py` sends two
     // keepalives on connect for that reason): a leading wake-up read, so the identity is not read as "" and every
     // remembered YNCA answer dropped for it (audit 2026-09-24, B1).
-    const identity = await this.deps.client.readCapabilities([
+    const answer = await this.deps.client.readCapabilities([
       { subunit: "SYS", func: "MODELNAME" },
       { subunit: "SYS", func: "MODELNAME" },
       { subunit: "SYS", func: "VERSION" },
     ]);
-    const model = identity.model;
-    const firmware = identity.subunits.SYS?.VERSION ?? "";
-    this.firmwareRead = firmware || undefined;
-    const remembered = this.deps.probeMemory.remembered(CAPS_KEY);
-    if (model && isCachedCapabilities(remembered) && remembered.model === model && remembered.firmware === firmware) {
+    const live: YncaIdentity = { model: answer.model, firmware: answer.subunits.SYS?.VERSION ?? "" };
+    this.firmwareRead = live.firmware || undefined;
+    const stored = this.deps.probeMemory.remembered(CAPS_KEY);
+    const remembered = isCachedCapabilities(stored) ? stored : undefined;
+    const same = remembered !== undefined && sameReceiver(live, remembered);
+    // A shape with nothing but SYS is the rump an unanswered probe left — swept anew, not trusted (rule 6).
+    if (same && hasSubunit(remembered.subunits)) {
       // The remembered subunit snapshot is proof for narrowing ONLY from the same identity: a snapshot of another
-      // firmware says nothing about which sources this device has now.
-      const cached = this.deps.subunitCache.get();
-      if (cached && cached.model === model && cached.firmware === firmware) {
-        // Only what the snapshot ASKED is judged: a subunit the catalog gained later was never probed and must not
-        // read as absent (audit 2026-09-24, B11).
-        this.probedSubunits = new Set(cached.probed ?? []);
-        this.presentSubunits = new Set(cached.subunits);
+      // firmware says nothing about which sources this device has now. Only what it ASKED is judged: a subunit the
+      // catalog gained later was never probed and must not read as absent (audit 2026-09-24, B11) — the background
+      // refresh asks it (rule 7).
+      const snapshot = this.snapshotFor({ model: live.model, firmware: live.firmware || remembered.firmware });
+      if (snapshot) {
+        this.probedSubunits = snapshot.probed;
+        this.presentSubunits = snapshot.present;
       }
       this.awakeRead = remembered.awake === true;
-      return { capabilities: { model, subunits: remembered.subunits }, fromCache: true };
+      return { capabilities: { model: live.model, subunits: remembered.subunits }, fromCache: true };
     }
-    if (remembered !== undefined && model) {
-      // A different (or updated) device behind this address: its remembered YNCA answers are void — the observed
-      // values, the pad verdicts and the menu proof too. The other transports guard their own portions. An EMPTY
-      // model is no identity at all (a lost first command), not another device.
+    // A different (or updated) device behind this address: its remembered YNCA answers are void — the observed values,
+    // the pad verdicts and the menu proof too (rule 2). The other transports guard their own portions. An EMPTY model is
+    // no identity at all (a lost first command), not another device; an empty firmware is no other firmware (rule 1).
+    const dropped = stored !== undefined && live.model !== "" && !same;
+    if (dropped) {
       this.deps.probeMemory.drop(key => YNCA_KEYS.has(key));
     }
-    const capabilities = await this.sweepDevice(catalog, model, firmware);
+    const capabilities = await this.sweepDevice(catalog, live);
     if (capabilities.model) {
-      const captured = capabilities.subunits.SYS?.VERSION ?? firmware;
-      // The same receiver read again (the identity read lost its first answer, so the fast path did not run): what it
-      // proved before stays — a sweep in standby answers many functions @RESTRICTED.
-      const same =
-        isCachedCapabilities(remembered) && remembered.model === capabilities.model && remembered.firmware === captured;
-      const subunits = same ? mergeYncaSubunits(remembered.subunits, capabilities.subunits) : capabilities.subunits;
-      const awake = (same && remembered.awake === true) || capabilities.subunits.MAIN?.PWR === "On";
-      this.deps.probeMemory.set(CAPS_KEY, {
+      const swept: YncaIdentity = {
         model: capabilities.model,
-        firmware: captured,
+        firmware: capabilities.subunits.SYS?.VERSION || live.firmware,
+      };
+      this.firmwareRead = live.firmware || swept.firmware || undefined;
+      // The same receiver read again (the identity read lost an answer, or the shape was the A1 rump, so the fast path
+      // did not run): what it proved before stays — a sweep in standby answers many functions @RESTRICTED (rule 6).
+      const kept = !dropped && remembered !== undefined && sameReceiver(swept, remembered) ? remembered : undefined;
+      const subunits = kept ? mergeYncaSubunits(kept.subunits, capabilities.subunits) : capabilities.subunits;
+      const awake = kept?.awake === true || capabilities.subunits.MAIN?.PWR === "On";
+      this.deps.probeMemory.set(CAPS_KEY, {
+        model: swept.model,
+        firmware: swept.firmware || (kept?.firmware ?? ""),
         subunits,
         awake,
       } satisfies CachedCapabilities);
@@ -294,9 +379,25 @@ export class YncaShapeReader {
    * @returns the grown shape, or undefined when the refresh ran into a drop
    */
   public async refresh(catalog: readonly YncaEntry[]): Promise<YncaCapabilities | undefined> {
-    const cached = this.deps.subunitCache.get();
+    const stored = this.deps.probeMemory.remembered(CAPS_KEY);
+    const remembered = isCachedCapabilities(stored) ? stored : undefined;
+    let snapshot = remembered ? this.snapshotFor(remembered) : undefined;
+    // A subunit the snapshot never asked — the catalog gained it with an update, or no snapshot was kept — is asked
+    // here: the fast path builds the tree without a probe, and before this only the slow path asked, so an
+    // installation never saw a subunit an update added (rule 7, review 2026-10-05, A25).
+    const unasked = AVAIL_PROBE.filter(get => !snapshot?.probed.has(get.subunit));
+    if (remembered && unasked.length > 0) {
+      const found = answeredAvail(await this.deps.client.readCapabilities(unasked));
+      if (this.storeSnapshot(found, remembered)) {
+        snapshot = this.snapshotFor(remembered);
+      }
+      if (snapshot) {
+        this.probedSubunits = snapshot.probed;
+        this.presentSubunits = snapshot.present;
+      }
+    }
     const gets = sweepGets(catalog).filter(
-      get => get.subunit === "SYS" || !cached || cached.subunits.includes(get.subunit),
+      get => get.subunit === "SYS" || !snapshot || snapshot.present.has(get.subunit),
     );
     // The same plan as the targeted sweep: the union with the remembered shape below keeps every function a fuller
     // sweep ever answered, so a skipped GET shrinks nothing here.
@@ -322,14 +423,14 @@ export class YncaShapeReader {
     // UNION with the remembered shape (same identity — the fast path proved it): a refresh while the device stands by
     // answers many functions @RESTRICTED and must not strip abilities it proved while awake; a lean standby FIRST
     // capture heals on the next awake refresh instead of staying lean forever (datapoint review finding, 2.0.2).
-    const remembered = this.deps.probeMemory.remembered(CAPS_KEY);
-    const subunits = isCachedCapabilities(remembered)
-      ? mergeYncaSubunits(remembered.subunits, fresh.subunits)
-      : fresh.subunits;
-    const awake = (isCachedCapabilities(remembered) && remembered.awake === true) || fresh.subunits.MAIN?.PWR === "On";
+    const subunits = remembered ? mergeYncaSubunits(remembered.subunits, fresh.subunits) : fresh.subunits;
+    const awake = remembered?.awake === true || fresh.subunits.MAIN?.PWR === "On";
+    // The refresh never changes the identity the shape was validated by — it only fills in what was unknown: an empty
+    // version stored here voided the whole memory at the next start (rule 1, review 2026-10-05, A39). A version that
+    // differs is the next connect's identity read to judge.
     this.deps.probeMemory.set(CAPS_KEY, {
-      model: fresh.model,
-      firmware: fresh.subunits.SYS?.VERSION ?? "",
+      model: remembered?.model || fresh.model,
+      firmware: remembered?.firmware || fresh.subunits.SYS?.VERSION || "",
       subunits,
       awake,
     } satisfies CachedCapabilities);
@@ -362,60 +463,90 @@ export class YncaShapeReader {
    * blind sweep, so an unknown firmware loses speed, never features.
    *
    * @param catalog the (group-filtered) catalog whose functions to sweep
-   * @param model the live-read SYS model name (from resolve)
-   * @param firmware the live-read SYS firmware version
+   * @param live the identity read live (from resolve)
    * @returns the assembled capabilities
    */
-  private async sweepDevice(catalog: readonly YncaEntry[], model: string, firmware: string): Promise<YncaCapabilities> {
+  private async sweepDevice(catalog: readonly YncaEntry[], live: YncaIdentity): Promise<YncaCapabilities> {
     const cached = this.deps.subunitCache.get();
-    // An empty model is no identity (a lost first command, B1): the cache is neither used nor cleared — a fresh probe
-    // runs and its result replaces it.
-    if (cached && model) {
-      // The device's IDENTITY was already read (three reads, ~0.3 s) — checking it BEFORE sweeping is what keeps a
-      // stale cache from costing a full targeted sweep, then the probe, then a second sweep (~40 s).
-      if (model === cached.model && firmware === cached.firmware) {
-        // A subunit the catalog gained after the snapshot was never asked — asked now, and only those; a snapshot
-        // from before the list was kept is asked in full once (B11).
-        const asked = new Set(cached.probed ?? []);
-        const unasked = AVAIL_PROBE.filter(get => !asked.has(get.subunit));
-        const present = new Set(cached.subunits);
-        if (unasked.length > 0) {
-          const extra = await this.deps.client.readCapabilities(unasked);
-          for (const subunit of Object.keys(extra.subunits)) {
-            present.add(subunit);
-          }
-          this.deps.subunitCache.set({ subunits: [...present], probed: [...PROBED_SUBUNITS], model, firmware });
-        }
-        this.probedSubunits = PROBED_SUBUNITS;
-        this.presentSubunits = present;
-        return await this.targetedSweep(catalog, present);
-      }
+    // The device's IDENTITY was already read (three reads, ~0.3 s) — checking it BEFORE sweeping is what keeps a stale
+    // cache from costing a full targeted sweep, then the probe, then a second sweep (~40 s). An empty model is no
+    // identity (a lost first command, B1): the cache is neither used nor cleared — a fresh probe runs and its result
+    // joins it.
+    if (cached && live.model !== "" && !sameReceiver(live, cached)) {
       // The device behind this IP changed (swap or firmware update) — re-probe.
       this.deps.log.debug(`${this.deviceId}: cached subunit set is stale (model/firmware changed), re-probing`);
       this.deps.subunitCache.clear();
     }
-    const probe = await this.deps.client.readCapabilities(AVAIL_PROBE);
-    const present = new Set(Object.keys(probe.subunits));
-    if (present.size === 0) {
-      // Device ignores AVAIL — sweep blind so no function is lost. And silence is no proof: `probedSubunits` stays
-      // empty, so no source is judged absent (advisor round 2026-09-09).
-      return await this.deps.client.readCapabilities(sweepGets(catalog));
+    const snapshot = live.model !== "" ? this.snapshotFor(live) : undefined;
+    let present: Set<string>;
+    if (snapshot) {
+      // A subunit the catalog gained after the snapshot was never asked — asked now, and only those; a snapshot from
+      // before the list was kept is asked in full once (B11, rule 7).
+      present = new Set(snapshot.present);
+      const unasked = AVAIL_PROBE.filter(get => !snapshot.probed.has(get.subunit));
+      if (unasked.length > 0) {
+        const found = answeredAvail(await this.deps.client.readCapabilities(unasked));
+        this.storeSnapshot(found, { model: live.model, firmware: live.firmware || snapshot.firmware });
+        found.forEach(subunit => present.add(subunit));
+      }
+    } else {
+      present = answeredAvail(await this.deps.client.readCapabilities(AVAIL_PROBE));
+      if (present.size === 0) {
+        // The device ignores AVAIL — sweep blind so no function is lost. Silence is no proof: `probedSubunits` stays
+        // empty, so no source is judged absent (advisor round 2026-09-09), and no snapshot is kept (rule 4).
+        return await this.deps.client.readCapabilities(sweepGets(catalog));
+      }
     }
     this.probedSubunits = PROBED_SUBUNITS;
     this.presentSubunits = present;
     const capabilities = await this.targetedSweep(catalog, present);
-    if (capabilities.model) {
-      const captured = capabilities.subunits.SYS?.VERSION ?? "";
+    if (!snapshot && capabilities.model) {
       // The same receiver probed again: a subunit it answered before stays — never replaced by a smaller probe.
-      const same = cached !== undefined && cached.model === capabilities.model && cached.firmware === captured;
-      this.deps.subunitCache.set({
-        subunits: same ? [...new Set([...cached.subunits, ...present])] : [...present],
-        probed: [...PROBED_SUBUNITS],
+      this.storeSnapshot(present, {
         model: capabilities.model,
-        firmware: captured,
+        firmware: capabilities.subunits.SYS?.VERSION || live.firmware,
       });
     }
     return capabilities;
+  }
+
+  /**
+   * The remembered AVAIL snapshot, as far as it holds for this receiver (rule 5): of the same identity, and naming a
+   * subunit — the `["SYS"]` an unanswered probe left behind is no snapshot (A1).
+   *
+   * @param identity the receiver's identity
+   * @returns what the snapshot proves, or undefined
+   */
+  private snapshotFor(identity: YncaIdentity): Snapshot | undefined {
+    const cached = this.deps.subunitCache.get();
+    if (!cached || !sameReceiver(identity, cached)) {
+      return undefined;
+    }
+    const present = new Set(cached.subunits.filter(subunit => subunit !== "SYS"));
+    return present.size > 0 ? { present, probed: new Set(cached.probed ?? []), firmware: cached.firmware } : undefined;
+  }
+
+  /**
+   * Keep the subunits a full probe proved, together with what the same receiver proved before (rule 5). A probe in
+   * which nothing answered keeps nothing (rule 4).
+   *
+   * @param present the subunits that answered AVAIL now
+   * @param identity the receiver's identity
+   * @returns whether a snapshot was kept
+   */
+  private storeSnapshot(present: ReadonlySet<string>, identity: YncaIdentity): boolean {
+    const before = this.snapshotFor(identity);
+    const subunits = new Set([...(before?.present ?? []), ...present]);
+    if (subunits.size === 0) {
+      return false;
+    }
+    this.deps.subunitCache.set({
+      subunits: [...subunits],
+      probed: [...PROBED_SUBUNITS],
+      model: identity.model,
+      firmware: identity.firmware || (before?.firmware ?? ""),
+    });
+    return true;
   }
 
   /**

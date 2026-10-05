@@ -1,6 +1,5 @@
 import { vi } from "vitest";
 import { MAX_OBSERVED_VALUES, YncaDeviceController } from "./device-controller";
-import type { YncaClientLike } from "./ynca/client-like";
 import type { YncaCapabilities } from "./ynca/capability";
 import { availGets, YNCA_CATALOG } from "./ynca/catalog";
 import type { ObjectDef } from "./catalog/types";
@@ -8,116 +7,7 @@ import { createSubunitCache } from "./ynca/subunit-cache";
 import { CommandGate } from "./lifecycle/command-gate";
 import { ProbeMemory } from "./lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "./lifecycle/discovery-schema";
-
-/** A real command gate for the controller under test (pacing has its own suite). */
-const testGate = (): CommandGate =>
-  new CommandGate({
-    minSpacingMs: 0,
-    timers: { schedule: (h, ms) => setTimeout(h, ms), cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>) },
-  });
-
-interface Msg {
-  subunit: string;
-  func: string;
-  value: string;
-}
-
-/** The one-GET-answers-many functions of the official lists (see bundleGets in the catalog). */
-const BUNDLE_FUNCS = new Set(["BASIC", "SCENENAME", "SIGINFO", "RDSINFO", "METAINFO"]);
-
-class FakeClient implements YncaClientLike {
-  public sent: Msg[] = [];
-  public closed = false;
-  public keepaliveStarted = false;
-  public capabilities: YncaCapabilities = { model: "", subunits: {} };
-  /**
-   * When set, an AVAIL-only request list (the probe pass) is answered with exactly
-   * these subunits; unset, every readCapabilities call returns `capabilities`
-   * (adequate for the tests that predate the two-pass sweep).
-   */
-  public availableSubunits?: string[];
-  /**
-   * When set, a LISTINFO-only request list (the browse probe, #613) is answered with list
-   * fields for exactly these subunits — every other one stays silent, as a real receiver
-   * does with `@UNDEFINED`. Unset, the probe falls through to `capabilities`.
-   */
-  public listSubunits?: string[];
-  /** Every readCapabilities request list, for asserting what was actually swept. */
-  public requests: Array<Array<{ subunit: string; func: string }>> = [];
-  /** Every bundle GET asked (`SUBUNIT:FUNC`), in order. */
-  public bundlesAsked: string[] = [];
-  /**
-   * The bracketed probe — a test replaces it; by default the device says nothing definite.
-   *
-   * @param _subunit the subunit asked
-   * @param funcs the functions asked
-   * @returns an unclear verdict for each
-   */
-  public probeKnown: (
-    subunit: string,
-    funcs: readonly string[],
-  ) => Promise<Record<string, "known" | "undefined" | "unclear">> = (_subunit, funcs) =>
-    Promise.resolve(Object.fromEntries(funcs.map(func => [func, "unclear" as const])));
-  private handler?: (message: Msg) => void;
-
-  public async connect(): Promise<void> {}
-  public readCapabilities(gets: Array<{ subunit: string; func: string }>): Promise<YncaCapabilities> {
-    this.requests.push(gets);
-    if (this.availableSubunits && gets.length > 0 && gets.every(get => get.func === "AVAIL")) {
-      const subunits: Record<string, Record<string, string>> = {};
-      for (const subunit of this.availableSubunits) {
-        subunits[subunit] = { AVAIL: "Ready" };
-      }
-      return Promise.resolve({ model: "", subunits });
-    }
-    if (gets.length > 0 && gets.every(get => BUNDLE_FUNCS.has(get.func))) {
-      // A bundle (BASIC, SCENENAME, SIGINFO, RDSINFO, METAINFO) answers with the functions the
-      // subunit has — on a fake, whatever the capabilities carry for it (a real BASIC lists
-      // 15–25 of them).
-      const subunits: Record<string, Record<string, string>> = {};
-      for (const get of gets) {
-        const subunit = this.capabilities.subunits[get.subunit];
-        if (subunit) {
-          subunits[get.subunit] = { ...subunit };
-        }
-      }
-      this.bundlesAsked.push(...gets.map(get => `${get.subunit}:${get.func}`));
-      return Promise.resolve({ model: "", subunits });
-    }
-    if (this.listSubunits && gets.length > 0 && gets.every(get => get.func === "LISTINFO")) {
-      const subunits: Record<string, Record<string, string>> = {};
-      for (const subunit of this.listSubunits) {
-        subunits[subunit] = { LISTLAYER: "1", LISTLAYERNAME: "Root", CURRLINE: "1", MAXLINE: "2" };
-      }
-      return Promise.resolve({ model: "", subunits });
-    }
-    return Promise.resolve(this.capabilities);
-  }
-  public send(subunit: string, func: string, value: string): void {
-    this.sent.push({ subunit, func, value });
-  }
-  public get(subunit: string, func: string): void {
-    this.gets.push({ subunit, func });
-  }
-  public gets: Array<{ subunit: string; func: string }> = [];
-  public onMessage(handler: (message: Msg) => void): void {
-    this.handler = handler;
-  }
-  public onDrop(): void {}
-  /** Replaced per test to capture the registered handler. */
-  public onRefusal: (handler: (command: string, verdict: "restricted" | "undefined") => void) => void = () => undefined;
-  /** Lines that decode to nothing — ignored by the fake. */
-  public onUnknownLine: (handler: (line: string) => void) => void = () => undefined;
-  public startKeepalive(): void {
-    this.keepaliveStarted = true;
-  }
-  public close(): void {
-    this.closed = true;
-  }
-  public emit(message: Msg): void {
-    this.handler?.(message);
-  }
-}
+import { BUNDLE_FUNCS, FakeClient, testGate } from "../../test/helpers/ynca-fake-client";
 
 function makeDeps(client: FakeClient): {
   created: string[];
@@ -423,12 +313,21 @@ describe("YncaDeviceController two-pass sweep", () => {
   test("a device that ignores AVAIL falls back to the full blind sweep (no feature loss)", async () => {
     const client = new FakeClient();
     client.availableSubunits = [];
-    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };
-    await new YncaDeviceController("living", makeDeps(client).deps).start();
-    const sweptSubunits = new Set(client.requests[1].map(get => get.subunit));
+    // The device answers the probe's closing marker like every receiver — before the fix (review 2026-10-05, A1)
+    // that `@SYS:VERSION=` counted as an answer, and only SYS was swept.
+    client.capabilities = { model: "RX", subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "On" } } };
+    const { created, deps } = makeDeps(client);
+    const persisted: unknown[] = [];
+    deps.subunitCache = createSubunitCache(undefined, snapshot => persisted.push(snapshot));
+    await new YncaDeviceController("living", deps).start();
+    const sweptSubunits = new Set(client.requests[2].map(get => get.subunit));
     // The blind sweep covers everything the catalog knows.
+    expect(sweptSubunits.has("MAIN")).toBe(true);
     expect(sweptSubunits.has("ZONE2")).toBe(true);
     expect(sweptSubunits.has("SPOTIFY")).toBe(true);
+    expect(created).toContain("living.power");
+    // A probe nobody answered is no probe: no snapshot is kept.
+    expect(persisted).toEqual([]);
   });
 
   test("a valid cached probe result skips the AVAIL phase entirely", async () => {
@@ -863,9 +762,9 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     const { created, acked, deps: deps2 } = makeDeps(client);
     await new YncaDeviceController("living", { ...deps2, probeMemory: memory }).start();
     // The only request the READY LINE waited for is the identity read plus the handful of
-    // values the start DECIDES from; no AVAIL probe, no blocking sweep.
+    // values the start DECIDES from; no AVAIL probe, no blocking sweep before it.
     expect(client.requests[0].map(get => get.func)).toEqual(["MODELNAME", "MODELNAME", "VERSION"]);
-    expect(client.requests.some(gets => gets.every(get => get.func === "AVAIL"))).toBe(false);
+    expect(client.requests.slice(0, 2).some(gets => gets.every(get => get.func === "AVAIL"))).toBe(false);
     // The remembered layer is a SHAPE — its values are the last run's. Power, the zone
     // inputs and the tuner band decide something (menu claim, write routing), so they are
     // read live before use instead of taken from the memory.
@@ -877,10 +776,12 @@ describe("YncaDeviceController fast restart (persisted capability layer)", () =>
     // presentation, not a stale device value.
     expect(acked.filter(a => !/^living\.scene\.(list|title\d+)$/.test(a.id))).toEqual([]);
     // The full question round then runs BEHIND the ready line as a value refresh —
-    // statics included, so a rename at the device heals in seconds, not on a restart.
+    // statics included, so a rename at the device heals in seconds, not on a restart. This device kept no AVAIL
+    // snapshot (it ignored the probe), so the refresh asks first what no snapshot ever asked (review 2026-10-05, A25).
     await flushAsync();
-    expect(client.requests).toHaveLength(3);
-    const background = client.requests[2];
+    expect(client.requests).toHaveLength(4);
+    expect(client.requests[2].every(get => get.func === "AVAIL")).toBe(true);
+    const background = client.requests[3];
     expect(background.some(get => get.func === "PWR")).toBe(true);
     expect(background.some(get => get.func === "INPNAMEHDMI1")).toBe(true);
   });
@@ -1889,9 +1790,9 @@ describe("YncaDeviceController sweep plan (2.7.0 — zone table, SYS families, a
 
   test("the blind sweep (device ignores AVAIL) is not filtered — it loses speed, never features", async () => {
     const client = new FakeClient();
-    // An empty AVAIL answer: the device ignored the probe → blind sweep.
+    // An empty AVAIL answer (only the closing marker answers): the device ignored the probe → blind sweep.
     client.availableSubunits = [];
-    client.capabilities = { model: "RX", subunits: { MAIN: { PWR: "On" } } };
+    client.capabilities = { model: "RX", subunits: { SYS: { MODELNAME: "RX", VERSION: "1.0" }, MAIN: { PWR: "On" } } };
     await new YncaDeviceController("living", makeDeps(client).deps).start();
     const gets = asked(client);
     expect(gets).toContain("ZONE4:VOL");
