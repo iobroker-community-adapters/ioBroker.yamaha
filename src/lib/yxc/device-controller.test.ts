@@ -1,4 +1,6 @@
 import { YxcRefusalError, YxcTransportError } from "./http-client";
+import { HttpStatusError } from "../util";
+import cdNt670d from "./__fixtures__/cd_nt670d.json";
 import { nameTextLabels, YxcDeviceController, zoneNameFrom } from "./device-controller";
 import type { YxcClientLike } from "./device-controller";
 import type { ObjectDef } from "../catalog/types";
@@ -2970,5 +2972,168 @@ describe("the play queue as single datapoints (readable values, 2026-09-30)", ()
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.player.source", value: "Spotify" });
     expect(s.acks).toContainEqual({ id: "living.player.artist", value: "Band" });
+  });
+});
+
+// Every write path says what became of it: a forgotten `undefined` reads as "unclear" in the multi-transport handle,
+// which then never tries the next protocol (Y-04) — on the RX-V6A MusicCast refuses setPartyMode and YNCA's
+// @SYS:PARTY was never tried. A write the controller drops itself is `unavailable` with a debug line, never "sent"
+// (review 2026-10-05, A3/A46).
+describe("every write says what became of it (review 2026-10-05, A3/A46)", () => {
+  const withSettings = async (failure?: Error): Promise<ReturnType<typeof setup>> => {
+    const s = setup(rxV481, { power: "on", volume: 60, input: "hdmi1", actual_volume: { mode: "numeric", value: 30 } });
+    s.client.funcStatus = { response_code: 0, party_mode: false, hdmi_out_1: true, speaker_a: true };
+    await s.controller.start();
+    s.client.failWrites = failure;
+    s.client.calls.length = 0;
+    return s;
+  };
+
+  test.each([
+    ["refused", new YxcRefusalError("/system/setPartyMode?enable=true", 3), "refused"],
+    [
+      "answered with an HTTP error",
+      new HttpStatusError("device refused /system/setPartyMode (HTTP 503)", 503),
+      "refused",
+    ],
+    ["unanswered", new YxcTransportError("/system/setPartyMode", new Error("timeout")), "unavailable"],
+  ] as const)("a device-wide setting %s says so, like a zone setting", async (_label, failure, expected) => {
+    const s = await withSettings(failure);
+    for (const id of ["multiroom.party", "hdmi.out1", "advanced.speakers.speakerA", "mute"]) {
+      expect(await s.controller.handleWrite(id, true), id).toBe(expected);
+    }
+  });
+
+  test("a device-wide setting the device took is sent and read back", async () => {
+    const s = await withSettings();
+    expect(await s.controller.handleWrite("multiroom.party", true)).toBe("sent");
+    await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["setPartyMode", "getFuncStatus"]);
+  });
+
+  // An HTTP error status is the device's answer: a write is refused and read back, and nobody asks whether the
+  // device is still there — it just answered.
+  test("a write answered with an HTTP error status is refused and read back, no liveness check", async () => {
+    const s = setup(wx10, { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0 });
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    s.client.failWrites = new HttpStatusError("device refused /main/setPower?power=standby (HTTP 503)", 503);
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("power", false)).toBe("refused");
+    await flush();
+    expect(s.client.calls.map(c => c.method)).toEqual(["power", "getStatus"]);
+    expect(dropped).toBe(0);
+  });
+
+  test("a zone status answered with an HTTP error status is proof of life", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    (s.client as unknown as { getStatus: () => Promise<never> }).getStatus = () =>
+      Promise.reject(new HttpStatusError("device refused /main/getStatus (HTTP 503)", 503));
+    for (let run = 0; run < 4; run++) {
+      s.fire.keepalive?.();
+      await flush();
+    }
+    await s.controller.verifyAlive();
+    expect(dropped).toBe(0);
+  });
+
+  // The CD-NT670D plays the disc: repeat is set directly only on the network player (API 1.19+) — the write is
+  // dropped, and says so.
+  test("repeat on a CD is not sent — unavailable, with a debug line", async () => {
+    const s = setup(cdNt670d, { response_code: 0, power: "on", volume: 20, mute: false, input: "cd" });
+    s.client.deviceInfo = { model_name: "CD-NT670D", system_version: "1.0", api_version: 2.11 };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("player.repeat", 2)).toBe("unavailable");
+    await flush();
+    expect(s.client.calls.filter(c => c.method.startsWith("set"))).toEqual([]);
+    expect(s.debugs).toContainEqual("living: player.repeat not sent — only the network player sets it directly");
+  });
+
+  test("a transport key while the zone plays no media source is not sent — unavailable", async () => {
+    const s = setup({ zone: [{ id: "main", func_list: ["power"] }], netusb: {} }, { power: "on", input: "hdmi1" });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("player.play", true)).toBe("unavailable");
+    expect(s.client.calls).toEqual([]);
+    expect(s.debugs).toContainEqual("living: player.play not sent — main is not playing a media source");
+  });
+
+  test("an equalizer band without the other two reported is not sent — unavailable", async () => {
+    const s = setup({ zone: [{ id: "main", func_list: ["power", "equalizer"] }] }, { power: "on", equalizer: {} });
+    await s.controller.start();
+    expect(await s.controller.handleWrite("sound.equalizer.low", 3)).toBe("unavailable");
+    expect(s.client.calls.some(c => c.method === "setEqualizer")).toBe(false);
+  });
+
+  test("the controller's other drops are unavailable and leave a trace", async () => {
+    const features = {
+      zone: [{ id: "main", func_list: ["power", "cursor", "volume"], cursor_list: ["up", "down"] }],
+      distribution: { version: 2 },
+    };
+    const s = setup(features, { ...(ysp as Record<string, unknown>), disable_flags: 1 });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    s.debugs.length = 0;
+    // a key the zone does not declare, a value no command takes, a function the zone reports not operable
+    expect(await s.controller.handleWrite("remote.cursor", "left")).toBe("unavailable");
+    expect(await s.controller.handleWrite("sleep", "soon")).toBe("unavailable");
+    expect(await s.controller.handleWrite("volume", 20)).toBe("unavailable");
+    // a menu write on a device without a menu, a group name that is no text, a partner nobody configured
+    expect(await s.controller.handleWrite("player.browse.source", "netRadio")).toBe("unavailable");
+    expect(await s.controller.handleWrite("multiroom.group.name", 7)).toBe("unavailable");
+    expect(await s.controller.handleWrite("multiroom.group.linkDevice", "10.9.9.9")).toBe("unavailable");
+    expect(s.client.calls.filter(c => c.method.startsWith("set") || c.method.startsWith("control"))).toEqual([]);
+    expect(s.debugs.filter(line => line.includes("not sent") || line.includes("write dropped"))).toHaveLength(5);
+  });
+
+  test("a menu key is handed to the menu engine — its outcome cannot be said, so it is never repeated elsewhere", async () => {
+    const s = setup({ zone: [{ id: "main", func_list: ["power"], input_list: ["net_radio"] }], netusb: {} }, ysp);
+    await s.controller.start();
+    expect(await s.controller.handleWrite("player.browse.source", "netRadio")).toBe("unclear");
+  });
+
+  test("the group writes say what became of them", async () => {
+    const features = { zone: [{ id: "main", func_list: ["power"] }], distribution: { version: 2 } };
+    const s = setup(features, ysp);
+    await s.controller.start();
+    expect(await s.controller.handleWrite("multiroom.group.name", "Wohnzimmer")).toBe("sent");
+    expect(await s.controller.handleWrite("multiroom.group.leave", true)).toBe("sent");
+    s.client.failWrites = new YxcRefusalError("/dist/setGroupName", 5);
+    expect(await s.controller.handleWrite("multiroom.group.name", "Küche")).toBe("refused");
+  });
+});
+
+// One resolution for a scene write on all three protocols: a whole number of 1 or more, or a title. MusicCast — the
+// first owner of `scene.recall` wherever it answers — recalled scene 2 for 1.5 and sent recallScene(0) for 0, while
+// YNCA and XML dropped both (review 2026-10-05, A26).
+describe("a scene write resolves the same way as on YNCA and XML (review 2026-10-05, A26)", () => {
+  const features = { zone: [{ id: "main", func_list: ["power", "scene"], input_list: ["hdmi1"], scene_num: 8 }] };
+
+  test.each([1.5, 0, -1, "1.5", "", true])("%j names no scene: nothing is sent, the write says so", async value => {
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("scene.recall", value)).toBe("unavailable");
+    expect(s.client.calls.filter(c => c.method === "recallScene")).toEqual([]);
+    expect(
+      s.debugs.some(line => line.startsWith(`living: scene "${String(value)}" is not one this device declares`)),
+    ).toBe(true);
+  });
+
+  test("a whole number, as number or text, recalls that scene", async () => {
+    const s = setup(features, { power: "on", input: "hdmi1" });
+    await s.controller.start();
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("scene.recall", 2)).toBe("sent");
+    expect(await s.controller.handleWrite("scene.recall", " 3 ")).toBe("sent");
+    expect(s.client.calls.filter(c => c.method === "recallScene")).toEqual([
+      { method: "recallScene", args: [2, "main"] },
+      { method: "recallScene", args: [3, "main"] },
+    ]);
   });
 });

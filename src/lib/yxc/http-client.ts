@@ -20,6 +20,20 @@ export function isWriteCommand(command: string): boolean {
 }
 
 /**
+ * Whether a failed request was ANSWERED by the device: a refusal (`response_code` ≠ 0) or an HTTP error
+ * status (`HttpStatusError` — a booting web server's 503, say). Either is proof the device is there, and
+ * for a write it is the device's no; only a request nobody answered is a reason to ask whether the device
+ * is still alive. The client rejects a non-2xx answer as `HttpStatusError` since the shared device reader
+ * (review 2026-10-05, E), and the controller took that for a lost connection.
+ *
+ * @param e the error a request ended with
+ * @returns true when the device answered
+ */
+export function answeredByDevice(e: unknown): boolean {
+  return e instanceof YxcRefusalError || e instanceof HttpStatusError;
+}
+
+/**
  * A switch value as the API spells it (`enable=true`) — one place instead of eighteen.
  *
  * @param on the switch value

@@ -56,7 +56,7 @@ import type { ControllerDepsBase } from "../controller";
 import { errText } from "../err-text";
 import { coerceBool, selfMap } from "../catalog/value-coerce";
 import { PollDropDetector } from "../lifecycle/poll-drop-detector";
-import { YxcRefusalError, YxcTransportError } from "./http-client";
+import { answeredByDevice, YxcTransportError } from "./http-client";
 import { splitZone, zonePrefix } from "./zones";
 import { presentSystemEntries, YXC_SYSTEM_CATALOG, type YxcSystemEntry } from "./system-catalog";
 import { keyedCommon, parentChannels } from "../catalog/types";
@@ -744,55 +744,64 @@ export class YxcDeviceController {
    * echoes and routed only the owner's ids here (audit 2026-09-29, A32: each controller re-checked
    * both, a path production never took).
    *
+   * Every path says what became of the write — never a forgotten `undefined`, which the handle reads as
+   * "unclear" and so never tries the next protocol (Y-04): a device-wide setting, a group change and a key
+   * stayed on MusicCast while YNCA could have carried them (review 2026-10-05, A3). A write this controller
+   * drops itself is `unavailable`, with a debug line naming the device, the datapoint and the reason (A46).
+   *
    * @param stateId the state id relative to the device
    * @param value the written value
+   * @returns what the device made of the write
    */
-  public handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> | WriteOutcome | void {
+  public async handleWrite(stateId: string, value: unknown): Promise<WriteOutcome> {
     if (stateId.startsWith("player.browse.")) {
-      this.browseEngine?.handleWrite(stateId, value);
-      return;
+      if (!this.browseEngine) {
+        this.deps.log.debug(`${this.deviceId}: ${stateId} — this device has no menu, write dropped`);
+        return "unavailable";
+      }
+      // The engine runs a menu key on its own and tells nobody what became of it, and a menu key sent
+      // twice acts twice — so nothing may be sent again through another protocol.
+      this.browseEngine.handleWrite(stateId, value);
+      return "unclear";
     }
-    // A scene TITLE resolves to its number via the shared device memory — the titles may
-    // have come over XML or YNCA while MusicCast owns the recall.
     const { zone: zoneKey, name } = splitZone(stateId);
-    if (name === "scene.recall" && typeof value === "string" && !/^\d+$/.test(value.trim())) {
+    // ONE resolution for every scene write, number or title, as on YNCA and XML: a whole number of 1 or more,
+    // or a title the zone reports (the titles may have come over XML or YNCA while MusicCast owns the recall).
+    // MusicCast recalled scene 2 for 1.5 and sent `recallScene(0)` for 0 (review 2026-10-05, A26).
+    if (name === "scene.recall") {
       const resolved = resolveSceneNumber(value, this.deps.probeMemory, zoneKey);
       if (resolved === undefined) {
-        // Same rule as the YNCA side: a write that goes nowhere leaves a trace.
+        // Same rule and words as the YNCA side: a write that goes nowhere leaves a trace.
         this.deps.log.debug(
-          `${this.deviceId}: scene "${value}" is unknown for ${zoneKey} — write dropped ` +
+          `${this.deviceId}: scene "${String(value)}" is not one this device declares — write dropped ` +
             `(known: ${
               knownScenes(this.deps.probeMemory, zoneKey)
                 .map(scene => scene.title)
                 .join(", ") || "none yet"
             })`,
         );
-        return;
+        return "unavailable";
       }
       value = resolved;
     }
     // Multiroom writes need controller state (the cached role), so they bypass the pure command map.
     if (stateId === "multiroom.group.leave") {
-      void this.leaveGroup();
-      return;
+      return this.leaveGroup();
     }
     if (stateId === "multiroom.group.linkDevice") {
-      void this.linkClient(String(value));
-      return;
+      return this.linkClient(String(value));
     }
     if (stateId === "multiroom.group.name") {
-      void this.renameGroup(value);
-      return;
+      return this.renameGroup(value);
     }
     // Device-wide settings are not part of the zone command map — they carry their own setters.
     const systemEntry = this.systemEntries.find(entry => entry.state === stateId);
     if (systemEntry) {
-      if (systemEntry.write) {
-        void this.applySystemWrite(systemEntry, value);
-      } else {
+      if (!systemEntry.write) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} is read-only on MusicCast — write dropped`);
+        return "unavailable";
       }
-      return;
+      return this.applySystemWrite(systemEntry, value);
     }
     // The on-screen remote: a word the zone DECLARES (cursor_list/menu_list) goes to the device
     // even where the shared vocabulary lacks it — help, mode and the four colour keys exist on
@@ -801,22 +810,24 @@ export class YxcDeviceController {
       const declared = this.zoneValueLists.get(zoneKey)?.[name];
       if (declared?.includes(value)) {
         const word = value;
-        void this.applyCommand(stateId, {
+        return this.applyCommand(stateId, {
           kind: "run",
           run: client =>
             name === "remote.cursor" ? client.controlCursor(word, zoneKey) : client.controlMenu(word, zoneKey),
         });
-        return;
       }
       // A zone that declares its keys takes those and no other — the shared vocabulary below is for a
       // zone without a list; before, a word the zone does not have still went out (audit 2026-09-29, C46).
       if (declared !== undefined) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} "${value}" is not a key this zone declares — not sent`);
-        return;
+        return "unavailable";
       }
     }
     const command = stateToYxc(stateId, value);
     if (!command) {
+      this.deps.log.debug(
+        `${this.deviceId}: ${stateId} — "${String(value)}" is no value MusicCast takes, write dropped`,
+      );
       return "unavailable";
     }
     // A function the zone reports not operable right now (YXC Basic §5.1 `disable_flags`: b0 volume,
@@ -828,10 +839,10 @@ export class YxcDeviceController {
       if (((this.disabledFlags.get(zone) ?? 0) & bit) !== 0) {
         this.deps.log.debug(`${this.deviceId}: ${stateId} is not operable on the device right now — not sent`);
         this.coalesced(`zone:${zone}`, () => this.refreshZone(zone));
-        return;
+        return "unavailable";
       }
     }
-    return this.applyCommand(stateId, command, value).then(outcome => (outcome === "failed" ? "unavailable" : outcome));
+    return this.applyCommand(stateId, command, value);
   }
 
   /** @returns the firmware (`system_version`) read on this connection, if any */
@@ -840,35 +851,49 @@ export class YxcDeviceController {
   }
 
   /**
-   * Apply a write to a device-wide setting and read the block back, so the state shows what
-   * the device actually took.
+   * Apply a write to a device-wide setting and read the block back — taken or refused — so the state shows
+   * what the device actually has.
    *
    * @param entry the system catalog entry
    * @param value the written value
+   * @returns what the device made of the write
    */
-  private async applySystemWrite(entry: YxcSystemEntry, value: unknown): Promise<void> {
+  private async applySystemWrite(entry: YxcSystemEntry, value: unknown): Promise<WriteOutcome> {
     // A switch reads the words a script writes ("false", "off", "0") for what they mean — the
     // entry's Boolean() would send every non-empty string as on.
     const input = entry.common.type === "boolean" ? coerceBool(value) : value;
     if (input === undefined) {
       this.deps.log.debug(`${this.deviceId}: ${entry.state} — "${String(value)}" is no switch value, write dropped`);
-      return;
+      return "unavailable";
     }
+    let outcome: WriteOutcome = "sent";
     try {
-      try {
-        await entry.write?.apply(this.deps.client, input);
-      } catch (e) {
-        this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errText(e)})`);
-        this.checkAliveAfter(e);
-        // A refused setting is read back like a taken one — the datapoint shows what the device
-        // kept (audit 2026-09-24, C28); a write nobody answered leaves it to the liveness check.
-        if (!(e instanceof YxcRefusalError)) {
-          return;
-        }
+      await entry.write?.apply(this.deps.client, input);
+    } catch (e) {
+      this.deps.log.warn(`${this.deviceId}: ${entry.state} could not be set (${errText(e)})`);
+      this.checkAliveAfter(e);
+      // A write nobody answered leaves it to the liveness check (and to the next protocol).
+      if (!answeredByDevice(e)) {
+        return "unavailable";
       }
+      // A refused setting is read back like a taken one — the datapoint shows what the device
+      // kept (audit 2026-09-24, C28).
+      outcome = "refused";
+    }
+    void this.readSystemBack(entry.state);
+    return outcome;
+  }
+
+  /**
+   * Read the device-wide settings back after a write to one of them.
+   *
+   * @param stateId the written setting, for the failure line
+   */
+  private async readSystemBack(stateId: string): Promise<void> {
+    try {
       this.applySystemStatus(await this.deps.client.getFuncStatus());
     } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: reading ${entry.state} back failed (${errText(e)})`);
+      this.deps.log.debug(`${this.deviceId}: reading ${stateId} back failed (${errText(e)})`);
     }
   }
 
@@ -1488,8 +1513,10 @@ export class YxcDeviceController {
    * then read the distribution back, so the datapoint shows what the device took (audit 2026-09-24, C8).
    *
    * @param value the written name
+   * @returns what the device made of the write
    */
-  private async renameGroup(value: unknown): Promise<void> {
+  private async renameGroup(value: unknown): Promise<WriteOutcome> {
+    let outcome: WriteOutcome = "unavailable";
     try {
       const name = typeof value === "string" ? value : undefined;
       if (name === undefined) {
@@ -1500,20 +1527,24 @@ export class YxcDeviceController {
         );
       } else {
         await this.deps.client.setGroupName(name);
+        outcome = "sent";
       }
-      await this.refreshDistribution();
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: renaming the group failed: ${errText(e)}`);
-      await this.refreshDistribution();
+      outcome = answeredByDevice(e) ? "refused" : "unavailable";
     }
+    await this.refreshDistribution();
+    return outcome;
   }
 
   /**
    * Leave the current MusicCast-Link group (YXC Advanced §9.1): a server stops distributing and
    * clears its server setup (§5.5, §5.2 with group ""); a client leaves as {@link leaveAsClient}.
    * Decided on the EFFECTIVE role (§9.2) — the role word flickers (audit 2026-09-24, C7).
+   *
+   * @returns what the devices made of it
    */
-  private async leaveGroup(): Promise<void> {
+  private async leaveGroup(): Promise<WriteOutcome> {
     try {
       await this.refreshDistribution();
       if (this.dist.role === "server") {
@@ -1535,9 +1566,11 @@ export class YxcDeviceController {
         await this.deps.client.setClientInfo({ group_id: "" });
       }
       await this.refreshDistribution();
+      return "sent";
     } catch (e) {
       // A user action failing must be visible — warn, like every other write command.
       this.deps.log.warn(`${this.deviceId}: leaveGroup failed: ${errText(e)}`);
+      return answeredByDevice(e) ? "refused" : "unavailable";
     }
   }
 
@@ -1645,14 +1678,15 @@ export class YxcDeviceController {
    * gets a random id (§9.1.2) (audit 2026-09-24, C7).
    *
    * @param target the address of the client device (a configured device)
+   * @returns what the devices made of it
    */
-  private async linkClient(target: string): Promise<void> {
+  private async linkClient(target: string): Promise<WriteOutcome> {
     try {
       const clientIp = (await resolveIPv4(target)) ?? target;
       const partner = this.deps.clientFor?.(clientIp) ?? this.deps.clientFor?.(target);
       if (!partner) {
         this.deps.log.warn(`${this.deviceId}: cannot link ${target} — not a known device`);
-        return;
+        return "unavailable";
       }
       const master = this.capabilities?.distribution;
       const joiningFeatures = parseYxcFeatures(await partner.getFeatures());
@@ -1669,7 +1703,7 @@ export class YxcDeviceController {
           this.deps.log.warn(
             `${this.deviceId}: cannot link ${target} — its MusicCast Link version ${version} is not one this device takes (${master.compatibleClients.join(", ")}); a firmware update of either brings them together`,
           );
-          return;
+          return "unavailable";
         }
       }
       await this.refreshDistribution();
@@ -1690,9 +1724,11 @@ export class YxcDeviceController {
       await this.deps.client.setServerInfo({ group_id: groupId, zone: "main", type: "add", client_list: [clientIp] });
       await this.deps.client.startDistribution(num);
       await this.awaitGroupBuilt();
+      return "sent";
     } catch (e) {
       // A user action failing must be visible — warn, like every other write command.
       this.deps.log.warn(`${this.deviceId}: linkClient(${target}) failed: ${errText(e)}`);
+      return answeredByDevice(e) ? "refused" : "unavailable";
     }
   }
 
@@ -1780,7 +1816,9 @@ export class YxcDeviceController {
       return { kind: "ok", status: await this.deps.client.getStatus(zone) };
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getStatus(${zone}) failed: ${errText(e)}`);
-      return e instanceof YxcRefusalError ? { kind: "refused", reason: errText(e) } : { kind: "unreachable" };
+      // An answer that says no — its `response_code`, or an HTTP error status of a booting web server — is
+      // proof the device is there; only silence is unreachable.
+      return answeredByDevice(e) ? { kind: "refused", reason: errText(e) } : { kind: "unreachable" };
     }
   }
 
@@ -1935,20 +1973,12 @@ export class YxcDeviceController {
    * @param stateId the written state id, for the failure log line
    * @param command the YXC command to apply
    * @param written the value that was written, when the state mirrors a device value
+   * @returns what the device made of the command
    */
-  private async applyCommand(
-    stateId: string,
-    command: YxcCommand,
-    written?: unknown,
-  ): Promise<"sent" | "refused" | "failed"> {
-    // Dropped with `void` by most callers: nothing may reject out of here.
-    let outcome: "sent" | "refused" | "failed" = "failed";
-    try {
-      outcome = await this.sendCommand(stateId, command);
-    } catch (e) {
-      this.deps.log.debug(`${this.deviceId}: write to ${stateId} failed: ${errText(e)}`);
-      return outcome;
-    }
+  private async applyCommand(stateId: string, command: YxcCommand, written?: unknown): Promise<WriteOutcome> {
+    // `sendCommand` answers every failure itself, so nothing rejects out of here (the outer guard that
+    // stood here could not be reached — review 2026-10-05, G).
+    const outcome = await this.sendCommand(stateId, command);
     // Confirmed behind the answer, so the caller learns at once what the device made of the command.
     void (async () => {
       try {
@@ -1971,9 +2001,10 @@ export class YxcDeviceController {
    *
    * @param stateId the written state id, for the failure log line
    * @param command the YXC command to apply
-   * @returns whether the device took it, refused it, or never answered (a failure is logged here)
+   * @returns whether the device took it, refused it (an answer: its `response_code` or an HTTP error status),
+   *   or it could not be sent — nobody answered, or this controller dropped it (a failure is logged here)
    */
-  private async sendCommand(stateId: string, command: YxcCommand): Promise<"sent" | "refused" | "failed"> {
+  private async sendCommand(stateId: string, command: YxcCommand): Promise<WriteOutcome> {
     try {
       switch (command.kind) {
         case "run":
@@ -1994,7 +2025,7 @@ export class YxcDeviceController {
             this.deps.log.warn(
               `${this.deviceId}: not writing ${stateId} — the device has not reported its equalizer bands yet`,
             );
-            break;
+            return "unavailable";
           }
           const next = { ...current, [band]: value };
           // Cache BEFORE the round-trip: a second band written straight afterwards
@@ -2019,7 +2050,7 @@ export class YxcDeviceController {
             if (this.mediaBlocks.includes("tuner")) {
               await this.refreshMediaSource("tuner");
             }
-            return "failed";
+            return "unavailable";
           }
           await this.deps.client.setFreq(this.lastTunerBand, command.value);
           break;
@@ -2070,8 +2101,8 @@ export class YxcDeviceController {
               ? this.routing.transport(command.zone, command.action)
               : this.routing.mode(command.zone, this.apiVersion, command);
           if ("notSent" in call) {
-            this.deps.log.debug(`${this.deviceId}: ${stateId} ignored — ${call.notSent}`);
-            break;
+            this.deps.log.debug(`${this.deviceId}: ${stateId} not sent — ${call.notSent}`);
+            return "unavailable";
           }
           await call.run(this.deps.client);
           break;
@@ -2080,7 +2111,7 @@ export class YxcDeviceController {
     } catch (e) {
       this.deps.log.warn(`${this.deviceId}: write to ${stateId} failed: ${errText(e)}`);
       this.checkAliveAfter(e);
-      return e instanceof YxcRefusalError ? "refused" : "failed";
+      return answeredByDevice(e) ? "refused" : "unavailable";
     }
     return "sent";
   }
