@@ -67,13 +67,33 @@ export class LogRing {
    * The lines about one device: those naming it (its id or address) and those naming no other
    * device (adapter-wide lines — discovery, the push receiver, the start).
    *
+   * A name counts only as a whole token: `rx-v473` is not named by `rx-v473-2: ready`, nor `10.0.0.5`
+   * by `10.0.0.50 answered` — a substring match gave a device the lines of every device whose id or
+   * address merely starts like its own (review 2026-10-05, B4).
+   *
    * @param mentions the strings that name this device (its id, its address)
    * @param others the strings that name the OTHER devices
    * @returns the lines, oldest first
    */
   public about(mentions: readonly string[], others: readonly string[]): LogLine[] {
-    const names = (line: LogLine, list: readonly string[]): boolean =>
-      list.some(text => text.length > 0 && line.msg.includes(text));
-    return this.lines.filter(line => names(line, mentions) || !names(line, others));
+    const mine = tokenPattern(mentions);
+    const theirs = tokenPattern(others);
+    return this.lines.filter(line => mine?.test(line.msg) === true || theirs?.test(line.msg) !== true);
   }
+}
+
+/**
+ * One pattern that finds any of the given names as a whole token. Ids and addresses are made of
+ * letters, digits, `-` and `_` (and the dots of an address, which end a token like any other
+ * character: `yamaha.0.rx-v473.power` names `rx-v473`), so a neighbouring letter, digit, `-` or `_`
+ * means the text is part of a longer name.
+ *
+ * @param names the names (empty ones are skipped)
+ * @returns the pattern, or undefined when there is no name to look for
+ */
+function tokenPattern(names: readonly string[]): RegExp | undefined {
+  const alternatives = names.filter(name => name.length > 0).map(name => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return alternatives.length > 0
+    ? new RegExp(`(?<![A-Za-z0-9_-])(?:${alternatives.join("|")})(?![A-Za-z0-9_-])`)
+    : undefined;
 }
