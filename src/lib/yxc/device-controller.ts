@@ -36,7 +36,6 @@ import {
   playQueueSlotEntries,
   STATION_SLOT_FIELDS,
   stationSlotEntries,
-  type PlayerTransport,
   type SlotEntry,
   type YxcCommand,
 } from "./command-mapper";
@@ -196,7 +195,7 @@ export function zoneNameFrom(nameText: unknown): string | undefined {
 
 import type { YxcClientLike } from "./client-contract";
 import { MEMORY_KEY } from "../lifecycle/memory-keys";
-import { PLAYER_CLEAR } from "../catalog/player-block";
+import { YxcPlayerRouting } from "./player-routing";
 
 /** Probe-memory key: per zone, the display scale (`db`/`numeric`) its `volume` datapoint was read in on. */
 const VOLUME_MODE_KEY = MEMORY_KEY.yxcVolumeMode;
@@ -290,8 +289,12 @@ export class YxcDeviceController {
   private readonly dropDetector = new PollDropDetector();
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
   private lastTunerBand = "fm";
-  /** Each zone's currently selected input, from its status — see {@link zoneListeningTo}. */
-  private readonly lastZoneInput = new Map<string, string>();
+  /** Which media source feeds which zone's "now playing" block, and which zone a recall goes to. */
+  private readonly routing = new YxcPlayerRouting({
+    zones: () => this.zones,
+    media: () => this.mediaBlocks,
+    emit: (id, value) => this.emit(id, value),
+  });
   /** Each zone's declared value lists (getFeatures), for the on-screen remote's write guard. */
   private readonly zoneValueLists = new Map<string, Readonly<Record<string, string[]>>>();
   /**
@@ -301,10 +304,6 @@ export class YxcDeviceController {
    */
   private capabilities: YxcCapabilities | undefined;
   private readonly zoneVolumeMode = new Map<string, string | undefined>();
-  /** The source the network player is currently on (netusb `input`, e.g. "net_radio"). */
-  private lastNetusbInput = "";
-  /** Which source currently feeds each zone's "now playing" block (v2.0.0 routing). */
-  private readonly zonePlayerBlock = new Map<string, "netusb" | "cd">();
   /** Each zone's last-seen equalizer bands, cached so one band write can supply the other two. */
   private readonly lastEqualizer = new Map<string, { low: number; mid: number; high: number }>();
   /** Whether the device reports MusicCast-Link distribution (gates the dist poll and objects). */
@@ -586,17 +585,8 @@ export class YxcDeviceController {
     this.hasPlayQueue = capabilities.netusbFuncs?.includes("play_queue") ?? false;
     await this.setupBrowse(capabilities);
     await this.refreshMedia();
-    // Seed the WHOLE player block with its cleared shape for every zone NOT playing a
-    // media source: the routing above only writes to listening zones, so on a device
-    // that starts on HDMI the block would sit valueless until the first media playback
-    // (live 2.0.0 deployment check — same gap the pre-release audit found for source).
-    if (this.mediaBlocks.includes("netusb") || this.mediaBlocks.includes("cd")) {
-      for (const zone of this.zones.length > 0 ? this.zones : ["main"]) {
-        if (!this.zonePlayerBlock.has(zone)) {
-          this.emitPlayerUpdates(zone, PLAYER_CLEAR);
-        }
-      }
-    }
+    // The WHOLE player block of every zone NOT playing a media source gets its cleared shape.
+    this.routing.clearIdle();
     await this.refreshLists();
     this.hasDistribution = capabilities.hasDistribution ?? false;
     if (this.hasDistribution) {
@@ -716,34 +706,6 @@ export class YxcDeviceController {
    */
   private remember<T>(key: string, probe: () => Promise<T>, isUsable?: (value: T) => boolean): Promise<T> {
     return this.deps.probeMemory.once(key, probe, isUsable);
-  }
-
-  /**
-   * The zone a recall should be routed to: recalling a favourite does not just start it, it
-   * also switches THAT zone to the source. Sending everything to the main zone (as this did
-   * before) means someone listening in zone 2 gets their favourite in the living room
-   * instead — and the main zone switched away from whatever it was playing.
-   *
-   * The zone actually listening to the source is the right target; the main zone is the
-   * fallback when nothing matches, which is also every single-zone device.
-   *
-   * @param source the input the recall belongs to (a network source, or "tuner")
-   * @returns the zone to route the recall to
-   */
-  private zoneListeningTo(source: string): string {
-    if (!source) {
-      return "main";
-    }
-    // Main first: on a device where several zones share the source, it is the natural target.
-    if (this.lastZoneInput.get("main") === source) {
-      return "main";
-    }
-    for (const [zone, input] of this.lastZoneInput) {
-      if (input === source) {
-        return zone;
-      }
-    }
-    return "main";
   }
 
   /**
@@ -962,7 +924,7 @@ export class YxcDeviceController {
       this.deps.client,
       inputs,
       this.cover,
-      input => this.zoneListeningTo(input),
+      input => this.routing.recallZone(input),
       yxcListLanguage(this.deps.systemLanguage),
     );
     this.browseDriver = driver;
@@ -1016,7 +978,7 @@ export class YxcDeviceController {
     // states of the zone listening to that source, and nothing is asked of the device.
     for (const { block, info } of mediaTimeUpdates(event)) {
       if (this.mediaBlocks.includes(block)) {
-        this.routePlayerBlock(block, parseYxcPlayInfo(info, block, this.cover));
+        this.routing.route(block, parseYxcPlayInfo(info, block, this.cover));
       }
     }
     // The favourites/recently-played lists announce their changes as flags in the push.
@@ -1464,72 +1426,10 @@ export class YxcDeviceController {
         return;
       }
       const source: "netusb" | "cd" = block === "cd" ? "cd" : "netusb";
-      const updates = parseYxcPlayInfo(info, source, this.cover);
-      if (source === "netusb") {
-        // The id, not the datapoint: `player.source` shows the input's name (C40), the zones match ids.
-        const active = (info as { input?: unknown } | null)?.input;
-        if (typeof active === "string") {
-          this.lastNetusbInput = active;
-        }
-      }
-      this.routePlayerBlock(source, updates);
+      this.routing.notePlayInfo(source, info);
+      this.routing.route(source, parseYxcPlayInfo(info, source, this.cover));
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${errText(e)}`);
-    }
-  }
-
-  /**
-   * Which player source a zone's input feeds into its "now playing" block: `cd` for
-   * the disc input, `netusb` when the zone's input IS the network player's active
-   * source. Anything else (HDMI, analog, tuner) plays no media block.
-   *
-   * @param input the zone's currently selected input
-   * @returns the feeding source, or undefined when the input is no media player
-   */
-  private playerBlockFor(input: string | undefined): "netusb" | "cd" | undefined {
-    if (input === "cd" && this.mediaBlocks.includes("cd")) {
-      return "cd";
-    }
-    if (input !== undefined && input !== "" && input === this.lastNetusbInput && this.mediaBlocks.includes("netusb")) {
-      return "netusb";
-    }
-    return undefined;
-  }
-
-  /**
-   * Route one source's play info into the "now playing" block of every zone listening
-   * to it (v2.0.0): main flat, the other zones under their multiroom folder. A zone
-   * that LEFT the source gets its block cleared once — the previous program's metadata
-   * must not linger under a zone that no longer plays it. Drive-own `player.cd.*`
-   * extras are device-global and emitted once, unprefixed.
-   *
-   * @param block the source the updates came from
-   * @param updates the parsed flat player updates
-   */
-  private routePlayerBlock(block: "netusb" | "cd", updates: StateValue[]): void {
-    const zones = this.zones.length > 0 ? this.zones : ["main"];
-    for (const zone of zones) {
-      const expected = this.playerBlockFor(this.lastZoneInput.get(zone));
-      const previous = this.zonePlayerBlock.get(zone);
-      if (previous === block && expected !== block) {
-        // The zone left OUR source — clear; the new source's refresh fills its own values.
-        this.zonePlayerBlock.delete(zone);
-        this.emitPlayerUpdates(zone, PLAYER_CLEAR);
-      }
-      if (expected === block) {
-        if (previous !== block) {
-          this.zonePlayerBlock.set(zone, block);
-          if (previous !== undefined) {
-            this.emitPlayerUpdates(zone, PLAYER_CLEAR);
-          }
-        }
-        this.emitPlayerUpdates(zone, updates);
-      }
-    }
-    for (const update of updates) {
-      if (update.id.startsWith("player.cd.")) {
-        this.emit(update.id, update.value);
-      }
     }
   }
 
@@ -1559,45 +1459,6 @@ export class YxcDeviceController {
       }
       for (const { id, value } of surface.values) {
         this.emit(id, value);
-      }
-    }
-  }
-
-  /**
-   * Re-evaluate which source feeds a zone's player block after ITS input changed:
-   * clear the block when the zone left a media source, and fetch the joined source's
-   * play info right away so the block fills now, not at the next sweep.
-   *
-   * @param zone the zone whose input just changed
-   */
-  private retargetZonePlayer(zone: string): void {
-    const expected = this.playerBlockFor(this.lastZoneInput.get(zone));
-    const previous = this.zonePlayerBlock.get(zone);
-    if (previous === expected) {
-      return;
-    }
-    if (previous !== undefined) {
-      this.zonePlayerBlock.delete(zone);
-      this.emitPlayerUpdates(zone, PLAYER_CLEAR);
-    }
-    if (expected !== undefined) {
-      // routePlayerBlock (inside this refresh) records the zone's new source.
-      void this.refreshMediaSource(expected);
-    }
-  }
-
-  /**
-   * Emit flat player updates into one zone's block (main flat, zones prefixed),
-   * skipping the device-global drive extras.
-   *
-   * @param zone the target zone
-   * @param updates the flat player updates
-   */
-  private emitPlayerUpdates(zone: string, updates: readonly StateValue[]): void {
-    const prefix = zonePrefix(zone);
-    for (const update of updates) {
-      if (!update.id.startsWith("player.cd.")) {
-        this.emit(`${prefix}${update.id}`, update.value);
       }
     }
   }
@@ -1971,8 +1832,7 @@ export class YxcDeviceController {
       // and its transport buttons follow. A future status field ending in "input" would
       // have bent that routing silently.
       if (update.id === `${zonePrefix(zone)}input` && typeof update.value === "string") {
-        const previous = this.lastZoneInput.get(zone);
-        this.lastZoneInput.set(zone, update.value);
+        const previous = this.routing.noteInput(zone, update.value);
         if (previous === "mc_link" && update.value !== "mc_link" && this.dist.role === "client") {
           void this.leaveAfterInputChange();
         }
@@ -1980,8 +1840,12 @@ export class YxcDeviceController {
           // The zone changed its input — re-target its player block NOW. Media
           // pushes alone cannot cover this: a zone leaving a still-playing source
           // (or joining one another zone already plays) changes nothing about the
-          // source itself, so no netusb/cd push ever arrives (2.0.0 review finding).
-          this.retargetZonePlayer(zone);
+          // source itself, so no netusb/cd push ever arrives (2.0.0 review finding). The joined
+          // source's play info is read right away, so the block fills now, not at the next sweep.
+          const joined = this.routing.retarget(zone);
+          if (joined !== undefined) {
+            void this.refreshMediaSource(joined);
+          }
         }
       }
     }
@@ -2162,7 +2026,7 @@ export class YxcDeviceController {
         case "tunerPreset": {
           // Shared-list devices recall on `common`; separate-list devices on the current band.
           const band = this.tunerFeatures?.presetType === "common" ? "common" : this.lastTunerBand;
-          await this.deps.client.recallTunerPreset(band, command.value, this.zoneListeningTo("tuner"));
+          await this.deps.client.recallTunerPreset(band, command.value, this.routing.recallZone("tuner"));
           break;
         }
         case "tunerClear": {
@@ -2184,10 +2048,10 @@ export class YxcDeviceController {
           break;
         case "netusbPreset":
           this.lastPresetRecall = { num: command.value, at: Date.now() };
-          await this.deps.client.recallPreset(command.value, this.zoneListeningTo(this.lastNetusbInput));
+          await this.deps.client.recallPreset(command.value, this.routing.recallZone(this.routing.networkSource));
           break;
         case "netusbRecent":
-          await this.deps.client.recallRecentItem(command.value, this.zoneListeningTo(this.lastNetusbInput));
+          await this.deps.client.recallRecentItem(command.value, this.routing.recallZone(this.routing.networkSource));
           break;
         case "volume": {
           // A zone without a settled display scale carries the device's own step count already
@@ -2198,31 +2062,18 @@ export class YxcDeviceController {
           await this.deps.client.setVolumeTo(raw, command.zone);
           break;
         }
-        case "playerTransport": {
-          // The unified block's buttons act on whatever the ZONE is playing (v2.0.0) —
-          // derived FRESH from the zone's input, never from the routing map: a stale
-          // map entry would send the command to the source the zone just left.
-          const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
-          if (block === undefined) {
-            this.deps.log.debug(`${this.deviceId}: ${stateId} ignored — ${command.zone} is not playing a media source`);
-            break;
-          }
-          await this.runTransport(block, command.action);
-          break;
-        }
+        case "playerTransport":
         case "playerMode": {
-          // Only the network player takes the modes directly (API 1.19+); a CD keeps its toggles.
-          const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
-          if (block !== "netusb" || this.apiVersion === undefined || this.apiVersion < 1.19) {
-            this.deps.log.debug(`${this.deviceId}: ${stateId} ignored — only the network player sets it directly`);
+          // The unified block's keys and modes act on whatever the ZONE is playing (v2.0.0).
+          const call =
+            command.kind === "playerTransport"
+              ? this.routing.transport(command.zone, command.action)
+              : this.routing.mode(command.zone, this.apiVersion, command);
+          if ("notSent" in call) {
+            this.deps.log.debug(`${this.deviceId}: ${stateId} ignored — ${call.notSent}`);
             break;
           }
-          if (command.repeat !== undefined) {
-            await this.deps.client.setNetRepeat(command.repeat);
-          }
-          if (command.shuffle !== undefined) {
-            await this.deps.client.setNetShuffle(command.shuffle);
-          }
+          await call.run(this.deps.client);
           break;
         }
       }
@@ -2317,7 +2168,7 @@ export class YxcDeviceController {
         return;
       case "playerTransport":
       case "playerMode": {
-        const block = this.playerBlockFor(this.lastZoneInput.get(command.zone));
+        const block = this.routing.blockOf(command.zone);
         if (block !== undefined) {
           await this.refreshMediaSource(block);
         }
@@ -2352,24 +2203,6 @@ export class YxcDeviceController {
         }
         return;
       }
-    }
-  }
-
-  /**
-   * Run one transport action on the given player source: the playback words through the one
-   * `setPlayback` endpoint of that player, repeat and shuffle through its toggles.
-   *
-   * @param block the source the zone is playing
-   * @param action the transport action
-   */
-  private async runTransport(block: "netusb" | "cd", action: PlayerTransport): Promise<void> {
-    const client = this.deps.client;
-    if (action === "repeatToggle") {
-      await client.toggleRepeat(block);
-    } else if (action === "shuffleToggle") {
-      await client.toggleShuffle(block);
-    } else {
-      await client.setPlayback(block, action === "prev" ? "previous" : action);
     }
   }
 }

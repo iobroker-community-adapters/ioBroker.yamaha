@@ -2015,84 +2015,57 @@ describe("YxcDeviceController recall routing (which zone gets the favourite)", (
   const twoZones = {
     system: {},
     zone: [
-      { id: "main", func_list: ["power"], input_list: ["hdmi1", "net_radio"] },
-      { id: "zone2", func_list: ["power"], input_list: ["net_radio"] },
+      { id: "main", func_list: ["power"], input_list: ["hdmi1", "net_radio", "tuner"] },
+      { id: "zone2", func_list: ["power"], input_list: ["hdmi1", "net_radio", "tuner"] },
     ],
     netusb: {},
+    tuner: { func_list: ["fm"], preset: { type: "common", num: 40 } },
   };
 
-  /** Set up a two-zone device where main plays HDMI and zone 2 plays net radio. */
-  function twoZoneSetup(): Promise<{ controller: YxcDeviceController; client: FakeClient }> {
-    const client = makeFakeClient(twoZones, { response_code: 0 });
-    // getStatus answers per zone via the recorded call; the controller stores each zone's input.
-    const controller = new YxcDeviceController("living", {
-      gate: testGate(),
-      pushLiveness: new PushLiveness(),
-      probeMemory: new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
-      client,
-      registerPush: () => () => {},
-      scheduleKeepalive: () => () => {},
-      upsertObject: async () => {},
-      setStateAck: () => {},
-      log: silentLog,
-    });
-    return Promise.resolve({ controller, client });
+  /**
+   * A started two-zone device, both zones switched on — through the public surface only: the zones report their
+   * inputs, the network player its source (the routing has its own module and suite, `player-routing.test.ts`).
+   *
+   * @param main the main zone's input
+   * @param zone2 zone 2's input
+   * @param network the network player's source
+   * @returns the started setup, its calls cleared
+   */
+  async function started(main: string, zone2: string, network: string): Promise<ReturnType<typeof setup>> {
+    const s = setup(twoZones, { power: "on", input: main });
+    s.client.statusByZone = { main: { power: "on", input: main }, zone2: { power: "on", input: zone2 } };
+    s.client.playInfo = { input: network, playback: "play" };
+    await s.controller.start();
+    s.client.calls.length = 0;
+    return s;
   }
 
   test("a favourite goes to the zone that is listening to the network player, not always to main", async () => {
-    const { controller, client } = await twoZoneSetup();
-    // Main is on HDMI, zone 2 on net radio — and the network player plays net radio.
-    const inner = controller as unknown as {
-      lastZoneInput: Map<string, string>;
-      lastNetusbInput: string;
-      applyCommand(stateId: string, command: unknown): Promise<void>;
-    };
-    inner.lastZoneInput.set("main", "hdmi1");
-    inner.lastZoneInput.set("zone2", "net_radio");
-    inner.lastNetusbInput = "net_radio";
-    await inner.applyCommand("player.netPlayer.preset", { kind: "netusbPreset", value: 3 });
-    expect(client.calls).toContainEqual({ method: "recallPreset", args: [3, "zone2"] });
+    const s = await started("hdmi1", "net_radio", "net_radio");
+    void s.controller.handleWrite("player.netPlayer.preset", 3);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallPreset", args: [3, "zone2"] });
   });
 
   test("main wins when it is listening to the same source", async () => {
-    const { controller, client } = await twoZoneSetup();
-    const inner = controller as unknown as {
-      lastZoneInput: Map<string, string>;
-      lastNetusbInput: string;
-      applyCommand(stateId: string, command: unknown): Promise<void>;
-    };
-    inner.lastZoneInput.set("main", "net_radio");
-    inner.lastZoneInput.set("zone2", "net_radio");
-    inner.lastNetusbInput = "net_radio";
-    await inner.applyCommand("player.netPlayer.preset", { kind: "netusbPreset", value: 1 });
-    expect(client.calls).toContainEqual({ method: "recallPreset", args: [1, "main"] });
+    const s = await started("net_radio", "net_radio", "net_radio");
+    void s.controller.handleWrite("player.netPlayer.preset", 1);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallPreset", args: [1, "main"] });
   });
 
   test("falls back to main when nothing is listening to that source (every single-zone device)", async () => {
-    const { controller, client } = await twoZoneSetup();
-    const inner = controller as unknown as {
-      lastZoneInput: Map<string, string>;
-      lastNetusbInput: string;
-      applyCommand(stateId: string, command: unknown): Promise<void>;
-    };
-    inner.lastZoneInput.set("main", "hdmi1");
-    inner.lastNetusbInput = "";
-    await inner.applyCommand("player.netPlayer.recallRecent", { kind: "netusbRecent", value: 2 });
-    expect(client.calls).toContainEqual({ method: "recallRecentItem", args: [2, "main"] });
+    const s = await started("hdmi1", "hdmi1", "");
+    void s.controller.handleWrite("player.netPlayer.recallRecent", 2);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallRecentItem", args: [2, "main"] });
   });
 
   test("a tuner preset goes to the zone listening to the tuner", async () => {
-    const { controller, client } = await twoZoneSetup();
-    const inner = controller as unknown as {
-      lastZoneInput: Map<string, string>;
-      tunerFeatures: { presetType: string; bands: string[] };
-      applyCommand(stateId: string, command: unknown): Promise<void>;
-    };
-    inner.lastZoneInput.set("main", "hdmi1");
-    inner.lastZoneInput.set("zone2", "tuner");
-    inner.tunerFeatures = { presetType: "common", bands: ["fm"] };
-    await inner.applyCommand("tuner.preset", { kind: "tunerPreset", value: 4 });
-    expect(client.calls).toContainEqual({ method: "recallTunerPreset", args: ["common", 4, "zone2"] });
+    const s = await started("hdmi1", "tuner", "net_radio");
+    void s.controller.handleWrite("tuner.preset", 4);
+    await flush();
+    expect(s.client.calls).toContainEqual({ method: "recallTunerPreset", args: ["common", 4, "zone2"] });
   });
 });
 
