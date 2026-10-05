@@ -104,6 +104,12 @@ export interface YxcCapabilities {
   systemFuncs?: string[];
   /** The value lists the SYSTEM block declares (`hdmi_standby_through_list`), keyed by their id. */
   systemLists?: Record<string, string[]>;
+  /**
+   * Which player each input feeds — `system.input_list[].play_info_type` (YXC Basic §4.2: `none`, `tuner`, `netusb`,
+   * `cd`), by input id. It decides which zone gets a "now playing" block (review 2026-10-05, A48). Absent in a memory
+   * from an earlier release, and on a device that does not declare it.
+   */
+  playInfoTypes?: Record<string, string>;
   /** The counts the SYSTEM block declares (`speaker_pattern_num`, `video_preset_num`), keyed by their id. */
   systemCounts?: Record<string, number>;
 }
@@ -261,6 +267,26 @@ function parseClockFeatures(clock: unknown): YxcClockFeatures | undefined {
 }
 
 /**
+ * Which player each input feeds, from the system block's input list.
+ *
+ * @param list `system.input_list` (untrusted)
+ * @returns input id → `play_info_type`, or undefined when the list declares none
+ */
+function playInfoTypesOf(list: unknown): Record<string, string> | undefined {
+  const types: Record<string, string> = {};
+  for (const entry of Array.isArray(list) ? list : []) {
+    const { id, play_info_type: type } = (typeof entry === "object" && entry !== null ? entry : {}) as {
+      id?: unknown;
+      play_info_type?: unknown;
+    };
+    if (typeof id === "string" && typeof type === "string") {
+      types[id] = type;
+    }
+  }
+  return Object.keys(types).length > 0 ? types : undefined;
+}
+
+/**
  * Parse a YXC getFeatures response into zones (with their functions and inputs)
  * and the media blocks the device offers. Robust against a malformed response.
  *
@@ -310,11 +336,13 @@ export function parseYxcFeatures(response: unknown): YxcCapabilities {
       systemCounts[key] = value;
     }
   }
+  const playInfoTypes = playInfoTypesOf(system.input_list);
   return {
     systemFuncs: stringList(system.func_list),
     systemRanges: parseRanges(system.range_step),
     ...(Object.keys(systemLists).length > 0 ? { systemLists } : {}),
     ...(Object.keys(systemCounts).length > 0 ? { systemCounts } : {}),
+    ...(playInfoTypes ? { playInfoTypes } : {}),
     zones,
     media,
     netusbFuncs:

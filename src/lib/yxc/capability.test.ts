@@ -70,6 +70,16 @@ describe("parseYxcFeatures", () => {
     expect(parseYxcFeatures({ zone: [{ id: "main" }], tuner: { func_list: ["fm"] } }).tuner?.ranges).toBeUndefined();
   });
 
+  // `system.input_list[].play_info_type` (YXC Basic §4.2) — which zone gets a "now playing" block (review 2026-10-05,
+  // A48).
+  test("reads which player each input feeds", () => {
+    const types = parseYxcFeatures(rxV685).playInfoTypes;
+    expect(types).toMatchObject({ net_radio: "netusb", spotify: "netusb", tuner: "tuner", hdmi1: "none" });
+    expect(parseYxcFeatures({ zone: [{ id: "main" }], system: { input_list: [{ id: "x" }] } }).playInfoTypes).toBe(
+      undefined,
+    );
+  });
+
   test("returns empty capabilities for a malformed response", () => {
     expect(parseYxcFeatures(null)).toEqual({ zones: [], media: [], hasDistribution: false });
     expect(parseYxcFeatures({ zone: "nope" })).toMatchObject({ zones: [], media: [], hasDistribution: false });

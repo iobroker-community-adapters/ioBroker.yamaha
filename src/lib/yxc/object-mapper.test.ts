@@ -1,4 +1,12 @@
-import { mapYxcToObjects, rawVolumeFor, shownVolumeFor, volumeScaleOf, yxcDeclaredAbsent } from "./object-mapper";
+import {
+  mapYxcToObjects,
+  playerZones,
+  rawVolumeFor,
+  shownVolumeFor,
+  volumeScaleOf,
+  yxcDeclaredAbsent,
+} from "./object-mapper";
+import rxA2070v287 from "./__fixtures__/RX_A2070_287_208.json";
 import { parseYxcFeatures } from "./capability";
 import { YXC_MENU_VALUES } from "./remote";
 import rxA2070 from "./__fixtures__/RX_A2070_v1.json";
@@ -854,5 +862,51 @@ describe("value lists for the words MusicCast reports (readable values, 2026-09-
     expect(common(objs, "tuner.presetSave")).toMatchObject({ role: "level", read: true, write: true });
     expect(common(objs, "tuner.searchUp")?.desc).toBeDefined();
     expect(common(objs, "tuner.searchDown")?.desc).toBeDefined();
+  });
+});
+
+// A zone that cannot select a media player's input has nothing to show in a "now playing" block (review 2026-10-05,
+// A48; Y-23) — the review's proof: RX-A2070 zone 4 (AV1–AV7, V-AUX) carried 20 such datapoints.
+describe("a player block only where the zone can play a media source (A48)", () => {
+  test("RX-A2070: zone 4 gets no player block; main, zone 2 and zone 3 keep theirs", () => {
+    const caps = parseYxcFeatures(rxA2070v287);
+    expect(caps.zones.find(zone => zone.id === "zone4")?.inputs).toEqual([
+      "av1",
+      "av2",
+      "av3",
+      "av4",
+      "av5",
+      "av6",
+      "av7",
+      "v_aux",
+    ]);
+    const objectIds = mapYxcToObjects(caps).map(o => o.id);
+    expect(objectIds.filter(id => id.startsWith("multiroom.zone4.player"))).toEqual([]);
+    expect(objectIds).toEqual(
+      expect.arrayContaining(["player.playback", "multiroom.zone2.player.playback", "multiroom.zone3.player.playback"]),
+    );
+    // The zone itself stays — power, volume, input.
+    expect(objectIds).toEqual(expect.arrayContaining(["multiroom.zone4.power", "multiroom.zone4.input"]));
+    expect(playerZones(caps)).toEqual(["main", "zone2", "zone3"]);
+  });
+
+  test("the inputs' play info types decide: netusb and cd feed a block, tuner and none do not", () => {
+    const zones = [
+      { id: "main", funcs: ["power"], inputs: ["net_radio", "hdmi1"] },
+      { id: "zone2", funcs: ["power"], inputs: ["cd"] },
+      { id: "zone3", funcs: ["power"], inputs: ["tuner", "main_sync"] },
+    ];
+    const playInfoTypes = { net_radio: "netusb", hdmi1: "none", cd: "cd", tuner: "tuner", main_sync: "none" };
+    expect(playerZones({ zones, media: ["netusb", "cd", "tuner"], playInfoTypes })).toEqual(["main", "zone2"]);
+    // Without a media player no zone has a block.
+    expect(playerZones({ zones, media: ["tuner"], playInfoTypes })).toEqual([]);
+  });
+
+  test("a device that declares no play info types (a memory of an earlier release) keeps a block on every zone", () => {
+    const zones = [
+      { id: "main", funcs: ["power"], inputs: [] },
+      { id: "zone2", funcs: ["power"], inputs: ["av1"] },
+    ];
+    expect(playerZones({ zones, media: ["netusb"] })).toEqual(["main", "zone2"]);
   });
 });

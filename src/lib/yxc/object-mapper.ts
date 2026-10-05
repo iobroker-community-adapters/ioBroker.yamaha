@@ -89,6 +89,28 @@ function actionState(
   };
 }
 
+/** The media sources that feed a zone's "now playing" block (v2.0.0) — the network player and the CD drive. */
+const PLAYER_SOURCES: readonly string[] = ["netusb", "cd"];
+
+/**
+ * The zones that carry a "now playing" block: the device has a media player, and the zone can select an input that
+ * plays through it (`play_info_type` netusb or cd). RX-A2070 zone 4 (AV1–AV7, V-AUX only) got 20 datapoints that
+ * could never show anything (review 2026-10-05, A48; Y-23). A device that declares no play info types — a memory from
+ * an earlier release — keeps the block on every zone, as before.
+ *
+ * @param capabilities the parsed YXC capabilities
+ * @returns the zone ids, in the device's order
+ */
+export function playerZones(capabilities: YxcCapabilities): string[] {
+  if (!capabilities.media.some(block => PLAYER_SOURCES.includes(block))) {
+    return [];
+  }
+  const types = capabilities.playInfoTypes;
+  return capabilities.zones
+    .filter(zone => !types || zone.inputs.some(input => PLAYER_SOURCES.includes(types[input] ?? "")))
+    .map(zone => zone.id);
+}
+
 /**
  * Append a zone's "now playing" block (channel + the shared player states) under a
  * dotted prefix — once for the main zone and once per further zone.
@@ -591,19 +613,14 @@ export function mapYxcToObjects(
       signal("bitrate", tName("audioBitrate"), "number", "value", tName("descAudioBitrate"));
     }
   }
-  if (capabilities.media.includes("netusb") || capabilities.media.includes("cd")) {
-    // ONE "now playing" block per zone (v2.0.0): the controller feeds it from
-    // whichever source the zone is listening to (netusb or cd) and clears it on a
-    // source switch. The source folders below keep only their genuinely own states.
-    // setRepeat/setShuffle exist from API 1.19 on the network player (aiomusiccast, Home Assistant; C37).
-    const settableModes =
-      capabilities.media.includes("netusb") && capabilities.apiVersion !== undefined && capabilities.apiVersion >= 1.19;
-    pushPlayerBlock(objects, "player", settableModes);
-    for (const zone of capabilities.zones) {
-      if (zone.id !== "main") {
-        pushPlayerBlock(objects, `${zonePrefix(zone.id)}player`, settableModes);
-      }
-    }
+  // ONE "now playing" block per zone that can play a media source (v2.0.0): the controller feeds it from whichever
+  // source the zone is listening to (netusb or cd) and clears it on a source switch. The source folders below keep
+  // only their genuinely own states. setRepeat/setShuffle exist from API 1.19 on the network player (aiomusiccast,
+  // Home Assistant; C37).
+  const settableModes =
+    capabilities.media.includes("netusb") && capabilities.apiVersion !== undefined && capabilities.apiVersion >= 1.19;
+  for (const zoneId of playerZones(capabilities)) {
+    pushPlayerBlock(objects, `${zonePrefix(zoneId)}player`, settableModes);
   }
   if (capabilities.media.includes("netusb")) {
     objects.push({ id: "player.netPlayer", type: "channel", common: channelCommon("netPlayer") });
