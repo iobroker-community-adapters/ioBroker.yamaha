@@ -514,7 +514,7 @@ describe("BrowseEngine remote pad", () => {
   });
 
   it("does not take the browse lock: a held direction key keeps going through", async () => {
-    // `run()` serialises menu operations and DROPS the second one while the first is in
+    // `start()` serialises menu operations and DROPS the second one while the first is in
     // flight — on a pad that would swallow presses, and it would raise `busy` on a surface
     // nobody is browsing. Pacing on the wire is the command gate's job.
     const { engine, driver, emitted } = setup();

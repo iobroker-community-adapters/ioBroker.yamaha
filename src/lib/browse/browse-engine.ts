@@ -172,8 +172,8 @@ export class BrowseEngine {
   /**
    * Handle a user write to the on-screen remote (`remote.cursor`, `remote.menu`).
    *
-   * Deliberately NOT through {@link run}: a remote key is a single press, not a menu
-   * operation. `run` serialises and DROPS a second write while one is in flight, which on a
+   * Deliberately NOT through {@link start}: a remote key is a single press, not a menu
+   * operation. `start` serialises and DROPS a second write while one is in flight, which on a
    * pad — where the user holds a direction — would swallow presses; and it would raise `busy`
    * on a surface nobody is browsing. Ordering and pacing on the wire are the command gate's
    * job, and it does that for every transport already.
