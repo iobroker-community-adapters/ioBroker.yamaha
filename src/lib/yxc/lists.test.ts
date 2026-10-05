@@ -6,8 +6,12 @@ import {
   parseYxcRecentList,
   parseYxcTunerPresetLists,
   playQueueCounters,
+  playlistSlotEntries,
+  playQueueSlotEntries,
+  netusbSlotEntries,
   stationSlotEntries,
 } from "./lists";
+import { distributionSummary } from "./distribution";
 
 describe("preset/recent selection (musiccast-adapter parity)", () => {
   test("parseYxcPresetList keeps stored slots with their number, skips empty ones", () => {
@@ -148,5 +152,39 @@ describe("device lists as slot entries", () => {
       { id: "player.netPlayer.queueLength", value: 0 },
       { id: "player.netPlayer.queuePosition", value: 0 },
     ]);
+  });
+});
+
+// Each list is read once; the JSON and the slots follow the same rule of an empty slot (review 2026-10-05, DRY).
+describe("one read per list — the JSON and the slots agree on an empty slot", () => {
+  test("a recent entry of input `unknown` is empty in both", () => {
+    const info = {
+      recent_info: [
+        { input: "unknown", text: "x" },
+        { input: "server", text: "Song" },
+      ],
+    };
+    expect(JSON.parse(String(parseYxcRecentList(info)?.value))).toEqual([{ num: 2, input: "server", name: "Song" }]);
+    expect(netusbSlotEntries(info.recent_info)).toEqual([undefined, { name: "Song", input: "SERVER" }]);
+  });
+
+  test("a playlist and a queue track without a name are empty in both", () => {
+    const info = { name_list: ["a", "", "  ", "b"] };
+    expect(JSON.parse(String(parseYxcPlaylistNames(info)?.value))).toEqual([
+      { num: 1, name: "a" },
+      { num: 4, name: "b" },
+    ]);
+    expect(playlistSlotEntries(info)).toEqual([{ name: "a" }, undefined, undefined, { name: "b" }]);
+    expect(playQueueSlotEntries({ track_info: [{ text: "" }, { text: "T" }] })).toEqual([undefined, { name: "T" }]);
+  });
+
+  test("a linked device without an address is no roster member and an empty slot", () => {
+    const info = {
+      role: "server",
+      group_id: "ab12",
+      client_list: ["10.0.0.2", { ip_address: "" }, { data_type: "x" }],
+    };
+    expect(clientSlotEntries(info)).toEqual([{ ip: "10.0.0.2" }, undefined, undefined]);
+    expect(distributionSummary(info).clients).toEqual(["10.0.0.2"]);
   });
 });

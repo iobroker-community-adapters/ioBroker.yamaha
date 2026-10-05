@@ -1,4 +1,5 @@
 import type { StateValue } from "../types";
+import { clientAddresses } from "./lists";
 
 /**
  * A device's part in a MusicCast Link group, from getDistributionInfo (YXC Advanced §5.1). Parsers only — split out of
@@ -68,17 +69,8 @@ export function distributionSummary(info: unknown): DistributionSummary {
   const d = typeof info === "object" && info !== null ? (info as Record<string, unknown>) : {};
   const groupId = typeof d.group_id === "string" ? d.group_id : "";
   const inGroup = /[1-9a-f]/i.test(groupId);
-  const clients = (Array.isArray(d.client_list) ? d.client_list : [])
-    .map(entry =>
-      typeof entry === "string"
-        ? entry
-        : typeof entry === "object" &&
-            entry !== null &&
-            typeof (entry as { ip_address?: unknown }).ip_address === "string"
-          ? (entry as { ip_address: string }).ip_address
-          : "",
-    )
-    .filter(ip => ip.length > 0);
+  // The one read of the roster (`lists.ts`) — the slot datapoints take the same list (review 2026-10-05, DRY).
+  const clients = (clientAddresses(info) ?? []).filter((ip): ip is string => ip !== undefined);
   const reported = typeof d.role === "string" ? d.role : "none";
   const role = inGroup && clients.length > 0 ? "server" : !inGroup && reported === "client" ? "none" : reported;
   const status = role === "server" && typeof d.status === "string" ? d.status.trim() : undefined;
