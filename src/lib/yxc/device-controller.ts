@@ -1594,6 +1594,7 @@ export class YxcDeviceController {
       return answer.kind === "refused";
     }
     try {
+      await this.learnVolumeMode(zone, answer.status);
       this.applyZoneStatus(zone, answer.status);
     } catch (e) {
       // A push handler calls this without awaiting it, so a rejection here would have no
@@ -1603,6 +1604,39 @@ export class YxcDeviceController {
       this.deps.log.warn(`${this.deviceId}: could not apply the ${zone} status (${errText(e)})`);
     }
     return true;
+  }
+
+  /**
+   * Learn a zone's display scale at the first status that reports one. The scale was decided only in `start`, so a
+   * zone whose status did not answer then stayed without one until the next reconnect: its datapoint showed the
+   * DISPLAYED value (40.5 on the numeric scale) while a write went out as the raw step count — writing 45 sent
+   * `setVolume(45)`, 22.5 instead of 90 steps, and −40 on the decibel scale was refused (review 2026-10-05, A15).
+   * Learned once and remembered with the others, never replaced (a read-in receiver keeps its scale, krobi
+   * 2026-10-02); until a status reports one, both directions stay on the raw step count the zone reports. The zone's
+   * volume datapoint follows the learned scale, as it would have at `start`.
+   *
+   * @param zone the zone the status belongs to
+   * @param status the raw getStatus answer
+   */
+  private async learnVolumeMode(zone: string, status: unknown): Promise<void> {
+    const mode = actualVolumeModeOf(status);
+    if (mode === undefined || this.zoneVolumeMode.get(zone) !== undefined) {
+      return;
+    }
+    this.zoneVolumeMode.set(zone, mode);
+    const learned = this.deps.probeMemory.remembered<Record<string, string>>(VOLUME_MODE_KEY) ?? {};
+    if (learned[zone] === undefined) {
+      this.deps.probeMemory.set(VOLUME_MODE_KEY, { ...learned, [zone]: mode });
+    }
+    if (this.capabilities === undefined) {
+      return;
+    }
+    const prefix = zonePrefix(zone);
+    for (const def of mapYxcToObjects(this.capabilities, { [zone]: { actualVolumeMode: mode } })) {
+      if (def.id === `${prefix}volume` || def.id === `${prefix}advanced.maxVolume`) {
+        await this.deps.upsertObject(`${this.deviceId}.${def.id}`, def);
+      }
+    }
   }
 
   /**

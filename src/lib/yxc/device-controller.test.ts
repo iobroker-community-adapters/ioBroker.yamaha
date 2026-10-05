@@ -3270,3 +3270,89 @@ describe("the read-back of a user write runs at user priority (review 2026-10-05
     expect(s.client.userCalls).toEqual(["getStatus", "getFuncStatus", "getDistributionInfo"]);
   });
 });
+
+// A zone whose status did not answer at the connect had no display scale until the next reconnect: its datapoint
+// showed the DISPLAYED value (40.5 numeric) while a write went out as the raw step count — 45 sent setVolume(45),
+// 22.5 instead of 90 steps (review 2026-10-05, A15).
+describe("the volume scale is learned at the first status that reports one (review 2026-10-05, A15)", () => {
+  /**
+   * An RX-V481 whose zone 2 does not answer at the connect and answers `zone2` afterwards.
+   *
+   * @param zone2 zone 2's status once it answers
+   * @param probeMemory the device's memory
+   * @returns the started setup and the switch that brings zone 2 up
+   */
+  async function zone2Late(
+    zone2: Record<string, unknown>,
+    probeMemory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA }),
+  ): Promise<{ s: ReturnType<typeof setup>; up: () => void; probeMemory: ProbeMemory }> {
+    let zone2Up = false;
+    const statuses: Record<string, unknown> = {
+      main: { power: "on", volume: 60, input: "hdmi1", actual_volume: { mode: "numeric", value: 30, unit: "" } },
+      zone2,
+    };
+    const s = setup(rxV481, statuses.main, {}, undefined, { probeMemory });
+    (s.client as unknown as Record<string, unknown>).getStatus = (zone: string): Promise<unknown> =>
+      zone === "zone2" && !zone2Up
+        ? Promise.reject(new YxcTransportError("/zone2/getStatus", new Error("YXC request timed out")))
+        : Promise.resolve(statuses[zone]);
+    expect(await s.controller.start()).toBe(true);
+    return { s, up: () => (zone2Up = true), probeMemory };
+  }
+
+  test("the numeric scale a late zone reports is learned: 45 is sent as 90 steps", async () => {
+    const { s, up, probeMemory } = await zone2Late({
+      power: "on",
+      volume: 81,
+      input: "hdmi1",
+      actual_volume: { mode: "numeric", value: 40.5, unit: "" },
+    });
+    up();
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.acks.filter(a => a.id === "living.multiroom.zone2.volume").at(-1)?.value).toBe(40.5);
+    expect(probeMemory.remembered("yxcVolumeMode")).toEqual({ main: "numeric", zone2: "numeric" });
+    expect(s.defs.get("living.multiroom.zone2.volume")?.common).toMatchObject({ min: 0, max: 97, step: 0.5 });
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("multiroom.zone2.volume", 45)).toBe("sent");
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [90, "zone2"] });
+  });
+
+  test("the decibel scale a late zone reports: the datapoint takes it, −40 dB goes out as 81 steps", async () => {
+    const { s, up } = await zone2Late({
+      power: "on",
+      volume: 81,
+      input: "hdmi1",
+      actual_volume: { mode: "db", value: -40, unit: "dB" },
+    });
+    // Before zone 2 answered: no scale yet — the envelope of both, no unit.
+    expect(s.defs.get("living.multiroom.zone2.volume")?.common.unit).toBe("");
+    up();
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.defs.get("living.multiroom.zone2.volume")?.common).toMatchObject({ unit: "dB", min: -80.5, max: 16.5 });
+    expect(s.acks.filter(a => a.id === "living.multiroom.zone2.volume").at(-1)?.value).toBe(-40);
+    s.client.calls.length = 0;
+    expect(await s.controller.handleWrite("multiroom.zone2.volume", -40)).toBe("sent");
+    expect(s.client.calls).toContainEqual({ method: "setVolumeTo", args: [81, "zone2"] });
+  });
+
+  test("a learned scale is kept: a later status on the other scale is converted, the memory stays", async () => {
+    const zone2: Record<string, unknown> = {
+      power: "on",
+      volume: 81,
+      input: "hdmi1",
+      actual_volume: { mode: "numeric", value: 40.5, unit: "" },
+    };
+    const { s, up, probeMemory } = await zone2Late(zone2);
+    up();
+    s.fire.keepalive?.();
+    await flush();
+    zone2.volume = 90;
+    zone2.actual_volume = { mode: "db", value: -35.5, unit: "dB" };
+    s.fire.keepalive?.();
+    await flush();
+    expect(s.acks.filter(a => a.id === "living.multiroom.zone2.volume").at(-1)?.value).toBe(45);
+    expect(probeMemory.remembered("yxcVolumeMode")).toEqual({ main: "numeric", zone2: "numeric" });
+  });
+});
