@@ -788,7 +788,11 @@ export class XmlDeviceController {
             steps: { ...form.steps, [entry.state]: declaredPut.range.step },
           });
         }
-        if (declaredPut?.words && !common.states) {
+        // The declared words are the values of a TEXT datapoint (the tone mode's Auto/Bypass/Manual). A switch is a
+        // boolean: its `On`/`Standby` words are the wire spelling of true/false, not values it takes. As a dropdown
+        // they offered "Standby", which sends nothing, were lent to the YNCA-owned boolean power and mute, and kept
+        // `keepsForm`/`canCarryWrite` from ever matching a switch another protocol builds (review 2026-10-05, A19).
+        if (declaredPut?.words && !common.states && common.type === "string") {
           common.states = selfMap(declaredPut.words);
         }
       }
