@@ -945,6 +945,41 @@ describe("MultiTransportHandle — the read-in completes once, with the receiver
     expect(second.info).toEqual([]);
   });
 
+  // A receiver updated in standby is read in once it is switched on — often in a later connection. The flag that
+  // said "this read-in came from a firmware update" lived in the connection that saw the update, and the later
+  // one closed the read-in without the ready line (review 2026-10-05, A54).
+  test("a firmware read-in completed by a later connection still ends with the ready line", async () => {
+    const store = {
+      tree: { shared: {}, transports: ["ynca"], firmware: { ynca: "1.80" }, settledVersion: "3.2.0" } as LearnedTree,
+    };
+    const connect = async (complete: boolean): Promise<string[]> => {
+      const info: string[] = [];
+      const ynca = Object.assign(fakeConn("ynca", [state("power", "Power")]), {
+        firmware: () => "1.90",
+        readComplete: () => complete,
+      });
+      const handle = new MultiTransportHandle("living", [ynca], {
+        upsertObject: () => Promise.resolve(),
+        log: { ...silentLog, info: (m: string) => info.push(m) },
+        adapterVersion: "3.2.0",
+        tree: { get: () => store.tree, set: tree => (store.tree = tree) },
+        settleTree: () => Promise.resolve(),
+      });
+      await handle.start();
+      handle.close();
+      return info;
+    };
+    expect(await connect(false)).toEqual([
+      "living: new firmware found (1.80 → 1.90) — reading the receiver again, this can take a few minutes",
+    ]);
+    expect(store.tree.settledVersion).toBeUndefined();
+    expect(await connect(true)).toEqual(["living: ready — YNCA ✓"]);
+    expect(store.tree.settledVersion).toBe("3.2.0");
+    expect(store.tree.firmwareUpdate).toBeUndefined();
+    // Read in: the next connection says nothing.
+    expect(await connect(true)).toEqual([]);
+  });
+
   test("in standby the firmware line stands, the ready line waits for the switched-on read", async () => {
     const ynca = fakeConn("ynca", [state("power", "Power")]);
     Object.assign(ynca, { firmware: () => "1.90", readComplete: () => false });

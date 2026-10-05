@@ -30,6 +30,13 @@ export interface LearnedTree {
   settledVersion?: string;
   /** The firmware each transport reported when it was read in — a different one opens the read-in again. */
   firmware: Partial<Record<Transport, string>>;
+  /**
+   * The open read-in was opened by a firmware update: its completion logs the startup's ready line (Y-21). Kept
+   * here, with the read-in, because it often completes in a later connection — a receiver updated in standby is
+   * read in once it is switched on — and a flag of the connection that saw the update was lost with it (review
+   * 2026-10-05, A54).
+   */
+  firmwareUpdate?: boolean;
 }
 
 /**
@@ -73,6 +80,9 @@ export function parseLearnedTree(raw: unknown): LearnedTree {
         tree.firmware[transport] = firmware;
       }
     }
+  }
+  if (raw.firmwareUpdate === true) {
+    tree.firmwareUpdate = true;
   }
   return tree;
 }

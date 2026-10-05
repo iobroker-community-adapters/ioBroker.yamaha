@@ -155,8 +155,6 @@ export class MultiTransportHandle implements ConnectionHandle {
   private readonly connecting = new Set<ConnectableTransport>();
   /** The proven transports that have not answered yet this handle (see `MultiTransportDeps.missing`). */
   private readonly missing: Set<Transport>;
-  /** A firmware update opened the read-in in this session — its completion says "ready" again. */
-  private firmwareChanged = false;
   /** The learn in flight, so two signals never run one concurrently. */
   private learning: Promise<void> = Promise.resolve();
   /** The learn queued behind the one in flight, not started yet — every signal until it starts rides on it. */
@@ -337,6 +335,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     if (this.closed) {
       return;
     }
+    const firmwareUpdate = this.tree.firmwareUpdate === true;
     this.tree = {
       shared: this.sharedOf(contributions, ownerByCanonicalId),
       transports: this.live.map(connection => connection.transport),
@@ -349,8 +348,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     if (this.closed) {
       return;
     }
-    if (this.firmwareChanged) {
-      this.firmwareChanged = false;
+    if (firmwareUpdate) {
       this.deps.log.info(
         readyLine(
           this.deviceId,
@@ -553,8 +551,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       this.deps.log.info(
         `${this.deviceId}: new firmware found (${known} → ${firmware}) — reading the receiver again, this can take a few minutes`,
       );
-      this.tree = { ...this.tree, settledVersion: undefined };
-      this.firmwareChanged = true;
+      this.tree = { ...this.tree, settledVersion: undefined, firmwareUpdate: true };
     }
     this.deps.tree?.set(this.tree);
   }

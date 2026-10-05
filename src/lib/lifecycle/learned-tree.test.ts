@@ -18,6 +18,11 @@ describe("learned tree — what a receiver serves over which transport, kept (20
     });
   });
 
+  test("a read-in a firmware update opened is read back as one, across a restart (review 2026-10-05, A54)", () => {
+    expect(parseLearnedTree({ firmware: { yxc: "2.51" }, firmwareUpdate: true }).firmwareUpdate).toBe(true);
+    expect(parseLearnedTree({ firmware: { yxc: "2.51" }, firmwareUpdate: "yes" }).firmwareUpdate).toBeUndefined();
+  });
+
   test("nothing usable stored is an empty tree", () => {
     expect(parseLearnedTree(undefined)).toEqual(emptyLearnedTree());
     expect(parseLearnedTree(null)).toEqual(emptyLearnedTree());
