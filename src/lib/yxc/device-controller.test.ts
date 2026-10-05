@@ -3432,3 +3432,66 @@ describe("push liveness judges a playing source (review 2026-10-05, A17)", () =>
     expect(s.client.calls.some(c => c.method === "getPlayInfo")).toBe(false);
   });
 });
+
+// A reconnect wrote the DAB station count 0 before the tuner read wrote 35 again (35 → 0 → 35 in the history), and
+// "none" over the network player's last error (review 2026-10-05, A43).
+describe("start values never stand over a value the device reports (review 2026-10-05, A43)", () => {
+  const dabFeatures = {
+    zone: [{ id: "main", func_list: ["power"], input_list: ["tuner"] }],
+    tuner: { func_list: ["fm", "dab", "dab_initial_scan"], preset: { type: "separate", num: 30 } },
+    netusb: {},
+  };
+  const scanned = {
+    response_code: 0,
+    band: "dab",
+    dab: { preset: 1, id: 1, status: "ready", freq: 222064, total_station_num: 35, initial_scan_progress: 100 },
+  };
+
+  test("a scanned tuner's station count is written once, as the device reports it", async () => {
+    const s = setup(dabFeatures, { power: "on", input: "tuner" });
+    s.client.tunerPlayInfo = scanned;
+    await s.controller.start();
+    expect(s.acks.filter(a => a.id === "living.tuner.dab.totalStations").map(a => a.value)).toEqual([35]);
+  });
+
+  test("a tuner that did not answer gets no start value — the stored count stays", async () => {
+    const s = setup(dabFeatures, { power: "on", input: "tuner" });
+    const getPlayInfo = (s.client as unknown as { getPlayInfo: (source?: string) => Promise<unknown> }).getPlayInfo;
+    (s.client as unknown as Record<string, unknown>).getPlayInfo = (source?: string): Promise<unknown> =>
+      source === "tuner"
+        ? Promise.reject(new YxcTransportError("/tuner/getPlayInfo", new Error("timeout")))
+        : getPlayInfo(source);
+    await s.controller.start();
+    expect(s.acks.some(a => a.id === "living.tuner.dab.totalStations")).toBe(false);
+  });
+
+  test("the network player's error and message get their start values on the device's first connection only", async () => {
+    const liveness = new PushLiveness();
+    const first = setup(dabFeatures, { power: "on", input: "tuner" }, {}, undefined, { pushLiveness: liveness });
+    await first.controller.start();
+    expect(first.acks).toContainEqual({ id: "living.player.netPlayer.playError", value: 0 });
+    const again = setup(dabFeatures, { power: "on", input: "tuner" }, {}, undefined, { pushLiveness: liveness });
+    await again.controller.start();
+    expect(again.acks.some(a => a.id.startsWith("living.player.netPlayer.play"))).toBe(false);
+  });
+});
+
+// Push was registered only after the start's reads: an event in the first second or two was lost, and the value
+// stood wrong until the next keepalive (review 2026-10-05, A47).
+describe("events during the start are not lost (review 2026-10-05, A47)", () => {
+  test("a volume event that arrives while the start reads is handled once the start has written its values", async () => {
+    const s = setup(wx10, { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0, volume: 30 });
+    s.client.nameText = { zone_list: [{ id: "main", text: "Kitchen" }] };
+    const nameText = (s.client as unknown as { getNameText: () => Promise<unknown> }).getNameText;
+    (s.client as unknown as Record<string, unknown>).getNameText = (): Promise<unknown> => {
+      // The knob turned while the adapter was still connecting: the event arrives mid-start.
+      s.client.status = { ...(ysp as Record<string, unknown>), power: "on", disable_flags: 0, volume: 42 };
+      s.fire.push?.({ main: { volume: 42 } });
+      return nameText();
+    };
+    expect(await s.controller.start()).toBe(true);
+    await flush();
+    expect(s.fire.push).toBeDefined();
+    expect(s.acks.filter(a => a.id === "living.volume").at(-1)?.value).toBe(42);
+  });
+});

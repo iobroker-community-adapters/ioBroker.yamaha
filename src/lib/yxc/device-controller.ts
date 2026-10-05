@@ -430,6 +430,12 @@ export class YxcDeviceController {
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getDeviceInfo failed (${errText(e)})`);
     }
+    // Registered for events NOW, not after the start's reads: those take a second or two, and an event in that
+    // window was lost — a volume turned while the adapter connected stood wrong until the next keepalive (review
+    // 2026-10-05, A47). Events that arrive before the start has written the device's values wait for it, so a
+    // refresh they trigger is never overwritten by the older answer the start is still writing.
+    this.earlyEvents = [];
+    this.cancelPush = this.deps.registerPush(event => this.onPush(event), this.pushDeviceId);
     // Capabilities and name are constant while the device runs, so on a reconnect —
     // and, persisted, on a restart — they come from the per-device memory instead of
     // costing more round-trips on a connection that is being (re-)established anyway.
@@ -523,26 +529,6 @@ export class YxcDeviceController {
     }
     this.deps.reportDeclaredAbsent?.(yxcDeclaredAbsent(this.capabilities));
     await this.setupSceneLists(capabilities, objects);
-    // The DAB scan counters are the one DAB detail the device reports only after a
-    // station scan (status stays not_ready before) — seed the documented start state
-    // (nothing scanned) so they are not left as valueless read states; a real scan
-    // result overwrites them via the tuner play info.
-    // Only where the tuner declares the scan (`dab_initial_scan`, YXC Basic §6.2 — audit 2026-09-29, C42).
-    if (
-      capabilities.media.includes("tuner") &&
-      (capabilities.tuner?.bands ?? []).includes("dab") &&
-      (capabilities.tuner?.funcs ?? []).includes("dab_initial_scan")
-    ) {
-      this.emit("tuner.dab.totalStations", 0);
-      this.emit("tuner.dab.scanProgress", 0);
-    }
-    // The network player's error and message come by push only — seeded to "none" so they never
-    // stand valueless (and are not purged as never filled) before the first report (C18).
-    if (capabilities.media.includes("netusb")) {
-      this.emit("player.netPlayer.playError", 0);
-      this.emit("player.netPlayer.playErrorText", "");
-      this.emit("player.netPlayer.playMessage", "");
-    }
     if (model) {
       // The info channel and info.model already exist — the adapter creates them for
       // every device up front, so the card renders even while the device is offline.
@@ -594,7 +580,22 @@ export class YxcDeviceController {
     this.hasMcPlaylist = capabilities.netusbFuncs?.includes("mc_playlist") ?? false;
     this.hasPlayQueue = capabilities.netusbFuncs?.includes("play_queue") ?? false;
     await this.setupBrowse(capabilities);
-    await this.refreshMedia();
+    const answered = await this.refreshMedia();
+    // The DAB scan counters are the one DAB detail the device reports only after a station scan (status stays
+    // not_ready before) — the documented start state (nothing scanned) where the tuner ANSWERED without them, so
+    // they are not left as valueless read states. Never before or over the tuner read: a reconnect wrote 0 over
+    // the 35 stations the read then wrote back (35 → 0 → 35 in the history; review 2026-10-05, A43). Only where
+    // the tuner declares the scan (`dab_initial_scan`, YXC Basic §6.2 — audit 2026-09-29, C42).
+    if (
+      answered.has("tuner") &&
+      (capabilities.tuner?.bands ?? []).includes("dab") &&
+      (capabilities.tuner?.funcs ?? []).includes("dab_initial_scan")
+    ) {
+      this.placeholders([
+        ["tuner.dab.totalStations", 0],
+        ["tuner.dab.scanProgress", 0],
+      ]);
+    }
     // The WHOLE player block of every zone NOT playing a media source gets its cleared shape.
     this.routing.clearIdle();
     await this.refreshLists();
@@ -603,7 +604,22 @@ export class YxcDeviceController {
       await this.refreshDistribution();
     }
     await this.setupSystemStates(capabilities);
-    this.cancelPush = this.deps.registerPush(event => this.onPush(event), this.pushDeviceId);
+    // The network player's error and message come by event only — "none" so they never stand valueless (and are
+    // not purged as never filled) before the first report (C18). Once per device and adapter run: a reconnect wrote
+    // "none" over an error an event had reported (review 2026-10-05, A43).
+    if (capabilities.media.includes("netusb") && this.deps.pushLiveness.claimStartValues()) {
+      this.placeholders([
+        ["player.netPlayer.playError", 0],
+        ["player.netPlayer.playErrorText", ""],
+        ["player.netPlayer.playMessage", ""],
+      ]);
+    }
+    // The events that came during the start, now that its own values are written.
+    const early = this.earlyEvents ?? [];
+    this.earlyEvents = undefined;
+    for (const event of early) {
+      this.handlePush(event);
+    }
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
@@ -740,6 +756,22 @@ export class YxcDeviceController {
 
   /** The MusicCast `device_id` this device reported — the events carry it too (see registerPush). */
   private pushDeviceId: string | undefined;
+  /** Events that arrived while the start was still writing the device's values — handled after it (A47). */
+  private earlyEvents: unknown[] | undefined;
+
+  /**
+   * Write start values only where this connection has not written a value yet — a placeholder never stands over
+   * one the device reported (review 2026-10-05, A43).
+   *
+   * @param values the ids and their start values
+   */
+  private placeholders(values: ReadonlyArray<readonly [string, number | string]>): void {
+    for (const [id, value] of values) {
+      if (!this.deviceValues.has(id)) {
+        this.emit(id, value);
+      }
+    }
+  }
 
   /** Per state id, the value the device last reported on THIS connection. */
   private readonly deviceValues = new Map<string, boolean | number | string | null>();
@@ -1013,6 +1045,19 @@ export class YxcDeviceController {
     if (this.deps.pushLiveness.noteEvent()) {
       this.deps.log.info(`${this.deviceId}: MusicCast events arrive again`);
     }
+    if (this.earlyEvents !== undefined) {
+      this.earlyEvents.push(event);
+      return;
+    }
+    this.handlePush(event);
+  }
+
+  /**
+   * Act on one device event (see {@link onPush}).
+   *
+   * @param event the parsed push event
+   */
+  private handlePush(event: unknown): void {
     for (const zone of zonesToRefresh(event)) {
       if (this.zones.includes(zone)) {
         this.coalesced(`zone:${zone}`, () => this.refreshZone(zone));
@@ -1468,10 +1513,15 @@ export class YxcDeviceController {
     }
   }
 
-  /** Refresh every player source the device offers (network player, cd, tuner). */
-  private async refreshMedia(): Promise<void> {
+  /**
+   * Refresh every player source the device offers (network player, cd, tuner).
+   *
+   * @returns the sources that answered
+   */
+  private async refreshMedia(): Promise<Set<string>> {
     // The three sources (netusb/cd/tuner) write disjoint states — fetch them together.
-    await Promise.all(this.mediaBlocks.map(block => this.refreshMediaSource(block)));
+    const answers = await Promise.all(this.mediaBlocks.map(block => this.refreshMediaSource(block)));
+    return new Set(this.mediaBlocks.filter((_block, i) => answers[i]));
   }
 
   /**
@@ -1481,8 +1531,9 @@ export class YxcDeviceController {
    *
    * @param block the media block (`netusb`, `cd`, `tuner`)
    * @param via the client to ask through — the user-priority one for the read-back of a user write
+   * @returns whether the device answered
    */
-  private async refreshMediaSource(block: string, via: YxcClientLike = this.deps.client): Promise<void> {
+  private async refreshMediaSource(block: string, via: YxcClientLike = this.deps.client): Promise<boolean> {
     const arg = block === "netusb" ? undefined : block;
     try {
       const info = await via.getPlayInfo(arg);
@@ -1493,13 +1544,15 @@ export class YxcDeviceController {
             this.lastTunerBand = String(update.value);
           }
         }
-        return;
+        return true;
       }
       const source: "netusb" | "cd" = block === "cd" ? "cd" : "netusb";
       this.routing.notePlayInfo(source, info);
       this.routing.route(source, parseYxcPlayInfo(info, source, this.cover));
+      return true;
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: getPlayInfo(${arg ?? ""}) failed: ${errText(e)}`);
+      return false;
     }
   }
 
