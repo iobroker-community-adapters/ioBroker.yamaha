@@ -495,6 +495,7 @@ import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import { MAX_HTTP_BODY_BYTES } from "./lib/util";
 import { LABEL_RANK } from "./lib/pure-helpers";
 import { PushLiveness } from "./lib/yxc/push-liveness";
+import { PROFILE_KEY } from "./lib/lifecycle/capability-profile";
 
 /**
  * What a read stub answers with: a COPY of the stored value, never the stored object itself.
@@ -850,6 +851,95 @@ describe("Yamaha onReady — configured devices", () => {
     ).updateDeviceLabel("Living_room", "Main Room", LABEL_RANK.deviceName);
     const common = ctx.i.objects.get("Living_room")?.common as Record<string, unknown>;
     expect(common.name).toBe("Cinema");
+  });
+
+  // Review 2026-10-05, A9 (proof test REVIEW H): one failed read of the device object at start made the header write the
+  // bare id over the user's name and flip the percent answer — and the model report then took the "placeholder".
+  it("one failed database read at start changes neither the name nor the percent answer", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Wohnzimmer" },
+      native: { label: "Wohnzimmer", labelRank: LABEL_RANK.user, volumeAsPercent: true },
+    });
+    const getObject = (ctx.i as unknown as { getObjectAsync: ReturnType<typeof vi.fn> }).getObjectAsync;
+    const original = getObject.getMockImplementation() as (id: string) => Promise<unknown>;
+    getObject.mockImplementationOnce((id: string) =>
+      id === "Living_room" ? Promise.reject(new Error("objects db timeout")) : original(id),
+    );
+    await ctx.i.onReady();
+    await flush();
+    await flushPatches(ctx);
+    const stored = ctx.i.objects.get("Living_room") as {
+      common: Record<string, unknown>;
+      native: Record<string, unknown>;
+    };
+    expect(stored.common.name).toBe("Wohnzimmer");
+    expect(stored.native.volumeAsPercent).toBe(true);
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    setStateAck("Living_room.info.model", "RX-V6A");
+    await flushPatches(ctx);
+    const after = ctx.i.objects.get("Living_room") as {
+      common: Record<string, unknown>;
+      native: Record<string, unknown>;
+    };
+    expect(after.common.name).toBe("Wohnzimmer");
+    expect(after.native.label).toBe("Wohnzimmer");
+  });
+
+  it("a device object that cannot be read at all is not written over — name, percent and profile stay", async () => {
+    const ctx = setup();
+    const stored = {
+      type: "device",
+      common: { name: "Wohnzimmer" },
+      native: {
+        label: "Wohnzimmer",
+        labelRank: LABEL_RANK.user,
+        volumeAsPercent: true,
+        [PROFILE_KEY]: JSON.stringify({ memory: { yxcIdentity: "RX-V6A|1.0" } }),
+      },
+    };
+    ctx.i.objects.set("Living_room", structuredClone(stored));
+    ctx.i.objects.set("Living_room.soundProgram", {
+      type: "state",
+      common: { name: "p", type: "string", role: "text", states: { Straight: "Straight", Jazz: "Jazz" } },
+      native: {},
+    });
+    const internals = ctx.i as unknown as {
+      getObjectAsync: ReturnType<typeof vi.fn>;
+      getAdapterObjectsAsync: ReturnType<typeof vi.fn>;
+    };
+    // The start-up read of the tree fails (the id move and the snapshot), the cleanup's read succeeds — and the device
+    // object itself cannot be read either.
+    internals.getAdapterObjectsAsync
+      .mockRejectedValueOnce(new Error("objects db timeout"))
+      .mockRejectedValueOnce(new Error("objects db timeout"));
+    internals.getObjectAsync.mockRejectedValue(new Error("objects db timeout"));
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls).toHaveLength(1); // the device still runs
+    expect(ctx.i.log.warn).toHaveBeenCalledWith(
+      expect.stringContaining("Living_room: its device object could not be read"),
+    );
+    // What the device was taught is not replaced by an empty profile …
+    (
+      ctx.i.profiles.get("Living_room") as unknown as { probeMemory: { set(k: string, v: string): void } }
+    ).probeMemory.set("xmlIdentity", "RX-V6A|1.0");
+    // … and the read-in it runs only because nothing was read shrinks nothing.
+    const deps = ctx.calls[0].deps as unknown as {
+      upsertObject(id: string, def: unknown, settle?: boolean): Promise<void>;
+      settleTree(built: ReadonlySet<string>): Promise<void>;
+    };
+    await deps.upsertObject(
+      "Living_room.soundProgram",
+      { type: "state", common: { name: "p", type: "string", role: "text", states: { Straight: "Straight" } } },
+      true,
+    );
+    await deps.settleTree(new Set());
+    await flushPatches(ctx);
+    expect(ctx.i.objects.get("Living_room")).toEqual(stored);
+    const program = ctx.i.objects.get("Living_room.soundProgram") as { common: { states: Record<string, string> } };
+    expect(Object.keys(program.common.states).sort()).toEqual(["Jazz", "Straight"]);
   });
 
   it("skips a configured row whose object id is already taken", async () => {
@@ -4190,13 +4280,26 @@ describe("the device table and the network search side by side", () => {
     expect(objectsRead).toHaveBeenCalledTimes(1);
   });
 
-  it("records where each device came from, at the device object", async () => {
+  // Review 2026-10-05, C4 / Y-27: `native.source` was written on every start and read nowhere — exactly the "how a device
+  // got into the list" marker Y-27 rules out. In memory the origin still drives behaviour (a typed address is the user's).
+  it("marks nowhere how a device got into the list, and takes an old marker off once", async () => {
     mocks.discoveredStore.devices = [{ id: "Found", ip: "192.168.1.20" }];
     const ctx = setup({ devices: [{ name: "Typed", ip: "192.168.1.10" }], discovery: "always" });
+    ctx.i.objects.set("Found", {
+      type: "device",
+      common: { name: "Found", custom: { "history.0": { enabled: true } } },
+      native: { source: "discovered", label: "Kitchen", labelRank: LABEL_RANK.user },
+    });
     await ctx.i.onReady();
     await flush();
-    expect((ctx.i.objects.get("Typed")?.native as { source?: string }).source).toBe("manual");
-    expect((ctx.i.objects.get("Found")?.native as { source?: string }).source).toBe("discovered");
+    expect(ctx.i.objects.get("Typed")?.native).not.toHaveProperty("source");
+    const found = ctx.i.objects.get("Found") as { common: Record<string, unknown>; native: Record<string, unknown> };
+    expect(found.native).not.toHaveProperty("source");
+    // The rest of the object stays: the header and everything a user attached.
+    expect(found.native).toMatchObject({ label: "Kitchen", labelRank: LABEL_RANK.user });
+    expect(found.common).toMatchObject({ name: "Kitchen", custom: { "history.0": { enabled: true } } });
+    expect(ctx.i.deviceRecords.get("Typed")?.source).toBe("manual");
+    expect(ctx.i.deviceRecords.get("Found")?.source).toBe("discovered");
   });
 
   it("only a discovered device arms the search that can find it again", async () => {

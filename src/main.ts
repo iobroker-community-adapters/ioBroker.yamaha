@@ -43,7 +43,7 @@ import { TRANSPORT_LABELS } from "./lib/ready-line";
 import { copyDeviceTree, movedId, type DeviceMoveDeps } from "./lib/lifecycle/device-move";
 import { moveAllWithEnums } from "./lib/enum-carry";
 import { StateMirror } from "./lib/lifecycle/write-mirror";
-import { coveredBy, KnownObjects } from "./lib/known-objects";
+import { coveredBy, KnownObjects, mergedWith } from "./lib/known-objects";
 import { readDeviceResponse } from "./lib/util";
 import { errText } from "./lib/err-text";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
@@ -57,7 +57,7 @@ import { identityFrom, mergeIdentity, sameDevice, type DeviceIdentity } from "./
 import { YxcPushReceiver } from "./lib/yxc/push-receiver";
 import { PushLiveness } from "./lib/yxc/push-liveness";
 import { YamahaDeviceManagement } from "./device-management";
-import type { DeviceSource, DeviceRecord } from "./lib/types";
+import type { DeviceRecord } from "./lib/types";
 import { PerDeviceCaches } from "./lib/lifecycle/per-device";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
 import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
@@ -185,6 +185,14 @@ const NOTIFY_RETRY_MS = 5000;
  * to seven writes of the device object per start in the inventory run (audit 2026-09-29, E2).
  */
 const DEVICE_PATCH_WINDOW_MS = 4500;
+
+/** A device object as the start read it — or the verdict that it could not be read (see `storedDevice`). */
+interface StoredDevice {
+  /** The object; undefined when the device has none yet. */
+  object: ioBroker.Object | undefined;
+  /** False when the object could not be read — then nothing the user set at it may be written over. */
+  readable: boolean;
+}
 
 /** A device object's patch waiting for its coalescing window to end. */
 interface PendingDevicePatch {
@@ -389,6 +397,14 @@ export class Yamaha extends utils.Adapter {
   });
   /** The start-up listing while the object store loads from it (see {@link known}). */
   private startListing: AdapterObjects | undefined;
+  /** Whether {@link known} holds the start-up read of the tree — then a device object is read from there, never again. */
+  private knownLoaded = false;
+  /**
+   * The devices whose device object could not be read at their setup: their stored profile is not written over with an
+   * empty one, and their tree is not settled from a read-in that only started because nothing was read (review
+   * 2026-10-05, A9).
+   */
+  private readonly unreadDevices = this.perDevice.set();
   /** What the states database holds — see writeStateNow (audit 2026-09-29, E3). */
   private readonly stateMirror = new StateMirror();
   /** See {@link instanceReadOnlyStates}. */
@@ -721,7 +737,9 @@ export class Yamaha extends utils.Adapter {
     // now (persistDeviceNative needs the record above), the header read below merges what the
     // object already carried from earlier runs.
     this.learnIdentity(device.id, device.identity);
-    await this.ensureDeviceHeader(device.id, device.ip, device.source ?? "discovered");
+    // ONE read of the device object for the header and the profile (it was read twice per start, review 2026-10-05, E).
+    const stored = await this.storedDevice(device.id);
+    await this.ensureDeviceHeader(device.id, device.ip, stored);
     // Stamp it disconnected BEFORE the first attempt: ioBroker keeps a state's last value
     // forever, so a crash or a power cut would otherwise leave the device green until it
     // reports again — and a device that never answers would stay green for good.
@@ -733,7 +751,7 @@ export class Yamaha extends utils.Adapter {
     // Held here, not in the controllers: those are rebuilt on every connection attempt;
     // persisted at the device object (one capability profile), so a restart starts from the
     // remembered answers.
-    const profile = await this.loadDeviceProfile(device.id);
+    const profile = await this.loadDeviceProfile(device.id, stored);
     if (this.unloading || this.removed.has(device.id)) {
       return; // deleted, or the adapter stopped, while the header was written
     }
@@ -1659,8 +1677,40 @@ export class Yamaha extends utils.Adapter {
    * @returns the write
    */
   public writeDeviceObject(deviceId: string, patch: ioBroker.PartialObject): Promise<void> {
+    return this.chainDeviceWrite(deviceId, () => this.writeObject(deviceId, patch));
+  }
+
+  /**
+   * Write a device object WHOLE, on its write chain — the one way a key leaves an object: `extendObject` merges, so a
+   * stored key outlives every patch without it (fleet check object-rewrite: read it, drop the key from the copy, write
+   * the copy with `setForeignObject`). The room and function assignments and the values stay.
+   *
+   * @param deviceId the device id
+   * @param rewrite the object to write, made from the stored one
+   * @returns the write
+   */
+  private rewriteDeviceObject(
+    deviceId: string,
+    rewrite: (stored: ioBroker.Object) => ioBroker.SettableObject,
+  ): Promise<void> {
+    return this.chainDeviceWrite(deviceId, async () => {
+      const stored = this.known.get(deviceId) as ioBroker.Object | undefined;
+      if (stored) {
+        await this.known.replace(`${this.namespace}.${deviceId}`, rewrite(stored));
+      }
+    });
+  }
+
+  /**
+   * Run one write of a device object behind the one in flight (see {@link writeDeviceObject}).
+   *
+   * @param deviceId the device id
+   * @param write the write
+   * @returns the write
+   */
+  private chainDeviceWrite(deviceId: string, write: () => Promise<void>): Promise<void> {
     const previous = this.deviceObjectWrites.get(deviceId) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(() => this.writeObject(deviceId, patch));
+    const next = previous.catch(() => undefined).then(write);
     this.deviceObjectWrites.set(
       deviceId,
       next.catch(() => undefined),
@@ -1905,6 +1955,7 @@ export class Yamaha extends utils.Adapter {
       this.startListing = listing;
       try {
         await this.known.load();
+        this.knownLoaded = true;
       } finally {
         this.startListing = undefined;
       }
@@ -2027,6 +2078,31 @@ export class Yamaha extends utils.Adapter {
   }
 
   /**
+   * The device object as it stands — from the start-up read of the tree (`known`): every write of a device object goes
+   * through it, so it holds the object as the database does. Before, the header and the profile each read it again, and
+   * one failed read at start passed for a device WITHOUT an object: the user's name became the id, the percent answer
+   * flipped, and the first persist replaced the stored profile with an empty one — learned tree, ownership, settled
+   * version and firmware gone, a new read-in without an adapter update (Y-01/Y-02, review 2026-10-05, A9). Only when
+   * the start-up read failed is the database asked, and a failure there says so instead of answering "none".
+   *
+   * @param deviceId the id-safe device id
+   * @returns the object (undefined when the device has none yet), and whether it could be read
+   */
+  private async storedDevice(deviceId: string): Promise<StoredDevice> {
+    if (this.knownLoaded) {
+      return { object: this.known.get(deviceId) as ioBroker.Object | undefined, readable: true };
+    }
+    try {
+      return { object: (await this.getObjectAsync(deviceId)) ?? undefined, readable: true };
+    } catch (e) {
+      this.log.warn(
+        `${deviceId}: its device object could not be read (${errText(e)}) — its name, its settings and what it was taught are left as they are this run`,
+      );
+      return { object: undefined, readable: false };
+    }
+  }
+
+  /**
    * Create AND refresh a device's header objects (the device node, its info channel and a
    * per-device connection indicator) so its state is visible even while offline.
    *
@@ -2037,113 +2113,33 @@ export class Yamaha extends utils.Adapter {
    * right only because a catalog entry upserts them on top). extendObject merges, so a recording
    * setting a user attached survives.
    *
+   * Nothing at the device object says how the device got into the list (Y-27): the `native.source` 3.2.0 wrote on every
+   * start was read nowhere, and is taken off once (review 2026-10-05, C4).
+   *
    * @param deviceId the id-safe device id
    * @param ip the device's current address (from config or discovery)
-   * @param source where the address came from — kept at the device object so the adapter, the
-   *   card and the edit path all know it without re-deriving it from which table happens to be
-   *   filled (which said the same thing about every device on the instance)
+   * @param stored the device object as {@link storedDevice} read it — when it could not be read, the device object is
+   *   not written at all: neither the user's name nor the percent answer may be guessed over
    */
-  private async ensureDeviceHeader(deviceId: string, ip: string, source: DeviceSource): Promise<void> {
-    // statusStates.onlineId lets the admin paint a green/red reachability symbol on the
-    // device object itself (as govee does), fed by the per-device connection state.
-    // A device that has not reported its model yet would sit in the tree without any
-    // symbol — an upgraded instance shows that on every start before the first report,
-    // and a device that never answers shows it for good. Seed the pictogram of the model the
-    // capability profile remembers (the default silhouette without one) when there is none —
-    // and ALSO when the stored one is an older adapter's drawing: the 2.9.x icons had a fixed
-    // colour and a <rect> body, invisible in the dark themes, and a device that is off during
-    // the update would keep that drawing until it reports its model (2.10.0, seen live). A
-    // current pictogram is left alone: overwriting would flip a soundbar back to the receiver
-    // default for the seconds until its model arrives.
-    let icon: string | undefined;
-    // Percent is a DEVICE setting since 2.9.0. A device that carries no answer yet inherits the
-    // instance-wide switch 2.8.0 had, so an upgrade keeps every receiver exactly as it was, and
-    // the answer is written down here so it never has to be inherited again.
-    let percent = this.legacyVolumePercent;
-    // The display name the adapter established for this device, remembered AT the device object.
-    // Deliberately not `preserve: { common: ["name"] }`: the adapter owns names (fleet rule, krobi
-    // 2026-09-02) and sparing the field would only hide who wrote it. What it must not do is fall
-    // back to the bare id on every start, so the name it wrote LAST is carried in `native.label`
-    // and written again — by the adapter's own record, not by leaving the field out. Both writers
-    // of a display name keep that record: the label updater below and the card's edit dialog, and
-    // the rank says which of them may overrule the other.
-    let label: string | undefined;
-    let labelRank: LabelRank = LABEL_RANK.model;
-    /** A name set on purpose that the adapter cannot have written — it stays untouched. */
-    let foreignName = false;
-    try {
-      const existing = await this.getObjectAsync(deviceId);
-      const stored = existing?.common?.icon;
-      if (typeof stored === "string" && CURRENT_PICTOGRAMS.has(stored)) {
-        // Remembered, so a later model report of the same class writes nothing.
-        this.deviceIcons.set(deviceId, stored);
+  private async ensureDeviceHeader(deviceId: string, ip: string, stored: StoredDevice): Promise<void> {
+    // In memory the device starts with the inherited percent switch; written down only below, from a read object.
+    this.volumePercent.set(deviceId, this.legacyVolumePercent);
+    if (stored.readable) {
+      const header = this.deviceHeader(deviceId, stored.object);
+      if (stored.object?.native && "source" in stored.object.native) {
+        // A key leaves an object only by a write of the whole object without it (`extendObject` merges) — once, with
+        // the header (fleet check object-rewrite).
+        await this.rewriteDeviceObject(deviceId, object => {
+          const merged = mergedWith(object, header) as ioBroker.DeviceObject;
+          const { source: _source, ...native } = merged.native as Record<string, unknown>;
+          return { ...merged, native };
+        });
       } else {
-        icon = iconForModel(rememberedModel(existing?.native));
-        this.deviceIcons.set(deviceId, icon);
+        await this.writeDeviceObject(deviceId, header);
       }
-      const native = existing?.native as
-        | {
-            volumeAsPercent?: unknown;
-            label?: unknown;
-            labelRank?: unknown;
-            identity?: unknown;
-            idScheme?: unknown;
-          }
-        | undefined;
-      if (native?.idScheme === ID_SCHEME) {
-        this.idDecided.add(deviceId);
-      }
-      const storedIdentity = identityFrom(
-        typeof native?.identity === "object" && native.identity !== null ? native.identity : {},
-      );
-      if (storedIdentity) {
-        this.learnIdentity(deviceId, storedIdentity);
-      }
-      const own = native?.volumeAsPercent;
-      if (typeof own === "boolean") {
-        percent = own;
-      }
-      const shown = existing?.common?.name;
-      if (typeof native?.label === "string" && native.label.length > 0) {
-        label = native.label;
-        labelRank = labelRankOf(native.labelRank);
-      } else if (typeof shown === "string" && shown.length > 0 && shown !== deviceId) {
-        // ADOPTION, once per device: an instance upgraded from 2.10.0 or earlier carries a display
-        // name with NO record behind it — writing `label ?? deviceId` without this would put the
-        // bare id back on the first start after the update, and a receiver that is switched off
-        // would keep the id until it next reports. The rank is `user` because the tree cannot tell
-        // the two sources apart any more: the stored name may be a MusicCast zone name the adapter
-        // wrote, or one the owner typed into the card's dialog — and silently replacing the second
-        // is the worse mistake. Every name established from here on carries its true rank.
-        label = shown;
-        labelRank = LABEL_RANK.user;
-      } else if (shown !== undefined && typeof shown !== "string") {
-        // A name that is not a plain string was set on purpose (a translation object typed into
-        // the admin). The adapter only ever writes plain strings, so this is none of its own and
-        // it has nothing better to put there — it writes no name at all. Same rule the label
-        // updater has always followed.
-        foreignName = true;
-      }
-      if (label !== undefined) {
-        // Seeding the in-memory record is what makes the decision survive a restart: without it
-        // the adapter's OWN label reads as a stranger's on the next start (neither the id nor
-        // anything it remembers writing), and a device that renames itself is never followed again.
-        this.deviceLabels.set(deviceId, { name: label, rank: labelRank });
-      }
-    } catch {
-      icon = undefined;
+    } else {
+      this.unreadDevices.add(deviceId);
     }
-    this.volumePercent.set(deviceId, percent);
-    await this.writeDeviceObject(deviceId, {
-      type: "device",
-      common: {
-        ...(foreignName ? {} : { name: label ?? deviceId }),
-        ...(icon ? { icon } : {}),
-        statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
-      },
-      // The record rides along with the name, so the adoption above happens once per device, ever.
-      native: { source, volumeAsPercent: percent, ...(label !== undefined ? { label, labelRank } : {}) },
-    });
     await this.writeObject(`${deviceId}.info`, {
       type: "channel",
       common: { name: tName("info") },
@@ -2203,6 +2199,102 @@ export class Yamaha extends utils.Adapter {
         native: {},
       });
     }
+  }
+
+  /**
+   * The device object's header patch, built from what the stored object carries — and what the adapter takes into memory
+   * from it (icon, id mark, identity, percent answer, the display name it established).
+   *
+   * @param deviceId the id-safe device id
+   * @param existing the stored device object, undefined for a device that has none yet
+   * @returns the patch to merge into the device object
+   */
+  private deviceHeader(deviceId: string, existing: ioBroker.Object | undefined): ioBroker.PartialObject {
+    // statusStates.onlineId lets the admin paint a green/red reachability symbol on the
+    // device object itself (as govee does), fed by the per-device connection state.
+    // A device that has not reported its model yet would sit in the tree without any
+    // symbol — an upgraded instance shows that on every start before the first report,
+    // and a device that never answers shows it for good. Seed the pictogram of the model the
+    // capability profile remembers (the default silhouette without one) when there is none —
+    // and ALSO when the stored one is an older adapter's drawing: the 2.9.x icons had a fixed
+    // colour and a <rect> body, invisible in the dark themes, and a device that is off during
+    // the update would keep that drawing until it reports its model (2.10.0, seen live). A
+    // current pictogram is left alone: overwriting would flip a soundbar back to the receiver
+    // default for the seconds until its model arrives.
+    let icon: string | undefined;
+    const storedIcon = existing?.common?.icon;
+    if (typeof storedIcon === "string" && CURRENT_PICTOGRAMS.has(storedIcon)) {
+      // Remembered, so a later model report of the same class writes nothing.
+      this.deviceIcons.set(deviceId, storedIcon);
+    } else {
+      icon = iconForModel(rememberedModel(existing?.native));
+      this.deviceIcons.set(deviceId, icon);
+    }
+    const native = existing?.native as
+      | { volumeAsPercent?: unknown; label?: unknown; labelRank?: unknown; identity?: unknown; idScheme?: unknown }
+      | undefined;
+    if (native?.idScheme === ID_SCHEME) {
+      this.idDecided.add(deviceId);
+    }
+    const storedIdentity = identityFrom(
+      typeof native?.identity === "object" && native.identity !== null ? native.identity : {},
+    );
+    if (storedIdentity) {
+      this.learnIdentity(deviceId, storedIdentity);
+    }
+    // Percent is a DEVICE setting since 2.9.0. A device that carries no answer yet inherits the
+    // instance-wide switch 2.8.0 had, so an upgrade keeps every receiver exactly as it was, and
+    // the answer is written down here so it never has to be inherited again.
+    const percent = typeof native?.volumeAsPercent === "boolean" ? native.volumeAsPercent : this.legacyVolumePercent;
+    this.volumePercent.set(deviceId, percent);
+    // The display name the adapter established for this device, remembered AT the device object.
+    // Deliberately not `preserve: { common: ["name"] }`: the adapter owns names (fleet rule, krobi
+    // 2026-09-02) and sparing the field would only hide who wrote it. What it must not do is fall
+    // back to the bare id on every start, so the name it wrote LAST is carried in `native.label`
+    // and written again — by the adapter's own record, not by leaving the field out. Both writers
+    // of a display name keep that record: the label updater below and the card's edit dialog, and
+    // the rank says which of them may overrule the other.
+    let label: string | undefined;
+    let labelRank: LabelRank = LABEL_RANK.model;
+    /** A name set on purpose that the adapter cannot have written — it stays untouched. */
+    let foreignName = false;
+    const shown = existing?.common?.name;
+    if (typeof native?.label === "string" && native.label.length > 0) {
+      label = native.label;
+      labelRank = labelRankOf(native.labelRank);
+    } else if (typeof shown === "string" && shown.length > 0 && shown !== deviceId) {
+      // ADOPTION, once per device: an instance upgraded from 2.10.0 or earlier carries a display
+      // name with NO record behind it — writing `label ?? deviceId` without this would put the
+      // bare id back on the first start after the update, and a receiver that is switched off
+      // would keep the id until it next reports. The rank is `user` because the tree cannot tell
+      // the two sources apart any more: the stored name may be a MusicCast zone name the adapter
+      // wrote, or one the owner typed into the card's dialog — and silently replacing the second
+      // is the worse mistake. Every name established from here on carries its true rank.
+      label = shown;
+      labelRank = LABEL_RANK.user;
+    } else if (shown !== undefined && typeof shown !== "string") {
+      // A name that is not a plain string was set on purpose (a translation object typed into
+      // the admin). The adapter only ever writes plain strings, so this is none of its own and
+      // it has nothing better to put there — it writes no name at all. Same rule the label
+      // updater has always followed.
+      foreignName = true;
+    }
+    if (label !== undefined) {
+      // Seeding the in-memory record is what makes the decision survive a restart: without it
+      // the adapter's OWN label reads as a stranger's on the next start (neither the id nor
+      // anything it remembers writing), and a device that renames itself is never followed again.
+      this.deviceLabels.set(deviceId, { name: label, rank: labelRank });
+    }
+    return {
+      type: "device",
+      common: {
+        ...(foreignName ? {} : { name: label ?? deviceId }),
+        ...(icon ? { icon } : {}),
+        statusStates: { onlineId: `${this.namespace}.${deviceId}.info.connection` },
+      },
+      // The record rides along with the name, so the adoption above happens once per device, ever.
+      native: { volumeAsPercent: percent, ...(label !== undefined ? { label, labelRank } : {}) },
+    };
   }
 
   /** The icon last written per device, so repeated model reports do not re-write the object. */
@@ -2481,6 +2573,11 @@ export class Yamaha extends utils.Adapter {
         }
         if (target === id) {
           await this.extendObject(id, { native: { idScheme: ID_SCHEME } });
+          // The listing this start goes on with (the object store loads from it) holds the object as written.
+          const obj = devices.get(id);
+          if (obj) {
+            obj.native = { ...obj.native, idScheme: ID_SCHEME };
+          }
           continue;
         }
         if (taken.has(target)) {
@@ -2725,7 +2822,9 @@ export class Yamaha extends utils.Adapter {
           if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config)) {
             return;
           }
-          if (settle) {
+          // A device whose object could not be read runs a read-in only because nothing was read — it never shrinks
+          // what is stored (review 2026-10-05, A9).
+          if (settle && !this.unreadDevices.has(device.id)) {
             // The completion of a read-in (installation, adapter or firmware update, receiver on): the
             // one moment a definition may lose something. A SHRINKING dropdown needs a clearing write
             // first — extendObject merges `common.states` key by key, so the old entries would survive
@@ -2810,7 +2909,7 @@ export class Yamaha extends utils.Adapter {
             : undefined;
         },
         settleTree: async built => {
-          if (alive()) {
+          if (alive() && !this.unreadDevices.has(device.id)) {
             await this.settleDeviceTree(device.id, built);
           }
         },
@@ -3192,20 +3291,26 @@ export class Yamaha extends utils.Adapter {
    * device object is the right home: writing an instance object's native restarts the
    * adapter, a device object's does not. Legacy keys of the releases before 2.7.0 are converted at load.
    *
+   * A profile whose device object could not be read is used in memory and never persisted: written, the empty profile
+   * would replace what the device was taught — the learned tree, the ownership, the settled version (review 2026-10-05,
+   * A9).
+   *
    * @param deviceId the id-safe device id
+   * @param stored the device object as the setup read it; read here when not given
    * @returns the per-device profile store
    */
-  private async loadDeviceProfile(deviceId: string): Promise<DeviceProfileStore> {
-    let native: Record<string, unknown> | undefined;
-    try {
-      native = (await this.getObjectAsync(deviceId))?.native;
-    } catch {
-      native = undefined;
+  private async loadDeviceProfile(deviceId: string, stored?: StoredDevice): Promise<DeviceProfileStore> {
+    const { object, readable } = stored ?? (await this.storedDevice(deviceId));
+    if (!readable) {
+      this.unreadDevices.add(deviceId);
     }
-    const store = new DeviceProfileStore(deviceId, native, {
+    const store = new DeviceProfileStore(deviceId, object?.native, {
       adapterVersion: this.version ?? "",
       now: () => new Date().toISOString(),
-      persist: patch => this.persistDeviceNative(deviceId, patch),
+      persist: patch =>
+        readable
+          ? this.persistDeviceNative(deviceId, patch)
+          : this.log.debug(`${deviceId}: profile not stored — its device object could not be read at the start`),
       log: message => this.log.debug(message),
     });
     this.profiles.set(deviceId, store);
