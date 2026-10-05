@@ -129,6 +129,10 @@ export interface XmlScene {
  * the RX-V6A capture shows `Scene_Sel` as the declared write element, not the
  * predecessor's `Scene_Load` (#615).
  *
+ * A blank title stays blank (trimmed to ""): the scene exists and is recalled by its number, but it has no name — the
+ * RX-V6A declares all eight that way, and the blank titles became eight empty dropdown labels and eight empty title
+ * datapoints (review 2026-10-05, A23).
+ *
  * @param xml the Scene_Sel_Item response body
  * @returns the declared writable scenes, empty when the zone has none
  */
@@ -137,7 +141,7 @@ export function parseSceneList(xml: string): XmlScene[] {
   const pattern = /<Item_\d+>\s*<Param>Scene (\d+)<\/Param>\s*<RW>([^<]*)<\/RW>\s*<Title>([^<]*)<\/Title>/g;
   for (let match = pattern.exec(xml); match; match = pattern.exec(xml)) {
     if (match[2].includes("W")) {
-      scenes.push({ num: Number(match[1]), title: decodeXmlText(match[3]) });
+      scenes.push({ num: Number(match[1]), title: decodeXmlText(match[3]).trim() });
     }
   }
   return scenes;

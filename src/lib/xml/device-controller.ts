@@ -440,6 +440,8 @@ export class XmlDeviceController {
       await this.deps.upsertObject(`${this.deviceId}.${channelId}.recall`, {
         id: `${channelId}.recall`,
         type: "state",
+        // The titles are the names the user gives the scenes in the receiver: they follow it while the adapter runs.
+        liveLabels: true,
         common: {
           name: tName("recallScene"),
           desc: tName("descRecallScene"),
@@ -450,15 +452,20 @@ export class XmlDeviceController {
           min: 1,
           max,
           step: 1,
-          // The declared titles as the dropdown, so the picker shows "Movie Viewing",
-          // not a bare number.
-          states: Object.fromEntries(scenes.map(scene => [scene.num, scene.title])),
+          // The declared titles as the dropdown, so the picker shows "Movie Viewing", not a bare number — and a
+          // scene without a title shows its number, never an empty label (review 2026-10-05, A23).
+          states: Object.fromEntries(scenes.map(scene => [scene.num, scene.title || String(scene.num)])),
         },
       });
       // Visualizations read titles as VALUES (button captions — the #613 reporter's setup), and a
       // dropdown's labels are not readable: the list for widgets, a title datapoint per scene for
-      // everything else (D8).
-      const surface = sceneListSurface(channelId, scenes);
+      // everything else (D8). Only scenes that HAVE a title: a blank one gave an empty title datapoint, and a zone
+      // without any titles has no list — as on YNCA, whose list holds the named scenes only (A23).
+      const titled = scenes.filter(scene => scene.title.length > 0);
+      if (titled.length === 0) {
+        continue;
+      }
+      const surface = sceneListSurface(channelId, titled);
       for (const object of surface.objects) {
         await this.deps.upsertObject(`${this.deviceId}.${object.id}`, object);
       }
@@ -779,6 +786,9 @@ export class XmlDeviceController {
         type: "state",
         common,
         ...(declared ? { declaredStates: true } : {}),
+        // The input labels are the names the user gives the sockets in the receiver (`Input_Sel_Item` titles, read on
+        // every connection): they follow it while the adapter runs, as on YNCA and MusicCast (Y-25).
+        ...(declared && entry.state === "input" ? { liveLabels: true } : {}),
       });
       this.markWritable(stateId, common.write === true);
     }
