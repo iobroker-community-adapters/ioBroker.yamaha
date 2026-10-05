@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { XmlDeviceController } from "./device-controller";
-import type { XmlClientLike } from "./device-controller";
+import type { XmlClientLike } from "./controller-context";
 import { XmlRefusalError, type BasicStatus, type XmlSystemConfig } from "./protocol";
 import { HttpStatusError } from "../util";
 import { CommandGate } from "../lifecycle/command-gate";
