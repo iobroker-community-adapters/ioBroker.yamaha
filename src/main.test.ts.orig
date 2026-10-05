@@ -551,7 +551,6 @@ function internalOf(adapter: Yamaha): {
   onStateChange(id: string, state: unknown): void;
   reportConnection(deviceId: string, connected: boolean): void;
   removeDevice(deviceId: string): Promise<void>;
-  startDevice(device: unknown, pushReceiver: unknown): Promise<void>;
   persistDeviceNative(deviceId: string, native: Record<string, unknown>): void;
   setVolumePercent(deviceId: string, on: boolean): Promise<void>;
   pendingDevicePatches: Map<string, { timer?: unknown; native: Record<string, unknown> }>;
@@ -1952,12 +1951,9 @@ describe("Yamaha auto-discovery", () => {
     // The user adds the same device back. `ensureDeviceHeader` seeds the default silhouette;
     // if the icon cache survived the removal, `updateDeviceIcon` would see the model as
     // unchanged and the soundbar would keep showing a receiver until the next restart.
-    ctx.i.removed.delete("RX-V685");
+    ctx.i.deviceRecords.set("RX-V685", record);
     ctx.i.objects.set("RX-V685", { type: "device", common: { icon: iconForModel(undefined) }, native: {} });
-    await ctx.i.startDevice(record, ctx.i.pushReceiver);
-    await flush();
-    const again = ctx.calls.at(-1)!.deps.setStateAck as (id: string, value: unknown) => void;
-    again("RX-V685.info.model", "YSP-1600");
+    setStateAck("RX-V685.info.model", "YSP-1600");
     await flushPatches(ctx);
     expect((ctx.i.objects.get("RX-V685")?.common as { icon?: string }).icon).toBe(soundbar);
   });
@@ -4963,15 +4959,10 @@ describe("Yamaha writes only what changed (audit 2026-09-15 — setStateChangedA
     const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
     setStateAck("Living_room.info.model", "RX-V6A");
     await flush();
-    const record = ctx.i.deviceRecords.get("Living_room")!;
     await ctx.i.removeDevice("Living_room");
-    ctx.i.removed.delete("Living_room");
-    await ctx.i.startDevice(record, ctx.i.pushReceiver);
-    await flush();
-    const again = ctx.calls.at(-1)!.deps.setStateAck as (id: string, value: unknown) => void;
     const objectReads = (ctx.i as unknown as { getObjectAsync: ReturnType<typeof vi.fn> }).getObjectAsync;
     objectReads.mockClear();
-    again("Living_room.info.model", "RX-V6A");
+    setStateAck("Living_room.info.model", "RX-V6A");
     await flush();
     expect(objectReads.mock.calls.filter(c => c[0] === "Living_room").length).toBeGreaterThanOrEqual(1);
   });

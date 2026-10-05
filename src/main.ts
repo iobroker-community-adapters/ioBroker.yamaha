@@ -51,7 +51,7 @@ import { YamahaDeviceManagement } from "./device-management";
 import type { DeviceRecord } from "./lib/types";
 import { PerDeviceCaches } from "./lib/lifecycle/per-device";
 import { DeviceSupervisor, type ConnectionHandle } from "./lib/lifecycle/device-supervisor";
-import { ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
+import { RECONNECT_BASE_MS, RECONNECT_MAX_MS, ReconnectStrategy } from "./lib/lifecycle/reconnect-strategy";
 import type { YncaSubunitCache } from "./lib/ynca/subunit-cache";
 import type { ProbeMemory } from "./lib/lifecycle/probe-memory";
 import {
@@ -68,9 +68,6 @@ import {
 } from "./lib/diagnostics/diagnostics-handler";
 import { LogRing } from "./lib/diagnostics/log-ring";
 
-/** Supervisor reconnect backoff bounds (exponential: 1s, 2s … capped at 60s). */
-const RECONNECT_BASE_MS = 1000;
-const RECONNECT_MAX_MS = 60000;
 /** Longest a delete waits for a device's running connection attempt (every transport times out sooner). */
 const REMOVE_SETTLE_CAP_MS = 30000;
 
