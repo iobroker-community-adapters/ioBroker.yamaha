@@ -235,13 +235,17 @@ const FIXTURE_NATIVE = { ...MANIFEST_NATIVE };
 const MOVES = {};
 /**
  * Round 87: adapter-specific like FIXTURE_NATIVE — the states that show an outage of EVERY counterpart, each with the
- * value it takes then: the instance's `info.connection`, and each device's (added per run, showsEveryDevice).
+ * value it takes then: the instance's `info.connection` and its device count, and each device's (added per run,
+ * showsEveryDevice). Round 96: every state that shows the outage belongs here — the value test exempts only these.
  */
-const OUTAGE_SHOWN = { "info.connection": false };
-/** Round 87: every fixture device of this run shows the outage in its own `info.connection` too. */
+const OUTAGE_SHOWN = { "info.connection": false, "info.devicesOnline": 0, "info.devicesAllOnline": false };
+/** Round 87: every fixture device of this run shows the outage in its own `info.connection` and per protocol too. */
 function showsEveryDevice() {
   for (const device of fixtures.devices) {
     OUTAGE_SHOWN[`${device.id}.info.connection`] = false;
+    for (const protocol of device.transports) {
+      OUTAGE_SHOWN[`${device.id}.info.transports.${protocol}`] = false;
+    }
   }
 }
 /**
@@ -765,7 +769,10 @@ async function waitForStates(harness, wanted, what) {
 /**
  * Round 87 (krobi 2026-10-02 23:26: no datapoint is deleted or emptied because a device is gone — the adapter shows
  * whether it is reachable): cut every counterpart, hold, bring it back. Returns when each phase began and the adapter's
- * own log lines of the outage and of the return.
+ * own log lines of the outage and of the return. Round 96 (krobi 2026-10-06 17:55–17:56: nothing is reset either —
+ * a value is a datapoint's content): it also returns every value of the namespace from before the cut, each state's
+ * `def`, and every value the adapter wrote from the cut until the end of the return (`[id, value, time]`; a deleted or
+ * expired state as `null`), and `back`, when the counterparts came back.
  *
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness
  * @param {{ deleted: string[] }} watch the suite's write watcher (watchObjectWrites)
@@ -777,7 +784,31 @@ async function playOutage(harness, watch) {
     before[id] = (await harness.states.getStateAsync(`${NS}${id}`))?.val;
     assert.notStrictEqual(before[id], val, `${id} already shows the outage before the cut`);
   }
-  const outage = { cut: Date.now(), deleted: watch.deleted.length, line: harness.getLogs().length };
+  const values = new Map();
+  const defs = new Map();
+  const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
+  for (const row of list.rows) {
+    if (row.value?.type === "state") {
+      values.set(row.id, canonical((await harness.states.getStateAsync(row.id))?.val ?? null));
+      defs.set(row.id, canonical(row.value.common?.def ?? null));
+    }
+  }
+  const writes = [];
+  const record = (id, state) => {
+    if (id.startsWith(NS) && (!state || state.from === `system.adapter.${ADAPTER}.0`)) {
+      writes.push([id, state ? canonical(state.val ?? null) : null, Date.now()]);
+    }
+  };
+  harness.on("stateChange", record);
+  const outage = {
+    cut: Date.now(),
+    deleted: watch.deleted.length,
+    line: harness.getLogs().length,
+    values,
+    defs,
+    writes,
+    back: 0,
+  };
   fs.writeFileSync(OUTAGE_FLAG, "");
   try {
     await waitForStates(harness, OUTAGE_SHOWN, "the adapter did not show the outage");
@@ -785,10 +816,15 @@ async function playOutage(harness, watch) {
     await new Promise(resolve => setTimeout(resolve, Math.max(OUTAGE_HOLD_MS, shown - outage.cut)));
   } finally {
     // A cut that stays on after a failed wait would cut every later suite of the run too.
+    outage.back = Date.now();
     fs.rmSync(OUTAGE_FLAG, { force: true });
   }
-  await waitForStates(harness, before, "the adapter did not show the return");
-  await new Promise(resolve => setTimeout(resolve, SETTLE_MS));
+  try {
+    await waitForStates(harness, before, "the adapter did not show the return");
+    await new Promise(resolve => setTimeout(resolve, SETTLE_MS));
+  } finally {
+    harness.removeListener("stateChange", record);
+  }
   outage.lines = harness
     .getLogs()
     .slice(outage.line)
@@ -1384,6 +1420,26 @@ tests.integration(ADAPTER_DIR, {
       it("writes no object while its counterpart is gone", function () {
         const written = [...new Set(watch.times.filter(([, t]) => t >= outage.cut).map(([id]) => id))];
         assert.deepStrictEqual(written, [], `objects written during the outage or the return:\n${written.join("\n")}`);
+      });
+
+      // Round 96 (krobi 2026-10-06 17:55–17:56): while the counterpart is gone no value changes but the ones that
+      // show the outage; at the return fresh values are fine, a value emptied or set back to its default is not.
+      // A thing the source itself reports as removed (a delivered parcel, a system taken out of the server) is not
+      // an outage — this suite never plays that.
+      it("keeps every value while its counterpart is gone", function () {
+        const shown = new Set(Object.keys(OUTAGE_SHOWN).map(id => `${NS}${id}`));
+        const empty = new Set([null, canonical(null), canonical("")]);
+        const reset = outage.writes
+          .filter(([id, val]) => !shown.has(id) && val !== outage.values.get(id))
+          .filter(([id, val, t]) => t < outage.back || empty.has(val) || val === outage.defs.get(id))
+          .map(
+            ([id, val]) => `${id} = ${val === null ? "(deleted)" : val}, before ${outage.values.get(id) ?? "(none)"}`,
+          );
+        assert.deepStrictEqual(
+          [...new Set(reset)],
+          [],
+          `values changed during the outage or reset at the return:\n${[...new Set(reset)].join("\n")}`,
+        );
       });
 
       it("logs nothing above debug while its counterpart is gone", function () {

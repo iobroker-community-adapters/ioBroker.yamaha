@@ -283,7 +283,7 @@ function listen(server) {
 /**
  * Start every fixture device and report how the adapter process must be routed to them.
  *
- * @returns {Promise<{devices: {id: string, name: string, ip: string}[], legacyDevices: {ip: string}[], routes: Record<string, {http: number, ynca: number|null}>, power: (on: boolean) => void, stop: () => Promise<void>}>}
+ * @returns {Promise<{devices: {id: string, name: string, ip: string, transports: string[]}[], legacyDevices: {ip: string}[], routes: Record<string, {http: number, ynca: number|null}>, power: (on: boolean) => void, stop: () => Promise<void>}>}
  *   the device list for the adapter's configuration — as 3.0.0 writes it (the id stored), and as
  *   2.x held it (the address only, the id derived from it) — the hook's routing table, a power switch for the YNCA
  *   receivers, and a stopper
@@ -311,7 +311,13 @@ async function startFixtureDevices() {
     routes[fixture.ip] = { http: httpServer.port, ynca: ynca ? ynca.port : null };
   }
   return {
-    devices: fixtures.map(f => ({ id: f.deviceId, name: f.deviceId, ip: f.ip })),
+    // `transports`: the protocols the capture answers — each device's `info.transports.<protocol>` shows an outage.
+    devices: fixtures.map(f => ({
+      id: f.deviceId,
+      name: f.deviceId,
+      ip: f.ip,
+      transports: ["ynca", "yxc", "xml"].filter(protocol => f[protocol]),
+    })),
     legacyDevices: fixtures.map(f => ({ ip: f.ip })),
     routes,
     /**
