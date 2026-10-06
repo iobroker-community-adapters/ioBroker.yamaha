@@ -191,7 +191,7 @@ export class DiagnosticsHandler {
         connectionNote = `live read failed: ${errText(e)}`;
       }
       const prefix = `${this.host.namespace}.${deviceId}`;
-      const [environment, deviceObject, { objectTree, transports }] = await Promise.all([
+      const [environment, deviceObject, { objectTree, transports, offlineSince }] = await Promise.all([
         this.environment(devices),
         this.host.getForeignObjectAsync(prefix).catch(() => null),
         this.deviceTree(prefix),
@@ -217,6 +217,7 @@ export class DiagnosticsHandler {
         connection,
         connectionNote,
         trail,
+        offlineSince,
         objectTree,
         logs: this.host.logRing.about([device.id, device.ip], others),
       });
@@ -294,18 +295,19 @@ export class DiagnosticsHandler {
    * instance, its values in ONE read.
    *
    * @param prefix the device's full id
-   * @returns one entry per datapoint, and transport → connected
+   * @returns one entry per datapoint, transport → connected, and when `info.connection` last turned false
    */
   private async deviceTree(
     prefix: string,
-  ): Promise<{ objectTree: ObjectTreeEntry[]; transports: Record<string, boolean> }> {
+  ): Promise<{ objectTree: ObjectTreeEntry[]; transports: Record<string, boolean>; offlineSince?: string }> {
     const start = `${prefix}.`;
     const view = await this.host
       .getObjectViewAsync("system", "state", { startkey: start, endkey: `${start}\u9999` })
       .catch(() => null);
     const rows = view?.rows ?? [];
     const flags = TRANSPORTS.map(transport => `${start}info.transports.${transport}`);
-    const states = await this.readStates(`${start}*`, [...rows.map(row => row.id), ...flags]);
+    const connectionId = `${start}info.connection`;
+    const states = await this.readStates(`${start}*`, [...rows.map(row => row.id), ...flags, connectionId]);
     const objectTree = rows.map(row => {
       const common = (row.value?.common ?? {}) as Partial<ioBroker.StateCommon>;
       const state = states[row.id];
@@ -327,7 +329,12 @@ export class DiagnosticsHandler {
     const transports = Object.fromEntries(
       TRANSPORTS.map((transport, index) => [transport, states[flags[index]]?.val === true]),
     );
-    return { objectTree, transports };
+    const connection = states[connectionId];
+    const offlineSince =
+      connection?.val === false && typeof connection.lc === "number"
+        ? new Date(connection.lc).toISOString()
+        : undefined;
+    return { objectTree, transports, offlineSince };
   }
 
   /**

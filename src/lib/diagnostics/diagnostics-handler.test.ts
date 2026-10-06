@@ -18,6 +18,7 @@ import { diagnosticsFileName } from "./report";
  * @param options.objects the objects by id
  * @param options.states the state values by id
  * @param options.bulk whether it offers the bulk state read
+ * @param options.lc when a state last changed, by id
  */
 function makeHost(
   options: {
@@ -25,6 +26,7 @@ function makeHost(
     objects?: Record<string, ioBroker.Object>;
     states?: Record<string, unknown>;
     bulk?: boolean;
+    lc?: Record<string, number>;
   } = {},
 ): DiagnosticsHost & { lines: string[]; reads: { one: string[]; bulk: Array<string | string[]> } } {
   const objects = options.objects ?? {};
@@ -34,7 +36,12 @@ function makeHost(
   const ring = new LogRing();
   ring.add("info", "rx-v6a-2b3c: ready (YNCA, MusicCast)");
   ring.add("debug", "wx-030-f504: swept");
-  const state = (id: string): ioBroker.State => ({ val: states[id], ack: true }) as ioBroker.State;
+  const state = (id: string): ioBroker.State =>
+    ({
+      val: states[id],
+      ack: true,
+      ...(options.lc?.[id] === undefined ? {} : { lc: options.lc[id] }),
+    }) as ioBroker.State;
   return {
     lines,
     reads,
@@ -209,6 +216,31 @@ describe("DiagnosticsHandler", () => {
       note: "not connected — no live read",
       ownersAtLastConnection: null,
     });
+  });
+
+  // Server test 2026-10-06: a receiver without power since the evening before, the adapter restarted in the morning —
+  // the trail had no "disconnected", and the report said null where plan Y3 wants "offline since".
+  it("tells since when an offline device is gone after a restart, from its info.connection", async () => {
+    const id = "yamaha.0.rx-v6a-2b3c.info.connection";
+    const lc = Date.UTC(2026, 9, 5, 21, 30, 32);
+    for (const bulk of [false, true]) {
+      const offline = makeHost({
+        devices: [device({ connected: false, capture: () => Promise.resolve(undefined) })],
+        states: { [id]: false },
+        lc: { [id]: lc },
+        bulk,
+      });
+      const answer = (await new DiagnosticsHandler(offline).export("rx-v6a-2b3c")) as { content: string };
+      expect(JSON.parse(answer.content).trail.disconnectedSince, `bulk ${bulk}`).toBe("2026-10-05T21:30:32.000Z");
+    }
+    // A datapoint that says connected gives no "offline since".
+    const stale = makeHost({
+      devices: [device({ connected: false, capture: () => Promise.resolve(undefined) })],
+      states: { [id]: true },
+      lc: { [id]: lc },
+    });
+    const answer = (await new DiagnosticsHandler(stale).export("rx-v6a-2b3c")) as { content: string };
+    expect(JSON.parse(answer.content).trail.disconnectedSince).toBeNull();
   });
 
   // Plan „Diagnosebericht“: the live read goes through the same clients the trail listens at; a full ring would lose

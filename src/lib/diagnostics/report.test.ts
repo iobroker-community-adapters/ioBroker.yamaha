@@ -364,6 +364,15 @@ describe("the diagnostics trail in the report", () => {
     expect(report.trail.commandResults[1].attempts[1].because).toBe("yxc could not send it");
   });
 
+  it("offline since: the trail's last 'disconnected' first, the datapoint's time after a restart, null while connected", () => {
+    const since = (over: Parameters<typeof input>[0]): unknown =>
+      (buildDiagnosticsReport(input(over)) as { trail: { disconnectedSince: unknown } }).trail.disconnectedSince;
+    const offlineSince = "2026-10-05T21:30:32.000Z";
+    expect(since({ trail: offlineTrail().snapshot(), offlineSince })).toBe("2026-10-06T10:00:13.000Z");
+    expect(since({ offlineSince })).toBe(offlineSince);
+    expect(since({ device: { ...input().device, connected: true }, offlineSince })).toBeNull();
+  });
+
   it("replaces every name the trail carries — a YNCA line, a whole XML body, MusicCast answers, a written name", () => {
     const content = diagnosticsExport(input({ trail: offlineTrail().snapshot() })).content;
     for (const secret of ["Kinderzimmer", "Wohnzimmer", "Haus Krobath", "KrobiNet", "Terrasse", "00A0DED4F504"]) {

@@ -122,23 +122,32 @@ export interface ReportInput {
   logs: LogLine[];
   /** The device's diagnostics trail, taken before the live read (traffic, commands, connection history, owners). */
   trail?: TrafficSnapshot;
+  /** When the device's `info.connection` last turned false — what tells "offline since" after a restart. */
+  offlineSince?: string;
 }
 
 /** A command datapoint whose value is a name the user gives — taught to the pseudonymiser before the walk. */
 const NAME_COMMAND = /(?:^|\.)(?:zoneName|name)$/;
 
 /**
- * When the device went offline: the last "disconnected" of its history, while it is not connected.
+ * When the device went offline: the last "disconnected" of its history, while it is not connected — after a restart
+ * the history has none, and the time its `info.connection` last turned false says it (server test 2026-10-06: a
+ * receiver without power since the evening before was reported with null).
  *
  * @param history the connection history, oldest first
  * @param connected whether the device is connected now
+ * @param offlineSince when the device's `info.connection` last turned false
  * @returns the time, or null
  */
-function disconnectedSince(history: readonly HistoryEvent[], connected: boolean): string | null {
+function disconnectedSince(
+  history: readonly HistoryEvent[],
+  connected: boolean,
+  offlineSince: string | undefined,
+): string | null {
   if (connected) {
     return null;
   }
-  return [...history].reverse().find(event => event.event === "disconnected")?.at ?? null;
+  return [...history].reverse().find(event => event.event === "disconnected")?.at ?? offlineSince ?? null;
 }
 
 /**
@@ -283,7 +292,7 @@ export function buildDiagnosticsReport(input: ReportInput): Record<string, unkno
       markers:
         "Markers (ip-private-1, name-1, device-1, serial-1-…2B3C) are stable INSIDE this file only. Never compare them across two exports.",
       trail:
-        "trail.* is what the adapter recorded before this report, in memory only (empty after a restart): traffic.ynca every line sent and received, traffic.musiccast every request with its answer or error and the device's time, traffic.xml every request body and file with its answer, traffic.events every MusicCast event — a repeat only counts up (count, first, last; the playback clock is not compared), an entry over 64 KB keeps only its size (omittedBytes). commandResults: the last 30 commands, each protocol tried and why the next one was. connectionHistory: the last 50 connection events with each protocol's reason. disconnectedSince and lastReasonPerTransport are read from it.",
+        "trail.* is what the adapter recorded before this report, in memory only (empty after a restart): traffic.ynca every line sent and received, traffic.musiccast every request with its answer or error and the device's time, traffic.xml every request body and file with its answer, traffic.events every MusicCast event — a repeat only counts up (count, first, last; the playback clock is not compared), an entry over 64 KB keeps only its size (omittedBytes). commandResults: the last 30 commands, each protocol tried and why the next one was. connectionHistory: the last 50 connection events with each protocol's reason. disconnectedSince is read from it, after a restart from when the device's info.connection last turned false; lastReasonPerTransport is read from it.",
       captures:
         "captures.* holds what the device answered when this report was made, verbatim and read-only: YNCA SUBUNIT:FUNC → value (plus every received line), MusicCast endpoint → JSON body, XML Element/Node → response body and desc.xml. Same shape as test/fixtures/inventory. complete = the read ran to its end without a transport failure; failed = questions that got no answer (timeout, lost connection), error = why. A refusal is an answer: kept as {response_code} or {httpStatus}; a transport failure as {error}.",
     },
@@ -311,7 +320,7 @@ export function buildDiagnosticsReport(input: ReportInput): Record<string, unkno
           ownersAtLastConnection: input.trail?.lastOwners ?? null,
         },
     trail: {
-      disconnectedSince: disconnectedSince(input.trail?.connectionHistory ?? [], device.connected),
+      disconnectedSince: disconnectedSince(input.trail?.connectionHistory ?? [], device.connected, input.offlineSince),
       lastReasonPerTransport: lastReasonPerTransport(input.trail?.connectionHistory ?? []),
       connectionHistory: input.trail?.connectionHistory ?? [],
       commandResults: input.trail?.commands ?? [],
