@@ -63,7 +63,8 @@ describe("DiagnosticsPanel", () => {
     fireEvent.click(button);
     expect(await screen.findByTestId("diag-generating")).toHaveTextContent("yd_generating");
     expect(screen.getByTestId("diag-export")).toBeDisabled();
-    await waitFor(() => expect(screen.getByTestId("diag-elapsed")).toHaveTextContent("yd_elapsed 1"), {
+    // The count is wall-clock seconds: a busy runner showed 2 at its first look (CI 2026-10-06) — any second counts.
+    await waitFor(() => expect(screen.getByTestId("diag-elapsed")).toHaveTextContent(/^yd_elapsed [1-9]\d*$/), {
       timeout: 2500,
     });
     answer({ error: "x" });
