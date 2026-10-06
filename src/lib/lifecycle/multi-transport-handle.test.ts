@@ -1443,11 +1443,14 @@ describe("MultiTransportHandle — what changes during the first learn is learne
       log: silentLog,
     });
     await handle.start();
-    await new Promise(resolve => setTimeout(resolve, 30));
-    expect(written).toContain("dev.sound.dialogueLevel");
-    expect(defs.get("dev.input")?.common.states).toEqual({ hdmi1: "HDMI1", tv: "TV" });
-    expect(acks).toContainEqual(["dev.sound.dialogueLevel", "2"]);
-    expect(acks.filter(([id]) => id === "dev.input").at(-1)).toEqual(["dev.input", "tv"]);
+    // Waited for, not timed: every write takes a timer round, and a Windows timer is ~15 ms coarse — a fixed 30 ms
+    // ended before the value arrived there (CI 2026-10-06, 22.x windows).
+    await vi.waitFor(() => {
+      expect(written).toContain("dev.sound.dialogueLevel");
+      expect(defs.get("dev.input")?.common.states).toEqual({ hdmi1: "HDMI1", tv: "TV" });
+      expect(acks).toContainEqual(["dev.sound.dialogueLevel", "2"]);
+      expect(acks.filter(([id]) => id === "dev.input").at(-1)).toEqual(["dev.input", "tv"]);
+    });
     handle.close();
   });
 
