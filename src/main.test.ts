@@ -5444,4 +5444,14 @@ describe("the diagnostics trail of a device", () => {
       expect.objectContaining({ event: "no connection", failedInARow: 1 }),
     ]);
   });
+
+  it("an attempt that throws is recorded once, with its count — not as an attempt without a connection too", async () => {
+    const ctx = setup({ devices: [{ name: "Bad", ip: "192.168.1.12" }] });
+    mocks.attemptDevice.mockImplementation(() => Promise.reject(new Error("object creation failed")));
+    await ctx.i.onReady();
+    await flush();
+    expect(trailOf(ctx)?.connectionHistory).toEqual([
+      expect.objectContaining({ event: "attempt failed", error: "object creation failed", failedInARow: 1 }),
+    ]);
+  });
 });

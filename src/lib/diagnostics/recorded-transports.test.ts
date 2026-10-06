@@ -115,10 +115,20 @@ describe("recorded seams", () => {
       gate(),
     );
     await expect(xml.getXml("Main_Zone", "<Basic_Status>GetParam</Basic_Status>")).rejects.toThrow("hang up");
+    const described = new XmlClient(
+      "10.0.0.9",
+      undefined,
+      gate(),
+      recordedXmlGetter(() => Promise.reject(new Error("HTTP 404")), recorder),
+    );
+    await expect(described.getDescriptor()).rejects.toThrow("404");
     const { traffic } = recorder.snapshot();
     expect(traffic.musiccast).toEqual([
       expect.objectContaining({ request: "/system/getDeviceInfo", error: "connect ECONNREFUSED" }),
     ]);
-    expect(traffic.xml).toEqual([expect.objectContaining({ error: "socket hang up" })]);
+    expect(traffic.xml).toEqual([
+      expect.objectContaining({ error: "socket hang up" }),
+      expect.objectContaining({ request: "GET /YamahaRemoteControl/desc.xml", error: "HTTP 404" }),
+    ]);
   });
 });

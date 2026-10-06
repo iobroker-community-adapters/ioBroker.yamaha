@@ -56,6 +56,8 @@ describe("TrafficRecorder — R1: what recurs is counted, not stacked", () => {
       ["connect ECONNREFUSED", 1, 5],
     ]);
     expect(traffic.xml).toEqual([expect.objectContaining({ request: "<Basic_Status>", answer: "<A/>", count: 2 })]);
+    rec.xml("<Basic_Status>", { answer: "<B/>" }, 42);
+    expect(rec.snapshot().traffic.xml.map(e => e.answer)).toEqual(["<A/>", "<B/>"]);
   });
 });
 

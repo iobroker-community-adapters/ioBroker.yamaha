@@ -476,6 +476,16 @@ describe("attemptDevice builders", () => {
     expect(xmlTried()).toBe(true);
   });
 
+  // Plan „Diagnosebericht“, Y1: with a trail, every protocol's client is built on the recorded seam.
+  test("with a trail, the MusicCast and XML requests of an attempt are recorded with their failure", async () => {
+    const recorder = new TrafficRecorder();
+    await attemptDevice({ id: "rx", ip: "192.168.1.10", source: "manual" }, { ...depsWith([]), recorder });
+    const { traffic } = recorder.snapshot();
+    expect(traffic.musiccast.length).toBeGreaterThan(0);
+    expect(traffic.xml.length).toBeGreaterThan(0);
+    expect(traffic.xml.every(entry => typeof entry.error === "string")).toBe(true);
+  });
+
   test("a description that advertises neither service still tries YNCA", async () => {
     wire.tcp.length = 0;
     wire.http.length = 0;
