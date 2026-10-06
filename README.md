@@ -75,31 +75,28 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 
 ### **WORK IN PROGRESS**
 
-- (krobipd) New: Expert tab in the instance settings with a diagnostics report — pick a receiver, press the button, and your browser saves one file for a GitHub issue
-- (krobipd) New: The report also shows what happened before it — each protocol's recent traffic, the last commands and when and why the receiver went offline
-- (krobipd) New: Addresses, serial numbers and the names you gave rooms, network and inputs are replaced by markers; a new "Report a device" issue form asks for the file
-- (krobipd) Changed: A datapoint looks and works the same whichever protocol serves it — YNCA, MusicCast and XML now share names, roles, value lists and the handling of written numbers
-- (krobipd) Changed: Over YNCA the input dropdown shows the names you gave the inputs in the receiver; the 29 datapoints advanced.inputNames.\* are removed
-- (krobipd) New: Input, scene and sound program names you change in the receiver or the MusicCast app reach the dropdowns while the adapter runs
-- (krobipd) Changed: sound.adaptiveDrc is a switch on every receiver — Auto from the receiver counts as on, and a script that writes "Auto" keeps working
-- (krobipd) Changed: On MusicCast-only devices, sleep is the same dropdown as on the other receivers (Off, 30 min …) and bass and treble are shown in dB
-- (krobipd) Changed: Zone B datapoints carry the same names, roles and ids as the other zones; the zone name moves from multiroom.zoneB.name to multiroom.zoneB.zoneName
-- (krobipd) Fixed: info.model and info.firmware are now filled on devices without YNCA as well, so the device card shows the model on MusicCast and XML devices
-- (krobipd) Fixed: A command the receiver refuses over one protocol goes over another one also for scenes, tuner, party mode, HDMI outputs, speakers and playback keys
-- (krobipd) Fixed: An empty value or a number like 1.5 or 0 written to scene.recall or a preset no longer recalls anything
-- (krobipd) Fixed: A tuner frequency written right after the band goes to the new band and is never clamped to another station
-- (krobipd) Fixed: Switches on receivers with a device description (2008–2017) are plain on/off switches instead of showing an On/Standby list
-- (krobipd) Fixed: The on-screen remote works over XML on the 2012 entry class (RX-V473 …) as its device description declares
-- (krobipd) Fixed: A YNCA receiver that did not answer at one start is read in full at the next one instead of keeping only its system datapoints
-- (krobipd) Changed: The network interface setting applies to every connection — the search, the receivers and the MusicCast event port; an address the host does not have is ignored
-- (krobipd) Fixed: Editing a device card in the instance settings no longer restarts the instance, and a receiver you deleted does not come back after a restart
-- (krobipd) Fixed: Zones on Main Zone Sync show and control the main zone's playback; zones without a media input get no player datapoints
-- (krobipd) Fixed: MusicCast — two quick link commands build one group, and a favourite is never sent to a zone that is in standby
-- (krobipd) Fixed: MusicCast — "power on, then volume" works on soundbars, a late zone's volume uses the right scale, and events of the first seconds are kept
-- (krobipd) Fixed: Receivers with a CD drive and MusicCast get their CD datapoints; until now the CD part of these devices was missing from the object tree
-- (krobipd) Fixed: The menu path finds entries on later pages and stops at a folder that does not open; a "not now" answer no longer hides the XML menus
-- (krobipd) Fixed: A powered-off XML receiver goes offline in seconds, and read-backs after a command no longer wait behind the regular poll
-- (krobipd) Fixed: A speaker, soundbar or CD player with MusicCast only that loses power shows as disconnected within three minutes instead of up to fifteen
+- (krobipd) New: Diagnostics report on the new Expert tab, with a "Report a device" issue form for it
+- (krobipd) New: Names you change in the receiver or the MusicCast app reach the input, scene and sound program dropdowns while the adapter runs
+- (krobipd) Changed: YNCA, MusicCast and XML datapoints now share names, roles and value lists
+- (krobipd) Changed: The YNCA input dropdown shows your input names; advanced.inputNames.\* is removed
+- (krobipd) Changed: sound.adaptiveDrc is a switch on every receiver; writing "Auto" still works
+- (krobipd) Changed: On MusicCast-only devices, sleep is a dropdown and bass and treble are in dB
+- (krobipd) Changed: The Zone B name moves from multiroom.zoneB.name to multiroom.zoneB.zoneName
+- (krobipd) Changed: The network interface setting applies to every connection of the adapter
+- (krobipd) Fixed: info.model and info.firmware are filled on devices without YNCA
+- (krobipd) Fixed: Commands refused over one protocol go over another one also for scenes, tuner, party mode, HDMI outputs, speakers and playback keys
+- (krobipd) Fixed: Empty or invalid values written to scene.recall or a preset no longer recall anything
+- (krobipd) Fixed: A tuner frequency written right after the band goes to the new band
+- (krobipd) Fixed: Switches on 2008–2017 receivers no longer show an On/Standby list
+- (krobipd) Fixed: The on-screen remote works over XML on the 2012 entry class (RX-V473 …)
+- (krobipd) Fixed: A YNCA receiver that did not answer at one start is read in full at the next
+- (krobipd) Fixed: Editing a device card no longer restarts the instance, and deleted receivers stay deleted
+- (krobipd) Fixed: Zones on Main Zone Sync show the main zone's playback; zones without a media input get no player datapoints
+- (krobipd) Fixed: MusicCast link groups, favourites and volume right after power-on on soundbars work reliably
+- (krobipd) Fixed: Receivers with a CD drive and MusicCast get their CD datapoints
+- (krobipd) Fixed: Menu paths find entries on later pages, and XML menus are no longer hidden after a "not now" answer
+- (krobipd) Fixed: A powered-off XML receiver goes offline in seconds
+- (krobipd) Fixed: A MusicCast-only device that loses power goes offline within three minutes instead of fifteen
 
 ### 3.2.0 (2026-10-02)
 
