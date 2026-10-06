@@ -10,6 +10,20 @@ import { DISCOVERY_SCHEMA } from "./lifecycle/discovery-schema";
 import { MEMORY_KEY } from "./lifecycle/memory-keys";
 import { BUNDLE_FUNCS, FakeClient, testGate } from "../../test/helpers/ynca-fake-client";
 
+/**
+ * The receiver answers `@UNDEFINED` to `LISTINFO` — it has no YNCA menus (the RX-V473, #613), as opposed to
+ * `@RESTRICTED`, the fake's default verdict "unclear".
+ *
+ * @param client the fake client
+ */
+function listInfoUndefined(client: FakeClient): void {
+  const base = client.probeKnown;
+  client.probeKnown = async (subunit, funcs) => ({
+    ...(await base(subunit, funcs)),
+    ...(funcs.includes("LISTINFO") ? { LISTINFO: "undefined" as const } : {}),
+  });
+}
+
 function makeDeps(client: FakeClient): {
   created: string[];
   objects: Array<{ id: string; def: ObjectDef }>;
@@ -544,6 +558,7 @@ describe("YncaDeviceController browse surface (#613)", () => {
       subunits: { MAIN: { PWR: "On" }, NETRADIO: { PLAYBACKINFO: "Stop" }, SERVER: { PLAYBACKINFO: "Stop" } },
     };
     client.listSubunits = []; // the device answers @UNDEFINED to every LISTINFO
+    listInfoUndefined(client);
     const { created, deps } = makeDeps(client);
     deps.gate = testGate();
     await new YncaDeviceController("living", deps).start();
@@ -605,6 +620,7 @@ describe("YncaDeviceController browse surface (#613)", () => {
       subunits: { SYS: { MODELNAME: "RX-V473", VERSION: "1.0" }, MAIN: { PWR: "On", INP: "NET RADIO" } },
     };
     client.listSubunits = [];
+    listInfoUndefined(client);
     const { created, deps } = makeDeps(client);
     deps.gate = testGate();
     await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
@@ -2063,6 +2079,7 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
    * @param options.power the main zone's power at connect
    * @param options.memory the device's memory
    * @param options.lists the sources that answer LISTINFO with a list
+   * @param options.noMenus the others answer `@UNDEFINED` (no menus) instead of `@RESTRICTED` (not ready)
    * @param options.model the model the device reports
    * @param options.zone3 whether the receiver has a zone 3 too
    */
@@ -2070,6 +2087,7 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     power: "On" | "Standby";
     memory?: ProbeMemory;
     lists?: string[];
+    noMenus?: boolean;
     model?: string;
     zone3?: boolean;
   }): Promise<{
@@ -2083,6 +2101,9 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
     const model = options.model ?? "RX-V475";
     const client = new FakeClient();
     client.listSubunits = options.lists ?? [];
+    if (options.noMenus) {
+      listInfoUndefined(client);
+    }
     client.capabilities = {
       model,
       subunits: {
@@ -2314,9 +2335,17 @@ describe("YncaDeviceController — what the receiver proved stays proven, and a 
   });
 
   test("no list answer is remembered as nothing — the next awake connect asks again", async () => {
-    const s = await proofSetup({ power: "On", lists: [] });
+    const s = await proofSetup({ power: "On", lists: [], noMenus: true });
     expect(s.memory.remembered("yncaBrowseSources")).toBeUndefined();
     expect(s.objects.some(entry => entry.id.includes("player.browse"))).toBe(false);
+  });
+
+  test("switched on with the network module not ready (@RESTRICTED), the menus stay claimed, unproven", async () => {
+    // A batch read cannot tell the two refusals apart; claimed as absent, a read-in completing in this session would
+    // remove the menus of a receiver that has them (upgrade suite 2026-10-06).
+    const s = await proofSetup({ power: "On", lists: [] });
+    expect(s.memory.remembered("yncaBrowseSources")).toBeUndefined();
+    expect(lastDef(s.objects, "living.player.browse.source")?.unproven).toBe(true);
   });
 
   test("a source proven once stays offered when it refuses now", async () => {

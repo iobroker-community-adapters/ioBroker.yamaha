@@ -623,6 +623,18 @@ export class YncaMenus {
     }
     // Only a real list answer counts; together with the remembered proof, which a refusal now (a network module not
     // ready yet) does not take away.
-    return { subunits: this.rememberBrowseProof(await this.proveBrowseSources(candidates)), proven: true };
+    const proven = this.rememberBrowseProof(await this.proveBrowseSources(candidates));
+    if (proven.size > 0) {
+      return { subunits: proven, proven: true };
+    }
+    // No source answered with a list, and a batch read cannot tell the two refusals apart. Only @UNDEFINED says the
+    // receiver has no menus (the RX-V473, #613); @RESTRICTED — the network module not ready right after power-on —
+    // proves nothing, and the sources stay claimed unproven as in standby: a read-in completing in this session
+    // must not remove a menu the receiver has (Y-01, upgrade suite 2026-10-06). The network sources share one
+    // module, so the first one answers for all.
+    const verdict = (await this.deps.client.probeKnown(candidates[0], ["LISTINFO"])).LISTINFO;
+    return verdict === "undefined"
+      ? { subunits: proven, proven: true }
+      : { subunits: new Set(candidates), proven: false };
   }
 }

@@ -619,6 +619,34 @@ export function neverWrittenStateIds(
   return ids;
 }
 
+/**
+ * The write-only states (keys: `common.read === false`) under the given devices, the `info.` header left out. They never
+ * carry a value, so "never written" cannot tell a stale one; the completion of a read-in removes the ones no transport
+ * built (upgrade suite 2026-10-06: 3.3.0 builds no player block for a zone without a network source — the RX-A2A's
+ * zone 4 — and its seven keys stayed behind the removed values).
+ *
+ * @param objects all objects under the instance, keyed by full id
+ * @param deviceIds the ids of the devices to look at
+ * @param namespace the adapter namespace (e.g. `yamaha.0`)
+ * @returns the full ids of the write-only states
+ */
+export function writeOnlyStateIds(
+  objects: Record<string, { type?: string; common?: unknown } | undefined>,
+  deviceIds: Set<string>,
+  namespace: string,
+): string[] {
+  return Object.entries(objects)
+    .filter(([fullId, object]) => {
+      if (object?.type !== "state" || (object.common as { read?: boolean } | undefined)?.read !== false) {
+        return false;
+      }
+      const relative = stripNamespace(fullId, namespace);
+      const top = relative.split(".")[0];
+      return deviceIds.has(top) && !relative.slice(top.length + 1).startsWith("info.");
+    })
+    .map(([fullId]) => fullId);
+}
+
 /** A scene title datapoint, relative to its device and its zone folder. */
 const SCENE_TITLE = /^scene\.title\d+$/;
 
@@ -852,6 +880,37 @@ export interface BoundFields {
   max?: number;
   /** The grid the datapoint's values sit on. */
   step?: number;
+}
+
+/** The parts of an object's `common` that make its form. */
+type FormFields = { type?: unknown; unit?: unknown; min?: unknown; max?: unknown; step?: unknown };
+
+/**
+ * Whether the stored object of a datapoint has another FORM than the one the transports build now — another value type,
+ * or for a number another unit, bound or step. While a read-in is open (an adapter update with the receiver switched
+ * off) the objects keep their stored form (Y-01), and the transports already report in the new one: a `boolean` for a
+ * datapoint that is still text (`sound.adaptiveDrc`), half-decibel steps for a bass still declared −12…12 in steps of 1
+ * (server test 2026-10-06). Such a datapoint gets no value until the switched-on read gives it its new form (krobi
+ * 2026-10-06 15:30: only a switched-on receiver changes datapoints). A field one side does not declare is no
+ * difference — a read may lack a bound the object carries.
+ *
+ * @param stored the stored object's `common`
+ * @param next the `common` the transports build now
+ * @returns true when a value in the new form would not fit the stored object
+ */
+export function formDiffers(stored: FormFields | undefined, next: FormFields): boolean {
+  if (!stored) {
+    return false;
+  }
+  if (stored.type !== next.type) {
+    return true;
+  }
+  if (next.type !== "number") {
+    return false;
+  }
+  return (["unit", "min", "max", "step"] as const).some(
+    field => stored[field] !== undefined && next[field] !== undefined && stored[field] !== next[field],
+  );
 }
 
 /**

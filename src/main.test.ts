@@ -2873,9 +2873,107 @@ describe("Yamaha datapoint balance in the log", () => {
     await ctx.i.onReady();
     await flush();
     await upsertOf(ctx)("Living_room.sleep", { type: "state", common: { name: "s", type: "string" } }, true);
-    expect((ctx.i.objects.get("Living_room.sleep")?.common as { states?: unknown }).states ?? undefined).toBe(
-      undefined,
+    // The key goes, not `null`: the tree a fresh installation builds carries none (upgrade suite 2026-10-06).
+    expect("states" in (ctx.i.objects.get("Living_room.sleep")?.common as object)).toBe(false);
+  });
+
+  // Upgrade suite 2026-10-06: `sleep` kept "min" after it became a dropdown, `adaptiveDrc` kept `states: null`.
+  it("at the completion of a read-in, a unit, bounds and a list the new form lacks leave as keys", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.sleep", {
+      type: "state",
+      common: { name: "s", type: "number", role: "level.timer.sleep", unit: "min", min: 0, max: 120, step: 30 },
+      native: {},
+    });
+    ctx.i.objects.set("Living_room.sound.adaptiveDrc", {
+      type: "state",
+      common: { name: "d", type: "string", role: "state", states: { Off: "Off", Auto: "Auto" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    await upsertOf(ctx)(
+      "Living_room.sleep",
+      {
+        type: "state",
+        common: { name: "s", type: "string", role: "state", states: { Off: "Off", "30 min": "30 min" } },
+      },
+      true,
     );
+    await upsertOf(ctx)(
+      "Living_room.sound.adaptiveDrc",
+      { type: "state", common: { name: "d", type: "boolean", role: "switch" } },
+      true,
+    );
+    const sleep = ctx.i.objects.get("Living_room.sleep")?.common as Record<string, unknown>;
+    expect(["unit", "min", "max", "step"].filter(key => key in sleep)).toEqual([]);
+    const drc = ctx.i.objects.get("Living_room.sound.adaptiveDrc")?.common as Record<string, unknown>;
+    expect([drc.type, drc.role, "states" in drc]).toEqual(["boolean", "switch", false]);
+  });
+
+  // Server test 2026-10-06 (Y-01): an update with the receiver switched off leaves the objects in their stored form
+  // until the switched-on read — and the transports already report in the new one. That value waits.
+  it("while a read-in is open, a value in another form than the stored object waits for the completion", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.sound.adaptiveDrc", {
+      type: "state",
+      common: { name: "d", type: "string", role: "state", states: { Off: "Off", Auto: "Auto" } },
+      native: {},
+    });
+    ctx.i.objects.set("Living_room.sound.bass", {
+      type: "state",
+      common: { name: "b", type: "number", role: "level", unit: "", min: -12, max: 12, step: 1 },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    const drc = { type: "state", common: { name: "d", type: "boolean", role: "switch", read: true, write: true } };
+    const bass = {
+      type: "state",
+      common: { name: "b", type: "number", role: "level", unit: "dB", min: -6, max: 6, step: 0.5 },
+    };
+    await upsertOf(ctx)("Living_room.sound.adaptiveDrc", drc);
+    await upsertOf(ctx)("Living_room.sound.bass", bass);
+    setStateAck("Living_room.sound.adaptiveDrc", false);
+    setStateAck("Living_room.sound.bass", -3.5);
+    await flush();
+    expect((ctx.i.objects.get("Living_room.sound.adaptiveDrc")?.common as { type: string }).type).toBe("string");
+    expect(ctx.i.states.has("Living_room.sound.adaptiveDrc")).toBe(false);
+    expect(ctx.i.states.has("Living_room.sound.bass")).toBe(false);
+
+    // The switched-on read completes the read-in: the new form, then its value.
+    await upsertOf(ctx)("Living_room.sound.adaptiveDrc", drc, true);
+    await upsertOf(ctx)("Living_room.sound.bass", bass, true);
+    setStateAck("Living_room.sound.adaptiveDrc", false);
+    setStateAck("Living_room.sound.bass", -3.5);
+    await flush();
+    expect(ctx.i.states.get("Living_room.sound.adaptiveDrc")).toEqual({ val: false, ack: true });
+    expect(ctx.i.states.get("Living_room.sound.bass")).toEqual({ val: -3.5, ack: true });
+  });
+
+  it("a read-in that is complete holds back no value", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.sound.bass", {
+      type: "state",
+      common: { name: "b", type: "number", role: "level", unit: "dB", min: -6, max: 6, step: 0.5 },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const profile = ctx.i.profiles.get("Living_room") as unknown as {
+      tree: { settledVersion?: string };
+      setTree(tree: object): void;
+    };
+    profile.setTree({ ...profile.tree, settledVersion: (ctx.i as unknown as { version: string }).version });
+    // A read that declares other bounds (a zone answering less) is no reason to keep the value back.
+    await upsertOf(ctx)("Living_room.sound.bass", {
+      type: "state",
+      common: { name: "b", type: "number", role: "level", unit: "dB", min: -3, max: 3, step: 0.5 },
+    });
+    (ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void)("Living_room.sound.bass", -1);
+    await flush();
+    expect(ctx.i.states.get("Living_room.sound.bass")).toEqual({ val: -1, ack: true });
   });
 
   it("an unchanged or growing dropdown is written once, without the clearing write", async () => {
@@ -3994,6 +4092,32 @@ describe("Yamaha removes what a device no longer has only when its read-in compl
     expect(ctx.i.objects.has("Living_room.inputText")).toBe(false);
     expect(ctx.i.objects.has("Living_room.player.server")).toBe(false);
     expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("read-in complete"));
+  });
+
+  // Upgrade suite 2026-10-06: 3.3.0 builds no player block for the RX-A2A's zone 4 (no network source); its values went
+  // at the completion, its keys — write-only, never a value — stayed, and the folder with them.
+  it("the completion removes the keys no transport built, and their folder", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room", { type: "device", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.multiroom.zone4.player", { type: "channel", common: {}, native: {} });
+    ctx.i.objects.set("Living_room.multiroom.zone4.player.play", {
+      type: "state",
+      common: { role: "button.play", read: false, write: true },
+      native: {},
+    });
+    // A key a transport built stays.
+    ctx.i.objects.set("Living_room.player.play", {
+      type: "state",
+      common: { role: "button.play", read: false, write: true },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    await (ctx.calls[0].deps.settleTree as (built: ReadonlySet<string>) => Promise<void>)(new Set(["player.play"]));
+    await flush();
+    expect(ctx.i.objects.has("Living_room.multiroom.zone4.player.play")).toBe(false);
+    expect(ctx.i.objects.has("Living_room.multiroom.zone4.player")).toBe(false);
+    expect(ctx.i.objects.has("Living_room.player.play")).toBe(true);
   });
 
   it("a completion that arrives after the adapter began to stop removes nothing", async () => {

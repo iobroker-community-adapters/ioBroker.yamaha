@@ -283,16 +283,24 @@ function listen(server) {
 /**
  * Start every fixture device and report how the adapter process must be routed to them.
  *
- * @returns {Promise<{devices: {id: string, name: string, ip: string}[], legacyDevices: {ip: string}[], routes: Record<string, {http: number, ynca: number|null}>, stop: () => Promise<void>}>}
+ * @returns {Promise<{devices: {id: string, name: string, ip: string}[], legacyDevices: {ip: string}[], routes: Record<string, {http: number, ynca: number|null}>, power: (on: boolean) => void, stop: () => Promise<void>}>}
  *   the device list for the adapter's configuration — as 3.0.0 writes it (the id stored), and as
- *   2.x held it (the address only, the id derived from it) — the hook's routing table, and a stopper
+ *   2.x held it (the address only, the id derived from it) — the hook's routing table, a power switch for the YNCA
+ *   receivers, and a stopper
  */
 async function startFixtureDevices() {
   const fixtures = loadFixtures();
   const servers = [];
   const routes = {};
+  // The YNCA answer tables, kept to switch a receiver on and off (`MAIN:PWR`, what the adapter reads as "switched
+  // on"). The captures of the RX-V6A and the RX-V473 were taken in standby.
+  const yncaAnswers = [];
   for (const fixture of fixtures) {
-    const ynca = fixture.ynca ? await startYnca({ ...fixture.ynca.answers }) : undefined;
+    const answers = fixture.ynca ? { ...fixture.ynca.answers } : undefined;
+    if (answers) {
+      yncaAnswers.push({ answers, captured: answers["MAIN:PWR"] });
+    }
+    const ynca = answers ? await startYnca(answers) : undefined;
     // One HTTP port per device serves BOTH HTTP protocols by path, like the real port 80; a
     // device that speaks neither still needs a listener that refuses, or an XML probe would hang.
     const httpServer =
@@ -306,6 +314,18 @@ async function startFixtureDevices() {
     devices: fixtures.map(f => ({ id: f.deviceId, name: f.deviceId, ip: f.ip })),
     legacyDevices: fixtures.map(f => ({ ip: f.ip })),
     routes,
+    /**
+     * Switch every YNCA receiver on, or back to the state its capture shows.
+     *
+     * @param {boolean} on true: `MAIN:PWR=On`; false: as captured
+     */
+    power: on => {
+      for (const { answers, captured } of yncaAnswers) {
+        if (captured !== undefined) {
+          answers["MAIN:PWR"] = on ? "On" : captured;
+        }
+      }
+    },
     stop: async () => {
       for (const server of servers) {
         if (server) {

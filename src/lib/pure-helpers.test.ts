@@ -6,6 +6,7 @@ import { XML_AMP_CATALOG } from "./xml/catalog";
 import { parseYxcFeatures } from "./yxc/capability";
 import { mapYxcToObjects } from "./yxc/object-mapper";
 import {
+  formDiffers,
   boundsOfCommon,
   isDottedQuad,
   isUsefulDeviceName,
@@ -25,6 +26,7 @@ import {
   sanitizeId,
   staleObjects,
   stripNamespace,
+  writeOnlyStateIds,
 } from "./pure-helpers";
 
 describe("legacyDeviceRow", () => {
@@ -1119,6 +1121,53 @@ describe("the migration tables never touch a datapoint that is still alive", () 
       [...live].some(id => id === channel || id.startsWith(`${channel}.`)),
     );
     expect(shadowed).toEqual([]);
+  });
+});
+
+// Server test 2026-10-06: after an update with the receiver switched off, the transports reported in the new form into
+// objects of the old one. The form decides whether a value may go in before the switched-on read-in (Y-01).
+describe("formDiffers — a value in the new form does not fit the stored object", () => {
+  it("another value type differs (sound.adaptiveDrc: text → switch)", () => {
+    expect(formDiffers({ type: "string" }, { type: "boolean" })).toBe(true);
+  });
+
+  it("a number on another scale differs: unit, bound or step (zone bass: −12…12 in 1 → dB, −6…6 in 0.5)", () => {
+    const old = { type: "number", unit: "", min: -12, max: 12, step: 1 };
+    expect(formDiffers(old, { type: "number", unit: "dB", min: -6, max: 6, step: 0.5 })).toBe(true);
+    expect(formDiffers(old, { type: "number", unit: "", min: -12, max: 12, step: 0.5 })).toBe(true);
+    expect(formDiffers(old, { type: "number", unit: "", min: -6, max: 12, step: 1 })).toBe(true);
+  });
+
+  it("the same form, a field one side does not declare, or nothing stored is no difference", () => {
+    const old = { type: "number", unit: "dB", min: -6, max: 6, step: 0.5 };
+    expect(formDiffers(old, { ...old })).toBe(false);
+    expect(formDiffers(old, { type: "number", unit: "dB" })).toBe(false);
+    expect(formDiffers({ type: "number" }, { type: "number", min: 0, max: 40, step: 1 })).toBe(false);
+    expect(formDiffers({ type: "string", unit: "x" }, { type: "string", unit: "y" })).toBe(false);
+    expect(formDiffers(undefined, { type: "boolean" })).toBe(false);
+  });
+});
+
+describe("writeOnlyStateIds — the keys a completion may remove", () => {
+  const key = { type: "state", common: { read: false, write: true } };
+  const objects = {
+    "yamaha.0.Living_room.player.play": key,
+    "yamaha.0.Living_room.info.refresh": key,
+    "yamaha.0.Living_room.volume": { type: "state", common: { read: true, write: true } },
+    "yamaha.0.Living_room.player": { type: "channel", common: {} },
+    "yamaha.0.Attic.player.play": key,
+  };
+
+  it("lists the write-only states under the given devices", () => {
+    expect(writeOnlyStateIds(objects, new Set(["Living_room"]), "yamaha.0")).toEqual([
+      "yamaha.0.Living_room.player.play",
+    ]);
+  });
+
+  it("leaves the device's info header out — it belongs to the adapter", () => {
+    expect(writeOnlyStateIds(objects, new Set(["Living_room"]), "yamaha.0")).not.toContain(
+      "yamaha.0.Living_room.info.refresh",
+    );
   });
 });
 

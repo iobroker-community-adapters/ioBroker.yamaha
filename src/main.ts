@@ -18,6 +18,7 @@ import {
   LABEL_RANK,
   type LabelRank,
   labelRankOf,
+  formDiffers,
   legacyDeviceRow,
   mergeDiscovered,
   neverWrittenStateIds,
@@ -30,6 +31,7 @@ import {
   renamedTableRows,
   staleObjects,
   stripNamespace,
+  writeOnlyStateIds,
 } from "./lib/pure-helpers";
 import { ID_SCHEME, modelId, RESERVED_DEVICE_IDS, serialId } from "./lib/device-id";
 import { TRANSPORT_LABELS } from "./lib/ready-line";
@@ -384,6 +386,10 @@ export class Yamaha extends utils.Adapter {
   private readonly unreadDevices = this.perDevice.set();
   /** What the states database holds — see writeStateNow (audit 2026-09-29, E3). */
   private readonly stateMirror = new StateMirror();
+  /** The datapoints whose value waits for their new form while a read-in is open (see {@link formDiffers}). */
+  private readonly formWaiting = this.perDevice.stateSet();
+  /** Of {@link formWaiting}, the ids whose held-back value was logged — once each. */
+  private readonly formWaitingLogged = this.perDevice.stateSet();
   /** See {@link instanceReadOnlyStates}. */
   private manifestReadOnly: ReadonlySet<string> | undefined;
   /** See {@link stores}. */
@@ -1862,6 +1868,7 @@ export class Yamaha extends utils.Adapter {
    * - the datapoints no transport built that never carried a value — an earlier version's over-declarations,
    *   a function a firmware update took away. A datapoint that carries a value stays: some are built only when
    *   the device first reports them (an XML source's playback fields, a MusicCast list slot);
+   * - the keys (write-only, never a value) no transport built;
    * - then the folders left without a datapoint.
    * The device's header (`info.*`) is the adapter's own, never a transport's.
    *
@@ -1874,7 +1881,10 @@ export class Yamaha extends utils.Adapter {
       const objects = await this.getAdapterObjectsAsync();
       const states = await this.getStatesAsync(`${deviceId}.*`);
       const renamed = renamedObjectIds(Object.keys(objects), new Set([deviceId]), this.namespace);
-      const unbuilt = neverWrittenStateIds(objects, states, new Set([deviceId]), this.namespace).filter(fullId => {
+      const unbuilt = [
+        ...neverWrittenStateIds(objects, states, new Set([deviceId]), this.namespace),
+        ...writeOnlyStateIds(objects, new Set([deviceId]), this.namespace),
+      ].filter(fullId => {
         const id = fullId.slice(base.length);
         return !built.has(id) && !id.startsWith("info.");
       });
@@ -1920,7 +1930,8 @@ export class Yamaha extends utils.Adapter {
    */
   private async clearStaleStates(id: string, next: Record<string, string>): Promise<void> {
     const stored = this.storedStates.get(id);
-    if (stored && Object.keys(stored).some(key => !(key in next))) {
+    // No list any more: the key goes with the object rewrite of clearStaleBounds, never as `null`.
+    if (stored && Object.keys(next).length > 0 && Object.keys(stored).some(key => !(key in next))) {
       await this.writeObject(id, { common: { states: null } });
     }
     this.storedStates.set(id, next);
@@ -1939,11 +1950,18 @@ export class Yamaha extends utils.Adapter {
   private async clearStaleBounds(id: string, next: ObjectDef["common"]): Promise<void> {
     const stored = this.storedBounds.get(id);
     const gone: string[] = BOUND_FIELDS.filter(field => stored?.[field] !== undefined && next[field] === undefined);
-    // Back on the device's own scale, the percent switch's unit goes with the bounds (review 2026-10-05, A24).
+    const storedCommon = (this.known.get(id) as { common?: Record<string, unknown> } | undefined)?.common;
+    // Back on the device's own scale, the percent switch's unit goes with the bounds (review 2026-10-05, A24) — and a
+    // unit or a list the new definition no longer carries goes as a key, not as `null`: an updated tree is the tree a
+    // fresh installation builds (upgrade suite 2026-10-06: `sleep` kept "min", `adaptiveDrc` kept `states: null`).
     if (
-      this.volume.dropsUnit(id, next, (this.known.get(id) as { common?: { unit?: unknown } } | undefined)?.common?.unit)
+      this.volume.dropsUnit(id, next, storedCommon?.unit) ||
+      (storedCommon?.unit !== undefined && next.unit === undefined)
     ) {
       gone.push("unit");
+    }
+    if (storedCommon !== undefined && "states" in storedCommon && next.states === undefined) {
+      gone.push("states");
     }
     if (gone.length === 0) {
       this.storedBounds.set(id, { min: next.min, max: next.max, step: next.step });
@@ -2856,6 +2874,7 @@ export class Yamaha extends utils.Adapter {
             // Running: a read-in receiver keeps its tree (krobi 2026-10-02) — only what was learned is added.
             await this.writeLearned(id, def);
           }
+          this.noteForm(device.id, id, def, settle === true);
           if (def.type === "state") {
             this.noteDatapointCreated(id);
           }
@@ -2868,7 +2887,18 @@ export class Yamaha extends utils.Adapter {
           if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config)) {
             return;
           }
-          this.writeState(id, this.volumeAsShown(id, value));
+          const shown = this.volumeAsShown(id, value);
+          if (this.formWaiting.has(id)) {
+            // An open read-in keeps the stored form (Y-01); a value in the new one waits for the switched-on read.
+            if (!this.formWaitingLogged.has(id)) {
+              this.formWaitingLogged.add(id);
+              this.log.debug(
+                `${id}: value kept back — the datapoint keeps its stored form until the read-in completes`,
+              );
+            }
+            return;
+          }
+          this.writeState(id, shown);
           // A model report also decides the device-class icon on the device node, and the display
           // name of a device that still shows its id placeholder or the adapter's own earlier label.
           if (id.endsWith(".info.model") && typeof value === "string" && value.length > 0) {
@@ -3382,6 +3412,26 @@ export class Yamaha extends utils.Adapter {
         this.writeState(id, value);
       }
     }
+  }
+
+  /**
+   * Note whether a datapoint's value has to wait for its new form: while the device's read-in is open, a stored object
+   * whose form differs from the built one gets no value (see {@link formDiffers}); the completion gives it its form.
+   *
+   * @param deviceId the device
+   * @param id the full object id
+   * @param def the definition the transports built
+   * @param settled whether this write completed the read-in
+   */
+  private noteForm(deviceId: string, id: string, def: ObjectDef, settled: boolean): void {
+    const open = this.profiles.get(deviceId)?.tree?.settledVersion !== this.version;
+    const stored = (this.known.get(id) as { common?: Record<string, unknown> } | undefined)?.common;
+    if (!settled && open && def.type === "state" && formDiffers(stored, this.presentVolume(id, def).common)) {
+      this.formWaiting.add(id);
+      return;
+    }
+    this.formWaiting.delete(id);
+    this.formWaitingLogged.delete(id);
   }
 
   /**

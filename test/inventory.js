@@ -284,6 +284,8 @@ const RUN_STATE_NATIVE = ["capabilityProfile", "probeCache", "yncaAvail", "purge
 const YNCA_REFRESH_MS = 40000;
 
 let fixtures;
+/** The tree a fresh installation builds with the receivers switched on — the upgrade suite's reference. */
+let freshSwitchedOn;
 
 /**
  * Bring up the fake devices and route the adapter to them.
@@ -582,9 +584,11 @@ async function seedPrevious(harness, previous) {
  *
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness
  * @param {Record<string, ioBroker.Object>} previous the previous release's inventory
+ * @param {Record<string, ioBroker.Object>} kept the tree the current release builds — a datapoint the release removes
+ *   (3.3.0: `advanced.inputNames.*`) leaves the room with its object, which is no lost membership
  * @returns {Promise<string[]>} the seeded members
  */
-async function seedRoom(harness, previous) {
+async function seedRoom(harness, previous, kept) {
   const members = [];
   for (const [id, obj] of Object.entries(previous)) {
     if (obj.type !== "device") {
@@ -592,7 +596,7 @@ async function seedRoom(harness, previous) {
     }
     members.push(id);
     const first = Object.keys(previous)
-      .filter(other => other.startsWith(`${id}.`) && previous[other].type === "state")
+      .filter(other => other.startsWith(`${id}.`) && previous[other].type === "state" && other in kept)
       .sort()[0];
     if (first) {
       members.push(first);
@@ -1535,6 +1539,127 @@ tests.integration(ADAPTER_DIR, {
 
     const previousFile = process.env.INVENTORY_PREVIOUS;
     if (previousFile && fs.existsSync(previousFile)) {
+      // Y-01 (krobi 2026-10-02, 2026-10-06 15:30): datapoints change only with the receiver switched on. The RX-V6A and
+      // RX-V473 captures are standby: updated in that state, their read-in stays open — no object may change, and no
+      // value may arrive in a form its stored object does not have (server test 2026-10-06: a boolean in the text
+      // datapoint sound.adaptiveDrc).
+      suite("upgrade with the receivers switched off", getHarness => {
+        let harness;
+        let restarts;
+        const previous = JSON.parse(fs.readFileSync(previousFile, "utf8"));
+        before(async function () {
+          this.timeout(900000);
+          harness = getHarness();
+          clearInstanceData(harness);
+          const watch = await watchObjectWrites(harness);
+          await seedPrevious(harness, previous);
+          await seedInstanceData(harness, previous);
+          await restoreMaskedSecrets(harness);
+          await resetInstanceNative(harness, await fixtureNative({}, devicesNotFinal(previous).length > 0));
+          await setSystemLanguage(harness, FIRST_LANGUAGE);
+          restarts = playControllerRestarts(harness, watch, HOOK);
+          await harness.startAdapterAndWait(false, adapterEnv(HOOK));
+          await waitForAdapterWork(harness);
+          await restarts.done;
+          await waitForAdapterWork(harness);
+        });
+
+        after(async function () {
+          this.timeout(60000);
+          await harness?.stopAdapter();
+        });
+
+        it("a receiver read switched off keeps every object as it was, and every value fits its object", async function () {
+          this.timeout(60000);
+          const live = await dumpObjects(harness);
+          const states = await dumpStates(harness);
+          // The profile from the RAW objects — dumpObjects strips it. MusicCast and XML read standby-independent, so a
+          // device of theirs alone completes its read-in switched off; only the YNCA receivers in standby stay open.
+          const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
+          const open = list.rows
+            .filter(
+              row =>
+                row.value?.type === "device" &&
+                !String(row.value.native?.capabilityProfile ?? "").includes('"settledVersion"'),
+            )
+            .map(row => row.id);
+          assert.ok(open.length > 0, "no device kept its read-in open — the suite would prove nothing");
+          const under = id => open.some(device => id.startsWith(`${device}.`));
+          const changed = [];
+          for (const [id, before] of Object.entries(previous)) {
+            if (before.type !== "state" || !under(id)) {
+              continue;
+            }
+            const now = live[id];
+            if (!now) {
+              changed.push(`${id}: deleted`);
+              continue;
+            }
+            for (const field of ["type", "role", "unit", "min", "max", "step"]) {
+              if (
+                before.common?.[field] !== undefined &&
+                canonical(now.common?.[field]) !== canonical(before.common[field])
+              ) {
+                changed.push(
+                  `${id}: ${field} ${JSON.stringify(before.common[field])} became ${JSON.stringify(now.common?.[field])}`,
+                );
+              }
+            }
+            for (const key of Object.keys(before.common?.states ?? {})) {
+              if (!now.common?.states || !(key in now.common.states)) {
+                changed.push(`${id}: list entry ${key} gone`);
+              }
+            }
+          }
+          for (const [id, state] of Object.entries(states)) {
+            const type = live[id]?.common?.type;
+            if (
+              under(id) &&
+              ["boolean", "number", "string"].includes(type) &&
+              state.val !== null &&
+              typeof state.val !== type
+            ) {
+              changed.push(`${id}: a ${typeof state.val} value in a ${type} datapoint`);
+            }
+          }
+          assert.deepStrictEqual(changed, [], `a switched-off receiver changed:\n${changed.join("\n")}`);
+        });
+      });
+
+      // The reference for the upgrade below: a fresh installation on the SAME switched-on answers. The committed
+      // inventory is read in standby, where a YNCA menu is claimed unproven; switched on, the fixtures (standby
+      // captures, only MAIN:PWR flipped) refuse every list function and the read-in proves no menu. An upgrade is
+      // judged against what a fresh installation builds from the same device answers, never against another state.
+      suite("fresh installation with the receivers switched on", getHarness => {
+        let harness;
+        let restarts;
+        before(async function () {
+          this.timeout(600000);
+          harness = getHarness();
+          clearInstanceData(harness);
+          await resetInstanceNative(harness, await fixtureNative());
+          fixtures.power(true);
+          await setSystemLanguage(harness, FIRST_LANGUAGE);
+          restarts = playControllerRestarts(harness, null, HOOK);
+          await harness.startAdapterAndWait(false, adapterEnv(HOOK));
+          await waitForAdapterWork(harness);
+          await restarts.done;
+          await waitForAdapterWork(harness);
+        });
+
+        after(async function () {
+          this.timeout(60000);
+          await harness?.stopAdapter();
+          await fixtures?.stop();
+        });
+
+        it("builds the reference tree", async function () {
+          this.timeout(30000);
+          freshSwitchedOn = await dumpObjects(harness);
+          assert.ok(Object.keys(freshSwitchedOn).length > 0, "no objects created — fixtures did not reach the adapter");
+        });
+      });
+
       suite("upgrade from the previous release", getHarness => {
         let harness;
         let watch;
@@ -1554,7 +1679,7 @@ tests.integration(ADAPTER_DIR, {
           await seedInstanceData(harness, previous);
           await restoreMaskedSecrets(harness);
           maskedLeft = await maskedSecretsLeft(harness);
-          roomMembers = await seedRoom(harness, previous);
+          roomMembers = await seedRoom(harness, previous, freshSwitchedOn);
           // The device table in the form the previous release left it. From 2.x that is the
           // address only (the id derived from it): a device whose model and serial the stored tree
           // knows moves to its 3.0.0 id at this start; the others tell theirs at the first contact
@@ -1562,6 +1687,9 @@ tests.integration(ADAPTER_DIR, {
           // or a reboot. From 3.0.0 on the table carries the final id next to the address; a 3.x tree
           // started with 2.x rows is a state no installation reaches.
           await resetInstanceNative(harness, await fixtureNative({}, devicesNotFinal(previous).length > 0));
+          // The update is read in with the receivers switched on (Y-01) — the suite above proves the switched-off side.
+          // After fixtureNative: it brings up fresh fake devices, in the state their captures show.
+          fixtures.power(true);
           // The inventory was written in FIRST_LANGUAGE: labels an adapter localises itself (`states`)
           // only compare in the same language.
           await setSystemLanguage(harness, FIRST_LANGUAGE);
@@ -1602,7 +1730,7 @@ tests.integration(ADAPTER_DIR, {
 
         it("every current object carries the current texts and roles", async function () {
           this.timeout(60000);
-          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
+          const current = freshSwitchedOn;
           const live = await dumpObjects(harness);
           const stale = [];
           for (const [id, obj] of Object.entries(current)) {
@@ -1648,10 +1776,16 @@ tests.integration(ADAPTER_DIR, {
             }
             const ip = id.slice(NS.length).replace(/_/g, ".");
             const now = live[id] ? id : liveIdByIp.get(ip);
-            for (const key of ["volumeAsPercent", "identity", "label", "labelRank", "source"]) {
+            // No `source`: since Y-27 a device carries no marker of how it got into the list. An identity stores an
+            // unknown field as `null` (both fields always present) — the same identity as one without the field.
+            const known = (key, value) =>
+              key === "identity" && value && typeof value === "object"
+                ? Object.fromEntries(Object.entries(value).filter(([, field]) => field !== null))
+                : value;
+            for (const key of ["volumeAsPercent", "identity", "label", "labelRank"]) {
               if (
                 obj.native?.[key] !== undefined &&
-                canonical(live[now]?.native?.[key]) !== canonical(obj.native[key])
+                canonical(known(key, live[now]?.native?.[key])) !== canonical(known(key, obj.native[key]))
               ) {
                 lost.push(
                   `${id} → ${now}: native.${key} ${JSON.stringify(obj.native[key])} became ${JSON.stringify(live[now]?.native?.[key])}`,
@@ -1697,7 +1831,7 @@ tests.integration(ADAPTER_DIR, {
 
         it("objects the release removed are gone (no leftovers)", async function () {
           this.timeout(60000);
-          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
+          const current = freshSwitchedOn;
           const live = await dumpObjects(harness);
           const leftovers = Object.keys(previous).filter(id => !(id in current) && id in live);
           assert.deepStrictEqual(leftovers, [], `leftover objects:\n${leftovers.join("\n")}`);
@@ -1716,7 +1850,7 @@ tests.integration(ADAPTER_DIR, {
         // A kept object that is deleted and created anew makes the suite judge a fresh object, not the
         // upgraded one (hassemu v1.43.1: the stale cleanup removed 18 seeded clients before the dump).
         it("deletes no object the release keeps", function () {
-          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
+          const current = freshSwitchedOn;
           const lost = [...new Set(watch.deleted)].filter(id => id in previous && id in current);
           assert.deepStrictEqual(lost, [], `kept objects deleted during the upgrade:\n${lost.join("\n")}`);
         });
@@ -1777,7 +1911,7 @@ tests.integration(ADAPTER_DIR, {
         // a datapoint created because the old one was recorded is exactly that).
         it("creates nothing a fresh installation lacks", async function () {
           this.timeout(30000);
-          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
+          const current = freshSwitchedOn;
           const live = await dumpObjects(harness);
           const extra = Object.keys(live).filter(id => !(id in current));
           assert.deepStrictEqual(extra, [], `objects a fresh installation does not have:\n${extra.join("\n")}`);

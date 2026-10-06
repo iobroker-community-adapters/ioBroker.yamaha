@@ -102,8 +102,16 @@ löscht und leert nichts. Belege und Befund: `.claude/dev-history.md` 2026-10-02
 - **Einlesen:** nach Neuinstallation, Adapter-Update (`settledVersion` ≠ Version) und Firmware-Update. Abgeschlossen bei
   EINER Verbindung, in der jedes bekannte Protokoll antwortet und jeder Lesevorgang von einem eingeschalteten Receiver
   stammt (`readComplete`: YNCA `awake` im Profil; MusicCast/XML lesen standby-unabhängig). Nur dieser Abschluss koordiniert
-  voll (`clearStaleStates`/`clearStaleBounds`) und entfernt unter DIESEM Gerät umbenannte Ids, nie gefüllte Datenpunkte,
-  die kein Protokoll baute, und leere Kanäle (`settleDeviceTree`); `info.*` gehört dem Adapter.
+  voll (`clearStaleStates`/`clearStaleBounds`: eine Einheit, Grenze oder Liste, die die neue Form nicht trägt, verschwindet
+  als Schlüssel, nie als `null`) und entfernt unter DIESEM Gerät umbenannte Ids, nie gefüllte Datenpunkte und Tasten, die
+  kein Protokoll baute, und leere Kanäle (`settleDeviceTree`); `info.*` gehört dem Adapter.
+- **Erst die Form, dann der Wert:** solange das Einlesen offen ist, bekommt ein Datenpunkt, dessen gespeichertes Objekt eine
+  andere Form hat als die gebaute (Typ; bei Zahlen Einheit, Grenzen, Schritt — `formDiffers`), keinen Wert; der Abschluss
+  gibt ihm Form und Wert (Server-Test 2026-10-06: ein Wahrheitswert im Text-Datenpunkt `sound.adaptiveDrc`). Bewacht von der
+  Inventar-Suite „upgrade with the receivers switched off“; die Aufstiegs-Suite misst das Update mit eingeschalteten
+  Prüfgeräten (`fixtures.power(true)`) gegen eine Neuinstallation auf DENSELBEN Antworten (Suite „fresh installation with
+  the receivers switched on“) — das committete Inventar ist im Standby gelesen, eingeschaltet beweist der RX-V473 kein
+  YNCA-Menü (#613).
 - **Firmware-Update:** ein anderer Stand (YNCA `SYS:VERSION`, MusicCast `system_version`, XML `version`; leer zählt nicht)
   schreibt `new firmware found (alt → neu) — reading the receiver again, this can take a few minutes` und öffnet das Einlesen;
   sein Abschluss schreibt dieselbe Bereit-Zeile wie der Start (`readyLine`).
@@ -464,7 +472,9 @@ Bewacht von den Inventar-Suiten `chosen network address` / `missing network addr
 
 **1) Kein Anspruch ohne Nachweis (#613):** ein Transport beansprucht `player.browse.*` erst, wenn eine Probe es
 belegt (YNCA `LISTINFO=?` mit Listen-Feldern; die Absagen `@UNDEFINED`/`@RESTRICTED` tragen keinen Subunit — es zählt
-das AUSBLEIBEN einer Antwort), und bei `MAIN:PWR != On` wird nicht geprobt. **YNCA-Fähigkeitsbeweise (Menü,
+das AUSBLEIBEN einer Antwort), und bei `MAIN:PWR != On` wird nicht geprobt. Beweist eingeschaltet KEINE Quelle eine
+Liste, entscheidet eine geklammerte Probe: nur `@UNDEFINED` heißt „kein Menü“, `@RESTRICTED` (Netzmodul noch nicht bereit)
+lässt den Anspruch unbewiesen stehen wie im Standby — sonst entfernte ein im selben Lauf abschließendes Einlesen das Menü. **YNCA-Fähigkeitsbeweise (Menü,
 Tasten-Dialekt, Zonen-Tastenfelder) werden gemerkt wie die XML-Probe (`yncaBrowseSources`, ein Beweis wird nie durch eine
 spätere Absage verkleinert); fehlt einer beim Verbinden, holt `PWR=On` oder eine vom Gerät selbst gesendete Listenzeile ihn
 nach, und YNCA übernimmt das Menü in derselben Sitzung — einmal, gemerkt im Fähigkeitsprofil.** Ein leeres XML-Menüfenster direkt nach dem Quellenwechsel gilt
