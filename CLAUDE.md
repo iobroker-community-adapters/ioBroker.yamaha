@@ -315,7 +315,8 @@ Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht; der 
   Größe stehen, nie halb. Dazu die letzten 30 Befehle je versuchtem Protokoll mit Ausweichgrund (`routeWrite`, offline
   verworfen im Supervisor), 50 Verbindungsereignisse mit dem Grund je Protokoll und die Zuständigkeiten der letzten
   Verbindung. Der Bericht nimmt den Schnappschuss VOR seiner Live-Abfrage (`trail()`), sonst schöbe diese die Vorgeschichte
-  aus den Ringen. Nichts davon wird Datenpunkt (Y-24).
+  aus den Ringen. Nichts davon wird Datenpunkt (Y-24). „Getrennt seit“ nimmt nach einem Neustart (Verlauf ohne
+  „disconnected“) die letzte Änderung von `info.connection` des Geräts, solange es `false` sagt.
 - **Pseudonymisierung** (`pseudonymiser.ts`): IP/MAC/Mail per Form, Seriennummer/MAC/SSID/Netz-/Standort-/Zonennamen aus
   ihren Fundstellen (YXC-Schlüssel, XML-Tags, YNCA `ZONENAME`), stabile Marker je Datei; Seriennummer behält die letzten 4.
 
