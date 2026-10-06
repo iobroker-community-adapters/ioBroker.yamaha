@@ -12,6 +12,7 @@ import type { ConnectionHandle, ControllerLog } from "../controller";
 import { errText } from "../err-text";
 import { readyLine } from "../ready-line";
 import type { HandleCapture, TransportCapture } from "../diagnostics/types";
+import type { CommandAttempt, TrafficRecorder } from "../diagnostics/traffic-recorder";
 import { emptyLearnedTree, readInDue, type LearnedTree } from "./learned-tree";
 import { RetryLoop, type Backoff } from "./reconnect-strategy";
 import { DropLatch } from "./drop-latch";
@@ -108,6 +109,8 @@ export interface DeviceTreeDeps {
   existing?(id: string): DatapointForm | undefined;
   /** At the completion of a read-in: remove the device's objects no transport built (canonical ids). */
   settleTree?(built: ReadonlySet<string>): Promise<void>;
+  /** The device's diagnostics trail — commands, connection history, owners and raw traffic, in memory only. */
+  recorder?: TrafficRecorder;
 }
 
 /** The adapter callbacks the multi-transport handle drives: the tree's, and its per-transport reconnect. */
@@ -407,6 +410,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       return;
     }
     this.ownerByCanonicalId = owners;
+    this.deps.recorder?.lastOwners(owners);
     // Over a copy: a transport may drop while another one is seeded.
     for (const connection of [...this.live]) {
       if (this.closed) {
@@ -489,6 +493,10 @@ export class MultiTransportHandle implements ConnectionHandle {
     }
     this.live.splice(index, 1);
     connection.close();
+    this.deps.recorder?.connection("transport dropped", {
+      transport: connection.transport,
+      ...(reason ? { reason: errText(reason) } : {}),
+    });
     if (this.live.length === 0) {
       // The device itself is unreachable: the supervisor (once it registered) closes this handle and
       // reconnects the whole set.
@@ -504,9 +512,14 @@ export class MultiTransportHandle implements ConnectionHandle {
     // The first drop is the question to the others: a device that lost power has every
     // transport dead, but a polled one notices only at its own cadence. Asked now, it reports
     // its drop through the same path and the device is judged gone within seconds.
+    this.deps.recorder?.connection("liveness check", {
+      after: connection.transport,
+      asked: this.live.map(other => other.transport),
+    });
     for (const other of [...this.live]) {
       other.verifyAlive?.().catch((e: unknown) => {
         this.deps.log.debug(`${this.deviceId}/${other.transport}: liveness check failed (${errText(e)})`);
+        this.deps.recorder?.connection("liveness check failed", { transport: other.transport, reason: errText(e) });
       });
     }
     this.scheduleTransportRetry(connection.transport);
@@ -559,6 +572,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       connected = await connection.connect();
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}/${transport}: reconnect attempt failed (${errText(e)})`);
+      this.deps.recorder?.connection("transport reconnect failed", { transport, reason: errText(e) });
     }
     if (!this.connecting.delete(connection)) {
       return; // close() took it and closed it
@@ -594,6 +608,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.retries.get(transport)?.succeeded();
     this.reportTransports();
     this.deps.log.debug(`${this.deviceId}/${transport}: transport reconnected`);
+    this.deps.recorder?.connection("transport back", { transport });
   }
 
   /** Cancel every per-transport reconnect loop. */
@@ -637,6 +652,8 @@ export class MultiTransportHandle implements ConnectionHandle {
    * @param value the value
    */
   private async routeWrite(canonicalId: string, owner: Transport, value: unknown): Promise<void> {
+    // Every protocol tried, for the diagnostics report (Y-04: which one took it, which one fell back and why).
+    const attempts: CommandAttempt[] = [];
     try {
       // The owner's form: as it built the datapoint in this session — or, for an owner away since this handle
       // started, as the datapoint stands in the tree, where the owner wrote it. Such an owner built nothing here,
@@ -669,9 +686,11 @@ export class MultiTransportHandle implements ConnectionHandle {
           this.deps.log.debug(`${this.deviceId}: ${canonicalId} — ${owner} ${reason}, sent through ${transport}`);
         } else if (!connection) {
           this.deps.log.debug(`${this.deviceId}: write to ${canonicalId} — its transport (${owner}) is offline`);
+          attempts.push({ transport, outcome: "offline" });
           continue;
         }
         const outcome = await connection.handleWrite(canonicalId, value);
+        attempts.push({ transport, outcome, ...(transport !== owner ? { because: `${owner} ${reason}` } : {}) });
         if (outcome !== "refused" && outcome !== "unavailable") {
           return;
         }
@@ -679,6 +698,8 @@ export class MultiTransportHandle implements ConnectionHandle {
       }
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: write to ${canonicalId} failed (${errText(e)})`);
+    } finally {
+      this.deps.recorder?.command(canonicalId, value, attempts);
     }
   }
 

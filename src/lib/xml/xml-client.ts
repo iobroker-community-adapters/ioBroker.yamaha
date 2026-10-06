@@ -48,7 +48,7 @@ function readResponse(res: IncomingMessage, resolve: (body: string) => void, rej
  * @param payload the XML request body
  * @returns the response body
  */
-function defaultPoster(ip: string, payload: string): Promise<string> {
+export function defaultPoster(ip: string, payload: string): Promise<string> {
   return new Promise((resolve, reject) => {
     // Content-Length, not chunked: without a length header node streams the body with
     // `Transfer-Encoding: chunked`, and the 2000s-era firmware this transport exists for
@@ -81,7 +81,7 @@ function defaultPoster(ip: string, payload: string): Promise<string> {
  * @param path the path to fetch
  * @returns the response body
  */
-function defaultGetter(ip: string, path: string): Promise<string> {
+export function defaultGetter(ip: string, path: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = request(
       { host: ip, port: 80, ...localAddressOption(), path, method: "GET", timeout: REQUEST_TIMEOUT_MS },

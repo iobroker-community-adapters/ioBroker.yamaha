@@ -2,6 +2,7 @@ import type { DeviceIdentity } from "../device-identity";
 import { errText } from "../err-text";
 import type { HandleCapture } from "./types";
 import type { LogRing } from "./log-ring";
+import type { TrafficSnapshot } from "./traffic-recorder";
 import {
   diagnosticsExport,
   type EnvironmentSnapshot,
@@ -56,6 +57,8 @@ export interface DiagnosticsDeviceState {
   pushEvents?: string;
   /** Read the device through its running connection; undefined when it is not connected. */
   capture(): Promise<HandleCapture | undefined>;
+  /** What the device's diagnostics trail holds right now (traffic, commands, connection history, last owners). */
+  trail?(): TrafficSnapshot | undefined;
 }
 
 /** What the handler reads from the running adapter. */
@@ -176,6 +179,9 @@ export class DiagnosticsHandler {
     this.running.add(deviceId);
     try {
       this.host.log.info(`${deviceId}: reading the device for a diagnostics report — this takes up to a minute`);
+      // The trail first: the live read below goes through the same clients and would push the history out of the
+      // rings it is meant to stand beside (plan „Diagnosebericht“).
+      const trail = device.trail?.();
       let connection: HandleCapture | undefined;
       let connectionNote: string | undefined;
       try {
@@ -210,6 +216,7 @@ export class DiagnosticsHandler {
         profile: (deviceObject?.native as Record<string, unknown> | undefined) ?? undefined,
         connection,
         connectionNote,
+        trail,
         objectTree,
         logs: this.host.logRing.about([device.id, device.ip], others),
       });

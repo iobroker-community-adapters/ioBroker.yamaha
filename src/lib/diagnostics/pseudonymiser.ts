@@ -203,8 +203,11 @@ export class Pseudonymiser {
         this.teach("name", record.val);
       }
       const below = [...path, key];
+      // A recorded request and its answer (the diagnostics trail): the answer is read under its endpoint, as the live
+      // read's captures are — the rules that know an endpoint (getLocationInfo) reach it there too.
+      const request = typeof record.request === "string" ? record.request.split(" ")[0] : undefined;
       for (const [k, v] of Object.entries(record)) {
-        this.learn(v, k, below);
+        this.learn(v, k === "answer" && request ? request : k, below);
       }
     }
   }

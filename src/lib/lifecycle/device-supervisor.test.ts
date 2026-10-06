@@ -447,3 +447,22 @@ describe("DeviceSupervisor — the lifetime of the handle an attempt produced (r
     expect(passedGuardAfterClose).toEqual([]);
   });
 });
+
+// Plan „Diagnosebericht“, Y2: a command written while the device is offline is one of its commands too.
+describe("DeviceSupervisor — the diagnostics trail", () => {
+  test("a user write while offline is recorded as dropped; a device's own acked value is not", () => {
+    const commands: Array<{ id: string; value: unknown; note?: string }> = [];
+    const supervisor = new DeviceSupervisor({
+      attempt: () => Promise.resolve(null),
+      schedule: () => 1,
+      cancel: () => {},
+      onConnectionChange: () => {},
+      backoff: fastBackoff(),
+      log: silentLog,
+      recorder: { command: (id, value, _attempts, note) => void commands.push({ id, value, note }) },
+    });
+    supervisor.handleStateChange("living.volume", false, -40);
+    supervisor.handleStateChange("living.power", true, false);
+    expect(commands).toEqual([{ id: "volume", value: -40, note: "the device is offline — dropped" }]);
+  });
+});

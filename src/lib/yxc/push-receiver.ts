@@ -96,6 +96,8 @@ export class YxcPushReceiver {
    * API 1.17) — the fallback when the source address is not the registered one (audit 2026-09-24, C2).
    */
   private readonly byDeviceId = new Map<string, (event: unknown) => void>();
+  /** The raw listener registered with a handler, if any. */
+  private readonly rawOf = new WeakMap<(event: unknown) => void, (packet: string) => void>();
   private listening = false;
   private closed = false;
   private retryTimer: ioBroker.Timeout | undefined;
@@ -120,9 +122,19 @@ export class YxcPushReceiver {
    * @param host the device address or hostname, matched against the UDP source address
    * @param onPush invoked with each parsed push event from that device
    * @param deviceId the device's MusicCast `device_id`, when known — matched against the events'
+   * @param onRaw invoked with every packet routed to this device as it came — and with one from its address that is no
+   *   JSON (the diagnostics trail, plan „Diagnosebericht“ Y1d)
    * @returns a function that unregisters THIS handler (a later registration of the same device stays)
    */
-  public register(host: string, onPush: (event: unknown) => void, deviceId?: string): () => void {
+  public register(
+    host: string,
+    onPush: (event: unknown) => void,
+    deviceId?: string,
+    onRaw?: (packet: string) => void,
+  ): () => void {
+    if (onRaw) {
+      this.rawOf.set(onPush, onRaw);
+    }
     const addresses: string[] = [];
     let active = true;
     const add = (ip: string): void => {
@@ -251,11 +263,17 @@ export class YxcPushReceiver {
       event = JSON.parse(payload);
     } catch {
       this.deps.log.debug(`ignoring malformed YXC push from ${address}`);
+      if (byAddress) {
+        this.rawOf.get(byAddress)?.(payload);
+      }
       return;
     }
     const deviceId = (event as { device_id?: unknown } | null)?.device_id;
     const handler =
       byAddress ?? (typeof deviceId === "string" ? this.byDeviceId.get(deviceId.toUpperCase()) : undefined);
+    if (handler) {
+      this.rawOf.get(handler)?.(payload);
+    }
     handler?.(event);
   }
 }

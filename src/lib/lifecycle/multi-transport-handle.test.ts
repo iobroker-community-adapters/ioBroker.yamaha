@@ -1,3 +1,4 @@
+import { TrafficRecorder } from "../diagnostics/traffic-recorder";
 import {
   MultiTransportHandle,
   type ConnectableTransport,
@@ -623,6 +624,7 @@ describe("MultiTransportHandle — a read-in receiver keeps its tree (krobi 2026
  * @param options.missing the known transports that did not answer
  * @param options.existing the tree as it stands (canonical id → object)
  * @param options.rebuilds per-transport factories for a reconnect
+ * @param options.recorder the device's diagnostics trail
  */
 function learnSetup(
   connections: ConnectableTransport[],
@@ -632,6 +634,7 @@ function learnSetup(
     missing?: Transport[];
     existing?: Record<string, { type: string; common: Partial<ObjectDef["common"]> }>;
     rebuilds?: Partial<Record<Transport, () => ConnectableTransport>>;
+    recorder?: TrafficRecorder;
   } = {},
 ): {
   handle: MultiTransportHandle;
@@ -670,6 +673,7 @@ function learnSetup(
     },
     cancel: () => {},
     backoffFactory: () => ({ nextDelay: () => 1000, reset: () => {} }),
+    recorder: options.recorder,
   });
   const fireTimers = async (): Promise<void> => {
     for (const cb of timers.splice(0)) {
@@ -1618,5 +1622,50 @@ describe("the model and the firmware reach the tree over every protocol (review 
       ["dev.info.firmware", "2.16"],
     ]);
     handle.close();
+  });
+});
+
+// Plan „Diagnosebericht“ (krobi 2026-10-06), Y2–Y4: what a report of the device shows about its commands and protocols.
+describe("MultiTransportHandle — the diagnostics trail", () => {
+  test("a command: each protocol tried, and why the next one was (Y-04)", async () => {
+    const power = state("power", "Power", { type: "boolean", role: "switch.power" });
+    const yxc = fakeConn("yxc", [power]);
+    const ynca = fakeConn("ynca", [power]);
+    const recorder = new TrafficRecorder();
+    const s = learnSetup([yxc, ynca], { recorder });
+    await s.handle.start();
+    yxc.outcome = "refused";
+    s.handle.handleStateChange("living.power", false, true);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(recorder.snapshot().commands).toEqual([
+      expect.objectContaining({
+        id: "power",
+        value: true,
+        attempts: [
+          { transport: "yxc", outcome: "refused" },
+          { transport: "ynca", outcome: "sent", because: "yxc refused it" },
+        ],
+      }),
+    ]);
+  });
+
+  test("the owners of this connection, a protocol's drop with its reason and its return", async () => {
+    const volume = state("volume", "Volume");
+    const xml = fakeConn("xml", [volume]);
+    const ynca = fakeConn("ynca", [volume]);
+    const recorder = new TrafficRecorder();
+    const s = learnSetup([xml, ynca], { recorder, rebuilds: { xml: () => fakeConn("xml", [volume]) } });
+    await s.handle.start();
+    expect(recorder.snapshot().lastOwners?.owners).toEqual({ volume: "ynca" });
+    xml.drop(new Error("3 polls failed"));
+    await s.fireTimers();
+    const events = recorder.snapshot().connectionHistory.map(({ at: _at, ...event }) => event);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { event: "transport dropped", transport: "xml", reason: "3 polls failed" },
+        { event: "liveness check", after: "xml", asked: ["ynca"] },
+        { event: "transport back", transport: "xml" },
+      ]),
+    );
   });
 });

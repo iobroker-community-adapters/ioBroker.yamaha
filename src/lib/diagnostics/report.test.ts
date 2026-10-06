@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { HandleCapture } from "./types";
 import { buildDiagnosticsReport, diagnosticsExport, personalIdPart, type ReportInput } from "./report";
+import { TrafficRecorder } from "./traffic-recorder";
 
 /**
  * A report input for one device; the rest as the test gives it.
@@ -293,5 +294,95 @@ describe("diagnostics report of a connected device (B1, B3)", () => {
     expect(report.captures.xml.answers["Zone_2/Rename"]).toContain(`<Rename_Latin_1>${marker}</Rename_Latin_1>`);
     // A status word inside Basic_Status's own Zone_B block is no name.
     expect(report.captures.xml.answers["Main_Zone/Basic_Status"]).toContain("<Lvl>Off</Lvl>");
+  });
+});
+
+// Plan „Diagnosebericht“ (krobi 2026-10-06): what happened before the report, for a device that is offline now.
+describe("the diagnostics trail in the report", () => {
+  /**
+   * A trail with a history: the device served, a command fell back, the device went off.
+   *
+   * @returns the recorder
+   */
+  function offlineTrail(): TrafficRecorder {
+    let now = Date.UTC(2026, 9, 6, 10, 0, 0);
+    const rec = new TrafficRecorder(() => (now += 1000));
+    rec.connection("attempt", { transports: { ynca: "connected", yxc: "connected", xml: "did not answer" } });
+    rec.connection("connected");
+    rec.lastOwners(
+      new Map([
+        ["volume", "yxc"],
+        ["input", "ynca"],
+      ] as const),
+    );
+    rec.yncaLine("received", "@ZONE2:ZONENAME=Kinderzimmer");
+    rec.xml(
+      '<YAMAHA_AV cmd="GET"><Main_Zone><Config>GetParam</Config></Main_Zone></YAMAHA_AV>',
+      {
+        answer: "<YAMAHA_AV><Main_Zone><Config><Name><Zone>Wohnzimmer</Zone></Name></Config></Main_Zone></YAMAHA_AV>",
+      },
+      40,
+    );
+    rec.musiccast(
+      "/system/getLocationInfo",
+      undefined,
+      { answer: { response_code: 0, id: "abc123", name: "Haus Krobath" } },
+      30,
+    );
+    rec.musiccast("/system/getNetworkStatus", undefined, { answer: { response_code: 0, ssid: "KrobiNet" } }, 30);
+    rec.event('{"netusb":{"play_time":3},"device_id":"00A0DED4F504"}');
+    rec.command("multiroom.zoneB.zoneName", "Terrasse", [{ transport: "ynca", outcome: "sent" }]);
+    rec.command("power", false, [
+      { transport: "yxc", outcome: "unavailable" },
+      { transport: "ynca", outcome: "sent", because: "yxc could not send it" },
+    ]);
+    rec.connection("transport dropped", { transport: "yxc", reason: "3 polls failed" });
+    rec.connection("transport dropped", { transport: "ynca", reason: "read ECONNRESET" });
+    rec.connection("disconnected");
+    rec.connection("no reachable transport", { transports: { ynca: "connect ETIMEDOUT", yxc: "connect ETIMEDOUT" } });
+    return rec;
+  }
+
+  it("an offline device: since when, each protocol's last reason, the owners of its last connection", () => {
+    const report = buildDiagnosticsReport(input({ trail: offlineTrail().snapshot() })) as {
+      connection: { ownersAtLastConnection: { owners: Record<string, string> } };
+      trail: {
+        disconnectedSince: string;
+        lastReasonPerTransport: Record<string, { reason: string }>;
+        commandResults: Array<{ id: string; attempts: Array<{ because?: string }> }>;
+      };
+    };
+    expect(report.trail.disconnectedSince).toBe("2026-10-06T10:00:13.000Z");
+    expect(report.trail.lastReasonPerTransport).toMatchObject({
+      ynca: { reason: "connect ETIMEDOUT" },
+      yxc: { reason: "connect ETIMEDOUT" },
+      xml: { reason: "did not answer" },
+    });
+    expect(report.connection.ownersAtLastConnection.owners).toEqual({ input: "ynca", volume: "yxc" });
+    expect(report.trail.commandResults[1].attempts[1].because).toBe("yxc could not send it");
+  });
+
+  it("replaces every name the trail carries — a YNCA line, a whole XML body, MusicCast answers, a written name", () => {
+    const content = diagnosticsExport(input({ trail: offlineTrail().snapshot() })).content;
+    for (const secret of ["Kinderzimmer", "Wohnzimmer", "Haus Krobath", "KrobiNet", "Terrasse", "00A0DED4F504"]) {
+      expect(content, secret).not.toContain(secret);
+    }
+    // The XML body stands whole, its name replaced in place.
+    expect(content).toMatch(/<Zone>name-\d+<\/Zone>/);
+  });
+
+  it("a device connected now has no 'disconnected since', and a report without a trail has empty lists", () => {
+    const connected = buildDiagnosticsReport(
+      input({ device: { ...input().device, connected: true }, trail: offlineTrail().snapshot() }),
+    ) as { trail: { disconnectedSince: unknown } };
+    expect(connected.trail.disconnectedSince).toBeNull();
+    const none = buildDiagnosticsReport(input()) as { trail: Record<string, unknown> };
+    expect(none.trail).toEqual({
+      disconnectedSince: null,
+      lastReasonPerTransport: {},
+      connectionHistory: [],
+      commandResults: [],
+      traffic: { ynca: [], musiccast: [], xml: [], events: [] },
+    });
   });
 });

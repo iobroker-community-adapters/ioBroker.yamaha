@@ -124,6 +124,27 @@ describe("YxcPushReceiver", () => {
     expect(seen).toEqual([{ main: { power: "on" } }]);
   });
 
+  // Plan „Diagnosebericht“, Y1d: the trail gets every packet routed to the device as it came, and one from its address
+  // that is no JSON — a packet from an address nobody registered reaches nobody.
+  test("hands the raw packet to the device's trail — also an unreadable one from its address", () => {
+    const fake = new FakeSocket();
+    const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);
+    const raw: string[] = [];
+    const seen: unknown[] = [];
+    receiver.register(
+      "192.168.1.5",
+      e => seen.push(e),
+      undefined,
+      packet => raw.push(packet),
+    );
+    receiver.start();
+    fake.emitMessage('{"netusb":{"play_time":3}}', "192.168.1.5");
+    fake.emitMessage("not json", "192.168.1.5");
+    fake.emitMessage('{"main":{"power":"on"}}', "192.168.1.9");
+    expect(raw).toEqual(['{"netusb":{"play_time":3}}', "not json"]);
+    expect(seen).toEqual([{ netusb: { play_time: 3 } }]);
+  });
+
   test("register returns an unregister that stops routing to that ip", () => {
     const fake = new FakeSocket();
     const receiver = new YxcPushReceiver(makeDeps().deps, () => fake);

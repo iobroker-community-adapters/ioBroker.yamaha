@@ -5,13 +5,20 @@ import { CommandGate } from "../../src/lib/lifecycle/command-gate";
 import { ProbeMemory } from "../../src/lib/lifecycle/probe-memory";
 import { DISCOVERY_SCHEMA } from "../../src/lib/lifecycle/discovery-schema";
 import { TransportConnectionAdapter } from "../../src/lib/lifecycle/transport-connection-adapter";
-import { YncaClient } from "../../src/lib/ynca/ynca-client";
+import { defaultFactory, YncaClient } from "../../src/lib/ynca/ynca-client";
 import { createSubunitCache } from "../../src/lib/ynca/subunit-cache";
 import { YncaDeviceController } from "../../src/lib/device-controller";
-import { YamahaYxcClient } from "../../src/lib/yxc/http-client";
+import { defaultSend, YamahaYxcClient } from "../../src/lib/yxc/http-client";
 import { YxcDeviceController } from "../../src/lib/yxc/device-controller";
 import { PushLiveness } from "../../src/lib/yxc/push-liveness";
-import { XmlClient } from "../../src/lib/xml/xml-client";
+import { defaultGetter, defaultPoster, XmlClient } from "../../src/lib/xml/xml-client";
+import type { TrafficRecorder } from "../../src/lib/diagnostics/traffic-recorder";
+import {
+  recordedXmlGetter,
+  recordedXmlPoster,
+  recordedYncaFactory,
+  recordedYxcSend,
+} from "../../src/lib/diagnostics/recorded-transports";
 import { XmlDeviceController } from "../../src/lib/xml/device-controller";
 
 const require = createRequire(__filename);
@@ -78,9 +85,14 @@ export async function startFixtures(): Promise<{ devices: FixtureDevice[]; stop:
  *
  * @param device the fixture device
  * @param transport the protocol
+ * @param recorder a diagnostics trail listening at the protocol's wire seam, as the adapter wires it
  * @returns the canonical objects and values
  */
-export async function readTransport(device: FixtureDevice, transport: Transport): Promise<TransportTree> {
+export async function readTransport(
+  device: FixtureDevice,
+  transport: Transport,
+  recorder?: TrafficRecorder,
+): Promise<TransportTree> {
   const values = new Map<string, unknown>();
   const adapter = new TransportConnectionAdapter(transport, device.id, (id, value) =>
     values.set(id.slice(device.id.length + 1), value),
@@ -92,7 +104,12 @@ export async function readTransport(device: FixtureDevice, transport: Transport)
     adapter.bind(
       new YncaDeviceController(device.id, {
         ...common,
-        client: new YncaClient(device.ip, timers, gate),
+        client: new YncaClient(
+          device.ip,
+          timers,
+          gate,
+          recorder ? recordedYncaFactory(defaultFactory, recorder) : undefined,
+        ),
         gate,
         subunitCache: createSubunitCache(undefined, () => undefined),
         probeMemory,
@@ -102,7 +119,11 @@ export async function readTransport(device: FixtureDevice, transport: Transport)
     adapter.bind(
       new YxcDeviceController(device.id, {
         ...common,
-        client: new YamahaYxcClient(device.ip, undefined, gate),
+        client: new YamahaYxcClient(
+          device.ip,
+          recorder ? recordedYxcSend(defaultSend(device.ip), recorder) : undefined,
+          gate,
+        ),
         gate,
         aliasZone: (from, to) => adapter.aliasZone(from, to),
         registerPush: () => () => undefined,
@@ -118,7 +139,14 @@ export async function readTransport(device: FixtureDevice, transport: Transport)
         device.id,
         {
           ...common,
-          client: new XmlClient(device.ip, undefined, gate),
+          client: recorder
+            ? new XmlClient(
+                device.ip,
+                recordedXmlPoster(defaultPoster, recorder),
+                gate,
+                recordedXmlGetter(defaultGetter, recorder),
+              )
+            : new XmlClient(device.ip, undefined, gate),
           scheduleKeepalive: () => () => undefined,
           gate,
           probeMemory,

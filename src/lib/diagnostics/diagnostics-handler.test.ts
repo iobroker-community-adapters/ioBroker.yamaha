@@ -1,3 +1,4 @@
+import { TrafficRecorder } from "./traffic-recorder";
 import { describe, expect, it } from "vitest";
 import type { HandleCapture } from "./types";
 import {
@@ -204,7 +205,39 @@ describe("DiagnosticsHandler", () => {
   it("says when the device is not connected instead of failing", async () => {
     const host = makeHost({ devices: [device({ connected: false, capture: () => Promise.resolve(undefined) })] });
     const answer = (await new DiagnosticsHandler(host).export("rx-v6a-2b3c")) as { content: string };
-    expect(JSON.parse(answer.content).connection).toEqual({ note: "not connected — no live read" });
+    expect(JSON.parse(answer.content).connection).toEqual({
+      note: "not connected — no live read",
+      ownersAtLastConnection: null,
+    });
+  });
+
+  // Plan „Diagnosebericht“: the live read goes through the same clients the trail listens at; a full ring would lose
+  // the history before an outage — the very data the trail is for.
+  it("shows the trail as it stood before the live read, whole — the live read's own traffic does not push it out", async () => {
+    const recorder = new TrafficRecorder();
+    for (let i = 0; i < 40; i++) {
+      recorder.xml(`<Basic_Status n="${i}"/>`, { answer: `<YAMAHA_AV>${"x".repeat(2000)}${i}</YAMAHA_AV>` }, 5);
+    }
+    const before = recorder.snapshot().traffic.xml.length;
+    const host = makeHost({
+      devices: [
+        device({
+          trail: () => recorder.snapshot(),
+          capture: () => {
+            // The live read: dozens of large XML answers through the same seam.
+            for (let i = 0; i < 200; i++) {
+              recorder.xml(`<Live n="${i}"/>`, { answer: `<YAMAHA_AV>${"y".repeat(2000)}</YAMAHA_AV>` }, 5);
+            }
+            return Promise.resolve(undefined);
+          },
+        }),
+      ],
+    });
+    const answer = (await new DiagnosticsHandler(host).export("rx-v6a-2b3c")) as { content: string };
+    const xml = (JSON.parse(answer.content) as { trail: { traffic: { xml: Array<{ request: string }> } } }).trail
+      .traffic.xml;
+    expect(xml).toHaveLength(before);
+    expect(xml.every(entry => entry.request.startsWith("<Basic_Status"))).toBe(true);
   });
 
   it("runs one report per device at a time", async () => {

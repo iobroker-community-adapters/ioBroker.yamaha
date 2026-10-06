@@ -1,5 +1,6 @@
 import type { ConnectionHandle } from "../controller";
 import type { HandleCapture } from "../diagnostics/types";
+import type { TrafficRecorder } from "../diagnostics/traffic-recorder";
 import { errText } from "../err-text";
 import { RetryLoop, type Backoff } from "./reconnect-strategy";
 
@@ -43,6 +44,8 @@ export interface SupervisorDeps {
   backoff: Backoff;
   /** Adapter log. */
   log: { debug(message: string): void; info(message: string): void; warn(message: string): void };
+  /** The device's diagnostics trail: a command dropped while the device is offline is one of its commands. */
+  recorder?: Pick<TrafficRecorder, "command">;
   /** The device the supervisor keeps, so its log lines say which one (audit 2026-09-24, A16). */
   deviceId?: string;
 }
@@ -123,6 +126,12 @@ export class DeviceSupervisor {
       // used to get here — the handle logs the same way when only ITS transport is down.
       if (!ack) {
         this.deps.log.debug(`${fullStateId}: write dropped — the device is offline`);
+        this.deps.recorder?.command(
+          fullStateId.slice(fullStateId.indexOf(".") + 1),
+          value,
+          [],
+          "the device is offline — dropped",
+        );
       }
       return;
     }

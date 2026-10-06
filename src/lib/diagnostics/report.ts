@@ -4,6 +4,7 @@ import { isIPv4 } from "../network-interfaces";
 import type { HandleCapture, TransportCapture } from "./types";
 import type { LogLine } from "./log-ring";
 import { Pseudonymiser, type PersonalKind } from "./pseudonymiser";
+import type { HistoryEvent, TrafficSnapshot } from "./traffic-recorder";
 
 /** One instance of the musiccast adapter. */
 export interface InstanceInfo {
@@ -119,6 +120,53 @@ export interface ReportInput {
   objectTree: ObjectTreeEntry[];
   /** The adapter's recent log lines about the device. */
   logs: LogLine[];
+  /** The device's diagnostics trail, taken before the live read (traffic, commands, connection history, owners). */
+  trail?: TrafficSnapshot;
+}
+
+/** A command datapoint whose value is a name the user gives — taught to the pseudonymiser before the walk. */
+const NAME_COMMAND = /(?:^|\.)(?:zoneName|name)$/;
+
+/**
+ * When the device went offline: the last "disconnected" of its history, while it is not connected.
+ *
+ * @param history the connection history, oldest first
+ * @param connected whether the device is connected now
+ * @returns the time, or null
+ */
+function disconnectedSince(history: readonly HistoryEvent[], connected: boolean): string | null {
+  if (connected) {
+    return null;
+  }
+  return [...history].reverse().find(event => event.event === "disconnected")?.at ?? null;
+}
+
+/**
+ * The latest reason each protocol gave for not serving: an attempt it did not connect in, a drop, a reconnect that
+ * failed, a liveness question it did not answer.
+ *
+ * @param history the connection history, oldest first
+ * @returns protocol → its latest reason and when
+ */
+function lastReasonPerTransport(history: readonly HistoryEvent[]): Record<string, { at: string; reason: string }> {
+  const reasons: Record<string, { at: string; reason: string }> = {};
+  for (const event of history) {
+    if (typeof event.transport === "string" && event.event !== "transport back") {
+      reasons[event.transport] = {
+        at: event.at,
+        reason: typeof event.reason === "string" ? `${event.event}: ${event.reason}` : event.event,
+      };
+    }
+    const transports = event.transports;
+    if (typeof transports === "object" && transports !== null) {
+      for (const [transport, outcome] of Object.entries(transports as Record<string, unknown>)) {
+        if (typeof outcome === "string" && outcome !== "connected") {
+          reasons[transport] = { at: event.at, reason: outcome };
+        }
+      }
+    }
+  }
+  return reasons;
 }
 
 /**
@@ -234,6 +282,8 @@ export function buildDiagnosticsReport(input: ReportInput): Record<string, unkno
       what: "Diagnostics export of one Yamaha device for a GitHub issue of ioBroker.yamaha. Addresses, serial numbers, MACs, network, room and device names (and a device id made from them) are replaced by markers.",
       markers:
         "Markers (ip-private-1, name-1, device-1, serial-1-…2B3C) are stable INSIDE this file only. Never compare them across two exports.",
+      trail:
+        "trail.* is what the adapter recorded before this report, in memory only (empty after a restart): traffic.ynca every line sent and received, traffic.musiccast every request with its answer or error and the device's time, traffic.xml every request body and file with its answer, traffic.events every MusicCast event — a repeat only counts up (count, first, last; the playback clock is not compared), an entry over 64 KB keeps only its size (omittedBytes). commandResults: the last 30 commands, each protocol tried and why the next one was. connectionHistory: the last 50 connection events with each protocol's reason. disconnectedSince and lastReasonPerTransport are read from it.",
       captures:
         "captures.* holds what the device answered when this report was made, verbatim and read-only: YNCA SUBUNIT:FUNC → value (plus every received line), MusicCast endpoint → JSON body, XML Element/Node → response body and desc.xml. Same shape as test/fixtures/inventory. complete = the read ran to its end without a transport failure; failed = questions that got no answer (timeout, lost connection), error = why. A refusal is an answer: kept as {response_code} or {httpStatus}; a transport failure as {error}.",
     },
@@ -255,7 +305,18 @@ export function buildDiagnosticsReport(input: ReportInput): Record<string, unkno
     },
     connection: connection
       ? { live: connection.live, missing: connection.missing, owners: connection.owners, learnedTree: connection.tree }
-      : { note: input.connectionNote ?? "not connected — no live read" },
+      : {
+          note: input.connectionNote ?? "not connected — no live read",
+          // Who served which datapoint, as at the last connection (plan „Diagnosebericht“, Y4).
+          ownersAtLastConnection: input.trail?.lastOwners ?? null,
+        },
+    trail: {
+      disconnectedSince: disconnectedSince(input.trail?.connectionHistory ?? [], device.connected),
+      lastReasonPerTransport: lastReasonPerTransport(input.trail?.connectionHistory ?? []),
+      connectionHistory: input.trail?.connectionHistory ?? [],
+      commandResults: input.trail?.commands ?? [],
+      traffic: input.trail?.traffic ?? { ynca: [], musiccast: [], xml: [], events: [] },
+    },
     captures,
     profile: readableProfile(input.profile),
     objectTree: input.objectTree,
@@ -271,6 +332,13 @@ export function buildDiagnosticsReport(input: ReportInput): Record<string, unkno
   for (const label of [device.label, input.profile?.label]) {
     if (typeof label === "string" && label !== device.id && label !== device.model) {
       pseudonymiser.teach("name", label);
+    }
+  }
+  // A name the user wrote through the adapter stands in the command list under its datapoint, not under a key the
+  // pseudonymiser knows.
+  for (const command of input.trail?.commands ?? []) {
+    if (NAME_COMMAND.test(command.id) && typeof command.value === "string") {
+      pseudonymiser.teach("name", command.value);
     }
   }
   const idPart = personalIdPart(device.id, device.model);

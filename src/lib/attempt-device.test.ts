@@ -8,6 +8,7 @@ import type { Transport } from "./catalog/owner-policy";
 import { createSubunitCache } from "./ynca/subunit-cache";
 import { ProbeMemory } from "./lifecycle/probe-memory";
 import { PushLiveness } from "./yxc/push-liveness";
+import { TrafficRecorder } from "./diagnostics/traffic-recorder";
 import { DISCOVERY_SCHEMA } from "./lifecycle/discovery-schema";
 
 const silentLog = { debug: (): void => {}, info: (): void => {}, warn: (): void => {} };
@@ -565,5 +566,33 @@ describe("connectTransports reconnects only what the device has shown (audit 202
   // whole session would be a connection attempt a minute that can never succeed.
   test("a silent YNCA the device never answered is not", async () => {
     expect(await run(["yxc"])).toEqual([]);
+  });
+});
+
+// Plan „Diagnosebericht“, Y3: a device that is off ends its attempt without an exception — each protocol's reason
+// stands only here, and the report needs it.
+describe("connectTransports — the diagnostics trail", () => {
+  test("each protocol's outcome of an attempt, and an attempt nothing answered", async () => {
+    const recorder = new TrafficRecorder();
+    const failing = (transport: Transport): ConnectableTransport => {
+      const conn = fakeConn(transport, []);
+      conn.connect = (): Promise<boolean> => Promise.reject(new Error("connect ETIMEDOUT"));
+      return conn;
+    };
+    const live = await connectTransports(
+      "living",
+      [
+        { transport: "ynca", build: () => failing("ynca") },
+        { transport: "yxc", build: () => fakeConn("yxc", [state("volume", "Volume")]) },
+        { transport: "xml", build: () => fakeConn("xml", [], false) },
+      ],
+      { ...deps(), recorder },
+    );
+    live?.close();
+    await connectTransports("living", [{ transport: "ynca", build: () => failing("ynca") }], { ...deps(), recorder });
+    expect(recorder.snapshot().connectionHistory.map(({ at: _at, ...event }) => event)).toEqual([
+      { event: "attempt", transports: { ynca: "connect ETIMEDOUT", yxc: "connected", xml: "did not answer" } },
+      { event: "no reachable transport", transports: { ynca: "connect ETIMEDOUT" } },
+    ]);
   });
 });

@@ -69,6 +69,7 @@ import {
   type DiagnosticsHost,
 } from "./lib/diagnostics/diagnostics-handler";
 import { LogRing } from "./lib/diagnostics/log-ring";
+import { TrafficRecorder } from "./lib/diagnostics/traffic-recorder";
 
 /** Longest a delete waits for a device's running connection attempt (every transport times out sooner). */
 const REMOVE_SETTLE_CAP_MS = 30000;
@@ -274,6 +275,8 @@ export class Yamaha extends utils.Adapter {
   private readonly readyShown = this.perDevice.set();
   /** deviceId → how many transports it had live at the last report, so a LOSS is visible. */
   private readonly liveTransportCount = this.perDevice.map<number>();
+  /** deviceId → its diagnostics trail (in memory only). */
+  private readonly recorders = this.perDevice.map<TrafficRecorder>();
   /** The offline devices a search already said it could not find — said once per outage. */
   private readonly reportedMissing = this.perDevice.set();
   /** Armed while an auto-found device is offline: the search that can bring it back. */
@@ -525,6 +528,7 @@ export class Yamaha extends utils.Adapter {
         volumeAsPercent: this.volumePercent.get(record.id),
         pushEvents: this.pushLiveness.get(record.id)?.state,
         capture: () => this.supervisorById.get(record.id)?.capture() ?? Promise.resolve(undefined),
+        trail: () => this.recorders.get(record.id)?.snapshot(),
       };
     });
   }
@@ -536,11 +540,12 @@ export class Yamaha extends utils.Adapter {
       // from its constructor on — it is built only once I18n stands (fleet check i18n-before-messages). The names
       // still come from the own tName (lib/i18n.ts); this only makes adapter-core's I18n usable for any caller.
       await utils.I18n.init(join(__dirname, "..", "admin"), this);
+      // From here on the diagnostics report's log ring hears every line, debug included — as early as the fleet check
+      // i18n-before-messages allows (I18n.init stays the first statement; plan „Diagnosebericht“, Y6).
+      this.logRing.hook(this.log);
       // The device cards — dm-utils registers itself for the admin's messages in its constructor, nothing reads it here.
       new YamahaDeviceManagement(this, this.stores);
-      // From here on the diagnostics report's log ring hears every line, debug included, and the admin's
-      // diagnostics card gets its answers.
-      this.logRing.hook(this.log);
+      // The admin's diagnostics card gets its answers.
       this.on("message", obj => void this.onMessage(obj));
       this.log.info('starting — a "ready" message will follow for each device');
       // The address picked in the settings is the only one this start listens, sends and connects on (round 87); one this
@@ -772,6 +777,10 @@ export class Yamaha extends utils.Adapter {
     // (audit 2026-09-24, C1).
     const pushLiveness = new PushLiveness();
     this.pushLiveness.set(device.id, pushLiveness);
+    // The device's diagnostics trail — in memory only, kept across reconnects (a new handle each time) and restarts of
+    // its supervisor, gone with the device and with the adapter (plan „Diagnosebericht“, D1).
+    const recorder = this.recorders.get(device.id) ?? new TrafficRecorder();
+    this.recorders.set(device.id, recorder);
     // Narrowing (attempt-device.ts: only the transports the description advertises) applies
     // INSIDE a streak of failed attempts. The first attempt after a success — the start, and the
     // first reconnect after a drop — always tries all three: a firmware update that brings
@@ -789,8 +798,14 @@ export class Yamaha extends utils.Adapter {
           probeMemory,
           pushLiveness,
           signal,
-        );
+        ).catch((e: unknown) => {
+          recorder.connection("attempt failed", { error: errText(e), failedInARow: failedInARow + 1 });
+          throw e;
+        });
         failedInARow = handle ? 0 : failedInARow + 1;
+        if (!handle) {
+          recorder.connection("no connection", { failedInARow });
+        }
         return handle;
       },
       schedule: (cb, ms) => this.setTimeout(cb, ms),
@@ -798,6 +813,7 @@ export class Yamaha extends utils.Adapter {
       onConnectionChange: connected => this.reportConnection(device.id, connected),
       backoff: new ReconnectStrategy(RECONNECT_BASE_MS, RECONNECT_MAX_MS),
       log: this.log,
+      recorder,
     });
     this.supervisorById.set(device.id, supervisor);
     supervisor.start();
@@ -1445,6 +1461,10 @@ export class Yamaha extends utils.Adapter {
     }
     // The first connect (or its failure) ends the hold on the device object's patch.
     this.armDevicePatch(deviceId);
+    // A change of state only: a device that is off reports "not connected" after every attempt.
+    if (this.deviceConnected.get(deviceId) !== connected) {
+      this.recorders.get(deviceId)?.connection(connected ? "connected" : "disconnected");
+    }
     this.deviceConnected.set(deviceId, connected);
     this.writeState(`${deviceId}.info.connection`, connected);
     // A drop clears the per-transport flags; a (re)connect sets them again via onTransports.
@@ -2874,7 +2894,9 @@ export class Yamaha extends utils.Adapter {
           schedule: (handler, ms) => (this.unloading ? undefined : this.setTimeout(handler, ms)),
           cancel: handle => this.clearTimeout(handle),
         },
-        registerPush: (ip, onPush, deviceId) => pushReceiver.register(ip, onPush, deviceId),
+        registerPush: (ip, onPush, deviceId) =>
+          pushReceiver.register(ip, onPush, deviceId, packet => this.recorders.get(device.id)?.event(packet)),
+        recorder: this.recorders.get(device.id),
         pushActive: () => pushReceiver.isListening(),
         pushLiveness,
         firstReady: () => {

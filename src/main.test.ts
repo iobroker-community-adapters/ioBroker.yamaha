@@ -5424,3 +5424,24 @@ describe("the settings a diagnostics report shows", () => {
     ).toBe(0);
   });
 });
+
+// Plan „Diagnosebericht“, Y3: connected and disconnected once per change, an attempt without a connection with its count.
+describe("the diagnostics trail of a device", () => {
+  type Trail = { connectionHistory: Array<{ event: string; failedInARow?: number }> } | undefined;
+  const trailOf = (ctx: Ctx, index = 0): Trail =>
+    (ctx.i as unknown as { diagnosticsDevices(): Array<{ trail?(): Trail }> }).diagnosticsDevices()[index]?.trail?.();
+
+  it("a device that connects says so once; one that does not answer counts its attempts", async () => {
+    const ok = setup({ devices: [{ name: "Wohnzimmer", ip: "192.168.1.10" }] });
+    await ok.i.onReady();
+    await flush();
+    expect(trailOf(ok)?.connectionHistory.map(event => event.event)).toEqual(["connected"]);
+
+    const off = setup({ devices: [{ name: "Küche", ip: "192.168.1.11" }] }, { failIds: ["K_che"] });
+    await off.i.onReady();
+    await flush();
+    expect(trailOf(off)?.connectionHistory).toEqual([
+      expect.objectContaining({ event: "no connection", failedInARow: 1 }),
+    ]);
+  });
+});

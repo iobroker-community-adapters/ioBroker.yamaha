@@ -1,9 +1,15 @@
-import { YncaClient } from "./ynca/ynca-client";
+import { defaultFactory, YncaClient } from "./ynca/ynca-client";
 import { YncaDeviceController } from "./device-controller";
 import { YxcDeviceController } from "./yxc/device-controller";
-import { YamahaYxcClient } from "./yxc/http-client";
+import { defaultSend, YamahaYxcClient } from "./yxc/http-client";
 import { XmlDeviceController } from "./xml/device-controller";
-import { XmlClient } from "./xml/xml-client";
+import { defaultGetter, defaultPoster, XmlClient } from "./xml/xml-client";
+import {
+  recordedXmlGetter,
+  recordedXmlPoster,
+  recordedYncaFactory,
+  recordedYxcSend,
+} from "./diagnostics/recorded-transports";
 import {
   MultiTransportHandle,
   type ConnectableTransport,
@@ -208,22 +214,29 @@ async function connectBuilt(
   built: ConnectableTransport[],
   signal: AbortSignal | undefined,
 ): Promise<ConnectionHandle | null> {
+  // Each protocol's result with its reason, for the diagnostics report: the usual case — a device that is off — ends
+  // without an exception, and the reasons stand only here (plan „Diagnosebericht“, Y3).
+  const outcomes: Partial<Record<Transport, string>> = {};
   const results = await Promise.all(
     attempts.map(async attempt => {
       const conn = attempt.build();
       built.push(conn);
       try {
         if (await conn.connect()) {
+          outcomes[conn.transport] = "connected";
           return conn;
         }
+        outcomes[conn.transport] = "did not answer";
       } catch (e) {
         deps.log.debug(`${deviceId}/${conn.transport}: transport did not connect (${errText(e)})`);
+        outcomes[conn.transport] = errText(e);
       }
       conn.close();
       return null;
     }),
   );
   const live = results.filter((conn): conn is ConnectableTransport => conn !== null);
+  deps.recorder?.connection(live.length > 0 ? "attempt" : "no reachable transport", { transports: outcomes });
   if (signal?.aborted) {
     for (const conn of live) {
       conn.close();
@@ -271,6 +284,7 @@ async function connectBuilt(
     // line for a device that is off (audit 2026-09-24, A21).
     handle.close();
     deps.log.debug(`${deviceId}: every transport dropped while connecting`);
+    deps.recorder?.connection("every transport dropped while connecting");
     return null;
   }
   // One summary line instead of three per-transport "ready" lines; each controller logs its
@@ -339,7 +353,12 @@ export function attemptDevice(
   const buildYnca = (): ConnectableTransport => {
     const ynca = new TransportConnectionAdapter("ynca", device.id, setStateAck);
     const gate = gateFor("ynca");
-    const client = new YncaClient(device.ip, timers, gate);
+    const client = new YncaClient(
+      device.ip,
+      timers,
+      gate,
+      deps.recorder ? recordedYncaFactory(defaultFactory, deps.recorder) : undefined,
+    );
     ynca.readWith(() => captureYnca(client));
     ynca.bind(
       new YncaDeviceController(device.id, {
@@ -360,7 +379,11 @@ export function attemptDevice(
   const buildYxc = (): ConnectableTransport => {
     const yxc = new TransportConnectionAdapter("yxc", device.id, setStateAck);
     const gate = gateFor("yxc");
-    const client = new YamahaYxcClient(device.ip, undefined, gate);
+    const client = new YamahaYxcClient(
+      device.ip,
+      deps.recorder ? recordedYxcSend(defaultSend(device.ip), deps.recorder) : undefined,
+      gate,
+    );
     yxc.readWith(() => captureYxc(client));
     yxc.bind(
       new YxcDeviceController(device.id, {
@@ -389,7 +412,14 @@ export function attemptDevice(
   const buildXml = (): ConnectableTransport => {
     const xml = new TransportConnectionAdapter("xml", device.id, setStateAck);
     const gate = gateFor("xml");
-    const client = new XmlClient(device.ip, undefined, gate);
+    const client = deps.recorder
+      ? new XmlClient(
+          device.ip,
+          recordedXmlPoster(defaultPoster, deps.recorder),
+          gate,
+          recordedXmlGetter(defaultGetter, deps.recorder),
+        )
+      : new XmlClient(device.ip, undefined, gate);
     xml.readWith(() => captureXml(client));
     xml.bind(
       new XmlDeviceController(

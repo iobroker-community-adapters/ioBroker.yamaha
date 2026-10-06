@@ -123,7 +123,7 @@ export type SocketFactory = (host: string, port: number) => YncaSocket;
  * @param port the TCP port
  * @returns a socket wrapper over a node:net connection
  */
-function defaultFactory(host: string, port: number): YncaSocket {
+export function defaultFactory(host: string, port: number): YncaSocket {
   // From the address the user picked, where one is picked (round 87, `source-address.ts`).
   const socket = connect({ host, port, ...localAddressOption() });
   // Guard the initial connect: a device that never answers (a MusicCast-only

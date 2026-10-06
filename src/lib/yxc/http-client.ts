@@ -192,7 +192,7 @@ export interface YxcClientInfo {
  * @param ip the device IP or hostname
  * @returns a send function bound to that device
  */
-function defaultSend(ip: string): YxcSend {
+export function defaultSend(ip: string): YxcSend {
   return (command, body) =>
     new Promise((resolve, reject) => {
       const url = `http://${ip}${API_BASE}${command}`;
