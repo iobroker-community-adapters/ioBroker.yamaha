@@ -307,6 +307,15 @@ Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht; der 
   installed, no instance / installed, switched off / switched on, not running / running, je Instanz `enabled` + `alive`;
   dazu Push-Port :41100 belegt?), Gerät, Zuständigkeit je Datenpunkt, Rohantworten, Profil (`native`), Objektbaum mit
   Werten, Logzeilen (`LogRing`, alle Stufen inkl. debug, auch bei Loglevel info).
+- **Mitschnitt** (`traffic-recorder.ts`, krobi-Plan 2026-10-06, nur im Speicher — nach Neustart leer): je Gerät ein Recorder
+  in `main.ts` (`recorders`, über Neuverbindungen hinweg), gefüttert an den Draht-Nähten (`recorded-transports.ts`: YNCA-Socket-
+  Fabrik, MusicCast-Transport, XML-Poster/-Getter — nie in den Clients, so hört er auch Marker und Rücklesungen), MusicCast-
+  Ereignisse roh über `register(…, onRaw)`. Je Quelle ein Ring mit Byte-Grenze (YNCA/MusicCast 256 KB, XML/Ereignisse 128 KB);
+  Wiederholtes zählt hoch statt zu stapeln (Spielzeit wird beim Vergleich ignoriert); ein Eintrag über 64 KB bleibt nur mit
+  Größe stehen, nie halb. Dazu die letzten 30 Befehle je versuchtem Protokoll mit Ausweichgrund (`routeWrite`, offline
+  verworfen im Supervisor), 50 Verbindungsereignisse mit dem Grund je Protokoll und die Zuständigkeiten der letzten
+  Verbindung. Der Bericht nimmt den Schnappschuss VOR seiner Live-Abfrage (`trail()`), sonst schöbe diese die Vorgeschichte
+  aus den Ringen. Nichts davon wird Datenpunkt (Y-24).
 - **Pseudonymisierung** (`pseudonymiser.ts`): IP/MAC/Mail per Form, Seriennummer/MAC/SSID/Netz-/Standort-/Zonennamen aus
   ihren Fundstellen (YXC-Schlüssel, XML-Tags, YNCA `ZONENAME`), stabile Marker je Datei; Seriennummer behält die letzten 4.
 

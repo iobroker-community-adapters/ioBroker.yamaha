@@ -75,7 +75,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 
 ### **WORK IN PROGRESS**
 
-- (krobipd) New: Diagnostics report on the new Expert tab of the instance settings — reads the receiver over every protocol (read only), adds its datapoints, the recent log lines and whether the musiccast adapter is installed, switched on and running, and saves it as one file for a GitHub issue; addresses, serial numbers and names are replaced by markers
+- (krobipd) New: Diagnostics report on the new Expert tab of the instance settings — reads the receiver over every protocol (read only), adds its datapoints, the recent log lines and whether the musiccast adapter is installed, switched on and running, and saves it as one file for a GitHub issue; addresses, serial numbers and names are replaced by markers; it also shows what happened before it — each protocol's recent traffic, the last commands and which protocol took them, when the receiver went offline and why
 - (krobipd) Changed: A datapoint looks and works the same whichever protocol serves it — YNCA, MusicCast and XML now share names, roles, value lists and the handling of written numbers
 - (krobipd) Changed: Over YNCA the input dropdown shows the names you gave the inputs in the receiver; the 29 datapoints advanced.inputNames.\* are removed
 - (krobipd) New: Input, scene and sound program names you change in the receiver or the MusicCast app reach the dropdowns while the adapter runs
