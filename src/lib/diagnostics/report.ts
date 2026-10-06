@@ -287,14 +287,13 @@ export function buildDiagnosticsReport(input: ReportInput): Record<string, unkno
     captures[capture.transport] = capture;
   }
   const report: Record<string, unknown> = {
+    // As in govee-smart: the privacy statement lives at the export button; what only the file can say is that its
+    // markers stop at its own edge.
     readMe: {
-      what: "Diagnostics export of one Yamaha device for a GitHub issue of ioBroker.yamaha. Addresses, serial numbers, MACs, network, room and device names (and a device id made from them) are replaced by markers.",
+      what: "Diagnostics export of one Yamaha device, for a GitHub issue. Pseudonymised.",
       markers:
-        "Markers (ip-private-1, name-1, device-1, serial-1-…2B3C) are stable INSIDE this file only. Never compare them across two exports.",
-      trail:
-        "trail.* is what the adapter recorded before this report, in memory only (empty after a restart): traffic.ynca every line sent and received, traffic.musiccast every request with its answer or error and the device's time, traffic.xml every request body and file with its answer, traffic.events every MusicCast event — a repeat only counts up (count, first, last; the playback clock is not compared), an entry over 64 KB keeps only its size (omittedBytes). commandResults: the last 30 commands, each protocol tried and why the next one was. connectionHistory: the last 50 connection events with each protocol's reason. disconnectedSince is read from it, after a restart from when the device's info.connection last turned false; lastReasonPerTransport is read from it.",
-      captures:
-        "captures.* holds what the device answered when this report was made, verbatim and read-only: YNCA SUBUNIT:FUNC → value (plus every received line), MusicCast endpoint → JSON body, XML Element/Node → response body and desc.xml. Same shape as test/fixtures/inventory. complete = the read ran to its end without a transport failure; failed = questions that got no answer (timeout, lost connection), error = why. A refusal is an answer: kept as {response_code} or {httpStatus}; a transport failure as {error}.",
+        "Markers (device-1, ip-private-1, name-1, …) are stable INSIDE this file only. " +
+        "Never compare them across two exports.",
     },
     adapter: "iobroker.yamaha",
     version: input.adapterVersion,
