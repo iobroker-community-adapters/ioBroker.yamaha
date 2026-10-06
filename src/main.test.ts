@@ -5407,6 +5407,21 @@ describe("device ids since 3.0.0 — the one-time move", () => {
   });
 });
 
+describe("the diagnostics report through the adapter", () => {
+  // Server test 2026-10-06: the handler is built in the constructor, js-controller gives the adapter its log only
+  // later — a log copied there was undefined, and every export answered "Cannot read properties of undefined".
+  it("logs through the log the adapter has when the report is made, not the one it had when it was built", async () => {
+    const ctx = setup({ devices: [] });
+    const lines: string[] = [];
+    const later = { debug: vi.fn(), info: (m: string) => void lines.push(m), warn: (m: string) => void lines.push(m) };
+    (ctx.i as unknown as { log: unknown }).log = later;
+    const diagnostics = (ctx.i as unknown as { diagnostics: { handle(p: unknown): Promise<unknown> } }).diagnostics;
+    expect(await diagnostics.handle({ action: "export", device: "nope" })).toEqual({ error: "unknown device 'nope'" });
+    const host = (diagnostics as unknown as { host: { log: unknown } }).host;
+    expect(host.log).toBe(later);
+  });
+});
+
 describe("the settings a diagnostics report shows", () => {
   it("counts the device table rows, never shows an address, and a broken table counts none", () => {
     const ctx = setup({

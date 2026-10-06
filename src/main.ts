@@ -487,7 +487,11 @@ export class Yamaha extends utils.Adapter {
       getForeignStateAsync: id => this.getForeignStateAsync(id),
       getForeignStatesAsync: pattern => this.getForeignStatesAsync(pattern),
       getObjectViewAsync: (design, search, params) => this.getObjectViewAsync(design, search, params),
-      log: this.log,
+      // Read when a report is made: the handler is built in the constructor, before js-controller gives the adapter its
+      // log — a copy taken there was undefined, and every export failed at its first line (server test 2026-10-06).
+      get log() {
+        return adapter.log;
+      },
     };
   }
 
