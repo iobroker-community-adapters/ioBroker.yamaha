@@ -34,10 +34,15 @@ export interface TransportTree {
   values: Map<string, unknown>;
 }
 
-/** Timers for the clients and gates: real timeouts, shortened so a YNCA read-in takes a second, not half a minute. */
+/**
+ * Timers for the clients and gates: the pacing between lines shortened, so a YNCA read-in takes a second, not half a
+ * minute. A wait for an ANSWER (one second and more: the marker, the sweep end, the connect) stays real — it ends with
+ * the answer, and cut to 50 ms it judged a fixture that answered slower on a loaded CI runner as silent: the RX-A2070's
+ * YNCA read-in built three objects (CI run 37423210001, Ubuntu, Node 24; reproduced with an 80 ms answer delay).
+ */
 const timers = {
   schedule: (handler: () => void, ms: number): ioBroker.Timeout | undefined =>
-    setTimeout(handler, Math.min(ms, 50)) as unknown as ioBroker.Timeout,
+    setTimeout(handler, ms >= 1000 ? ms : Math.min(ms, 50)) as unknown as ioBroker.Timeout,
   cancel: (handle: ioBroker.Timeout | undefined): void => clearTimeout(handle as unknown as NodeJS.Timeout),
 };
 
