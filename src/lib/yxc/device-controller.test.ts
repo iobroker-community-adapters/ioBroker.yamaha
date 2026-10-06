@@ -622,6 +622,13 @@ describe("YxcDeviceController", () => {
     expect(again.acks.filter(a => a.id === "living.volume").at(-1)?.value).toBe(-50.5);
   });
 
+  // Audit 2026-09-29, C40: `max_volume` arrives in raw steps; it is shown on the scale its volume is shown on.
+  test("the volume limit is shown on the volume's scale, not in raw steps", async () => {
+    const s = setup(rxV481, { power: "on", volume: 60, max_volume: 161, actual_volume: { mode: "db", value: -50.5 } });
+    await s.controller.start();
+    expect(s.acks.filter(a => a.id === "living.advanced.maxVolume").at(-1)?.value).toBe(0);
+  });
+
   test("a status without a scale change reshapes nothing", async () => {
     const s = setup(rxV481, { power: "on", actual_volume: { mode: "db", value: -47.5 } });
     await s.controller.start();
