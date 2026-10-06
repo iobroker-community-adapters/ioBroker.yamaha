@@ -76,7 +76,6 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 ### **WORK IN PROGRESS**
 
 - (krobipd) New: Expert tab in the instance settings with a diagnostics report — pick a receiver, press the button, and your browser saves one file for a GitHub issue
-- (krobipd) New: The report reads the receiver over every protocol without changing anything and adds its datapoints, the recent log lines and the state of the musiccast adapter
 - (krobipd) New: The report also shows what happened before it — each protocol's recent traffic, the last commands and when and why the receiver went offline
 - (krobipd) New: Addresses, serial numbers and the names you gave rooms, network and inputs are replaced by markers; a new "Report a device" issue form asks for the file
 - (krobipd) Changed: A datapoint looks and works the same whichever protocol serves it — YNCA, MusicCast and XML now share names, roles, value lists and the handling of written numbers
