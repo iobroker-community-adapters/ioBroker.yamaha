@@ -11,7 +11,7 @@
   "yd_done": "Enregistré sous %s.",
   "yd_openIssue": "Ouvrir un ticket GitHub",
   "yd_exportFailed": "Le rapport n'a pas pu être créé.",
-  "yd_privacy": "Les adresses, numéros de série, noms de réseau et de pièces sont remplacés par des marqueurs avant que le fichier ne quitte l'adaptateur. L'adaptateur n'en garde aucune copie.",
+  "yd_privacy": "Les adresses, numéros de série, noms de réseau et de pièces sont remplacés par des marqueurs avant que le fichier ne quitte l'adaptateur. L'adaptateur n'écrit rien sur le disque et ne garde le rapport en mémoire que jusqu'à ce que ton navigateur l'ait reçu.",
   "yd_generating": "Création du rapport de diagnostic — l'ampli est lu par chaque protocole qu'il parle. Cela prend jusqu'à une minute ; le fichier est ensuite proposé au téléchargement.",
   "yd_elapsed": "%s s",
   "yd_notRunning": "L'instance n'est pas en cours d'exécution. Démarrez-la, puis rouvrez cet onglet.",

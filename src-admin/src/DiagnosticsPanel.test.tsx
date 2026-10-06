@@ -9,10 +9,20 @@ vi.mock("@iobroker/gui-components", () => ({
 
 import { DiagnosticsPanel } from "./DiagnosticsPanel";
 
+/** The card asks every few milliseconds here, not every two seconds. */
+const FAST = { listMs: 15_000, exportMs: 180_000, pollMs: 5 };
+
+/**
+ * An instance that lists its devices, starts a report as job `j1` and hands back `answers.export` for it.
+ *
+ * @param answers the device list and the report (or error)
+ * @param answers.list the answer to `list`
+ * @param answers.export the answer to `result`
+ */
 function socket(answers: { list: unknown; export?: unknown }): { sendTo: ReturnType<typeof vi.fn> } {
   return {
     sendTo: vi.fn((_instance: string, _command: string, data: { action: string }) =>
-      Promise.resolve(data.action === "list" ? answers.list : answers.export),
+      Promise.resolve(data.action === "list" ? answers.list : data.action === "start" ? { job: "j1" } : answers.export),
     ),
   };
 }
@@ -33,6 +43,7 @@ describe("DiagnosticsPanel", () => {
       <DiagnosticsPanel
         socket={s}
         namespace="yamaha.0"
+        timeouts={FAST}
       />,
     );
     const button = await screen.findByTestId("diag-export");
@@ -40,22 +51,30 @@ describe("DiagnosticsPanel", () => {
     fireEvent.click(button);
     expect(await screen.findByTestId("diag-done")).toHaveTextContent("yamaha_rx-v6a-2b3c_v3.3.0.json");
     expect(click).toHaveBeenCalled();
-    expect(s.sendTo).toHaveBeenCalledWith("yamaha.0", "diagnostics", { action: "export", device: "rx-v6a-2b3c" });
+    expect(s.sendTo).toHaveBeenCalledWith("yamaha.0", "diagnostics", { action: "start", device: "rx-v6a-2b3c" });
+    expect(s.sendTo).toHaveBeenCalledWith("yamaha.0", "diagnostics", { action: "result", job: "j1" });
   });
 
   it("shows that the report is being generated, with the seconds counting, until the answer comes", async () => {
-    let answer: (value: unknown) => void = () => {};
+    let done = false;
     const s = {
       sendTo: vi.fn((_i: string, _c: string, data: { action: string }) =>
-        data.action === "list"
-          ? Promise.resolve({ devices: [{ value: "rx-v6a-2b3c", label: "RX-V6A", connected: true }] })
-          : new Promise(resolve => (answer = resolve)),
+        Promise.resolve(
+          data.action === "list"
+            ? { devices: [{ value: "rx-v6a-2b3c", label: "RX-V6A", connected: true }] }
+            : data.action === "start"
+              ? { job: "j1" }
+              : done
+                ? { error: "x" }
+                : { pending: true },
+        ),
       ),
     };
     render(
       <DiagnosticsPanel
         socket={s}
         namespace="yamaha.0"
+        timeouts={FAST}
       />,
     );
     const button = await screen.findByTestId("diag-export");
@@ -67,7 +86,7 @@ describe("DiagnosticsPanel", () => {
     await waitFor(() => expect(screen.getByTestId("diag-elapsed")).toHaveTextContent(/^yd_elapsed [1-9]\d*$/), {
       timeout: 2500,
     });
-    answer({ error: "x" });
+    done = true;
     await waitFor(() => expect(screen.queryByTestId("diag-generating")).toBeNull());
   });
 
@@ -80,6 +99,7 @@ describe("DiagnosticsPanel", () => {
       <DiagnosticsPanel
         socket={s}
         namespace="yamaha.0"
+        timeouts={FAST}
       />,
     );
     const button = await screen.findByTestId("diag-export");
@@ -131,6 +151,7 @@ describe("DiagnosticsPanel", () => {
       <DiagnosticsPanel
         socket={s}
         namespace="yamaha.0"
+        timeouts={FAST}
       />,
     );
     expect(await screen.findByTestId("diag-list-failed")).toHaveTextContent("yd_notRunning");
@@ -156,6 +177,7 @@ describe("DiagnosticsPanel", () => {
       <DiagnosticsPanel
         socket={s}
         namespace="yamaha.0"
+        timeouts={FAST}
       />,
     );
     const button = await screen.findByTestId("diag-export");

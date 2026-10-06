@@ -233,5 +233,5 @@ minute, and your browser saves one file: what the receiver can do and what it an
 datapoints, the adapter's recent log lines (debug lines included, even with the log level at
 info) and whether the musiccast adapter is installed, switched on and running. Addresses, serial
 numbers, network, room, device and input names are replaced by markers — also when the receiver is off —,
-and the adapter keeps no copy. If the instance is not running, the tab says so instead of waiting. Attach
-the file to a [GitHub issue](https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues).
+and the adapter writes nothing to disk — it holds the report in memory only until your browser has it. If the instance is not running, the tab says so instead of waiting. Attach the file to a
+[device report on GitHub](https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues/new?template=device-support.yml).

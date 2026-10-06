@@ -240,6 +240,7 @@ den Receiver über jedes Protokoll aus, das er spricht — nur lesend, am Receiv
 was er geantwortet hat, seine Datenpunkte, die letzten Logzeilen des Adapters (auch die
 Debug-Zeilen, selbst wenn die Protokollstufe auf info steht) und ob der musiccast-Adapter
 installiert, eingeschaltet und gestartet ist. Adressen, Seriennummern, Netzwerk-, Raum-, Geräte- und Eingangsnamen
-werden durch Platzhalter ersetzt — auch wenn der Receiver aus ist —, und der Adapter behält keine Kopie.
-Läuft die Instanz nicht, sagt der Tab das, statt zu warten. Häng die Datei an ein
-[GitHub-Issue](https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues).
+werden durch Platzhalter ersetzt — auch wenn der Receiver aus ist —, und der Adapter schreibt nichts auf die
+Festplatte: den Bericht hält er nur im Speicher, bis dein Browser ihn hat.
+Läuft die Instanz nicht, sagt der Tab das, statt zu warten. Häng die Datei an eine
+[Gerätemeldung auf GitHub](https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues/new?template=device-support.yml).

@@ -23,11 +23,13 @@ import {
   makeDiagnosticsApi,
   type DiagnosticsDevice,
   type DiagnosticsSocket,
+  type DiagnosticsTimeouts,
 } from "./diagnosticsApi";
 import { forgetLastTab } from "./tabMemory";
 
-/** Where a report goes. */
-const ISSUES_URL = "https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues/new";
+/** Where a report goes: the issue form that asks for it (`.github/ISSUE_TEMPLATE/device-support.yml`). */
+export const ISSUES_URL =
+  "https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues/new?template=device-support.yml";
 
 /** Props of the diagnostics card. */
 export interface DiagnosticsPanelProps {
@@ -35,6 +37,8 @@ export interface DiagnosticsPanelProps {
   socket: unknown;
   /** The instance, e.g. `yamaha.0`. */
   namespace: string;
+  /** How long the card waits — the defaults outside tests. */
+  timeouts?: DiagnosticsTimeouts;
 }
 
 /** What the card knows about its device list. */
@@ -62,8 +66,8 @@ export function failureText(e: unknown, fallback: string): string {
 }
 
 /**
- * Hand the browser a file. The download is the only copy of the report — the adapter stores none — so the
- * user can attach it to an issue right away.
+ * Hand the browser a file. The adapter writes the report nowhere and drops it once handed over, so the download is
+ * the copy the user attaches to an issue.
  *
  * @param fileName the name to save it under
  * @param content the report JSON
@@ -88,9 +92,13 @@ export function offerDownload(fileName: string, content: string): void {
  * @param root0 props
  * @param root0.socket the admin socket
  * @param root0.namespace the instance
+ * @param root0.timeouts how long the card waits (tests only)
  */
-export function DiagnosticsPanel({ socket, namespace }: DiagnosticsPanelProps): React.JSX.Element {
-  const api = React.useMemo(() => makeDiagnosticsApi(socket as DiagnosticsSocket, namespace), [socket, namespace]);
+export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPanelProps): React.JSX.Element {
+  const api = React.useMemo(
+    () => makeDiagnosticsApi(socket as DiagnosticsSocket, namespace, timeouts),
+    [socket, namespace, timeouts],
+  );
   const [list, setList] = React.useState<ListState>({ status: "loading" });
   const [selected, setSelected] = React.useState("");
   const [busy, setBusy] = React.useState(false);

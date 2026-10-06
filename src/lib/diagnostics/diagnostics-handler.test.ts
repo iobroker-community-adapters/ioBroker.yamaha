@@ -2,6 +2,7 @@ import { TrafficRecorder } from "./traffic-recorder";
 import { describe, expect, it } from "vitest";
 import type { HandleCapture } from "./types";
 import {
+  DIAGNOSTICS_KEEP_MS,
   DiagnosticsHandler,
   musiccastStatus,
   type DiagnosticsDeviceState,
@@ -280,6 +281,42 @@ describe("DiagnosticsHandler", () => {
     expect(await handler.export("rx-v6a-2b3c")).toEqual({ error: expect.stringContaining("being made") });
     release();
     expect(await first).toHaveProperty("fileName");
+  });
+
+  // Server test 2026-10-06: the admin's browser connection gives up on every answer after 30 s, a report takes up
+  // to a minute — `start` answers at once, `result` hands the report over when it is done.
+  it("starts a report, answers at once, and hands it over once it is done — once", async () => {
+    let release: () => void = () => {};
+    const slow = device({ capture: () => new Promise(resolve => (release = () => resolve(undefined))) });
+    const handler = new DiagnosticsHandler(makeHost({ devices: [slow] }));
+    const started = (await handler.handle({ action: "start", device: "rx-v6a-2b3c" })) as { job: string };
+    expect(started.job).toEqual(expect.any(String));
+    expect(await handler.handle({ action: "start", device: "rx-v6a-2b3c" })).toEqual(started);
+    expect(await handler.handle({ action: "result", job: started.job })).toEqual({ pending: true });
+    release();
+    await new Promise(resolve => setImmediate(resolve));
+    expect(await handler.handle({ action: "result", job: started.job })).toHaveProperty("fileName");
+    expect(await handler.handle({ action: "result", job: started.job })).toEqual({ gone: true });
+  });
+
+  it("does not know a job it never started (a restarted instance)", async () => {
+    const handler = new DiagnosticsHandler(makeHost({ devices: [device()] }));
+    expect(await handler.handle({ action: "result", job: "rx-v6a-2b3c#1" })).toEqual({ gone: true });
+    expect(await handler.handle({ action: "start", device: "nope" })).toEqual({ error: "unknown device 'nope'" });
+  });
+
+  it("drops a report nobody fetched once its keep time is over, at the next message", async () => {
+    let clock = 1_000;
+    const handler = new DiagnosticsHandler(makeHost({ devices: [device()] }), () => clock);
+    const fetched = (await handler.handle({ action: "start", device: "rx-v6a-2b3c" })) as { job: string };
+    await new Promise(resolve => setImmediate(resolve));
+    clock += DIAGNOSTICS_KEEP_MS;
+    expect(await handler.handle({ action: "result", job: fetched.job })).toHaveProperty("fileName");
+    const left = (await handler.handle({ action: "start", device: "rx-v6a-2b3c" })) as { job: string };
+    await new Promise(resolve => setImmediate(resolve));
+    clock += DIAGNOSTICS_KEEP_MS + 1;
+    await handler.handle({ action: "list" });
+    expect(handler.result(left.job)).toEqual({ gone: true });
   });
 
   it("answers an unknown device or action with an error", async () => {

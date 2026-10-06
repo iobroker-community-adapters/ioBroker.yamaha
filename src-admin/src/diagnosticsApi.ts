@@ -72,12 +72,25 @@ export const LIST_TIMEOUT_MS = 15_000;
  */
 export const EXPORT_TIMEOUT_MS = 180_000;
 
+/**
+ * How often the card asks whether the report is done. No single answer may take long: the admin's browser
+ * connection calls every pending answer with "timeout" after 30 s (admin 8.0.23 `lib/js/socket.io.js`, a callback
+ * lives `Date.now() + 3e4`) — a report in one answer failed after 33 s on every receiver with YNCA (server test
+ * 2026-10-06).
+ */
+export const POLL_INTERVAL_MS = 2_000;
+
+/** The words the admin's browser connection answers with instead of the instance (`lib/js/socket.io.js`). */
+const TRANSPORT_WORDS = new Set(["timeout", "disconnected"]);
+
 /** How long the card waits for each answer. */
 export interface DiagnosticsTimeouts {
-  /** The device list. */
+  /** The device list, and each question about a running report. */
   listMs: number;
-  /** One report. */
+  /** One report, from the start to the file. */
   exportMs: number;
+  /** The pause between two questions about a running report. */
+  pollMs?: number;
 }
 
 /** The two operations the card drives. */
@@ -140,7 +153,12 @@ export async function askInstance(
     // The same: no watch, the timeout stays.
   }
   try {
-    return await Promise.race([socket.sendTo(namespace, "diagnostics", data), unavailable]);
+    const answer = await Promise.race([socket.sendTo(namespace, "diagnostics", data), unavailable]);
+    if (typeof answer === "string" && TRANSPORT_WORDS.has(answer)) {
+      // The connection gave up on this answer, not the instance: say so instead of "no report".
+      throw new InstanceUnavailableError("noAnswer", Math.round(timeoutMs / 1000));
+    }
+    return answer;
   } finally {
     clearTimeout(timer);
     socket.unsubscribeState?.(aliveId, onAlive);
@@ -175,11 +193,46 @@ export function makeDiagnosticsApi(
       return devices as DiagnosticsDevice[];
     },
     async exportReport(device: string): Promise<DiagnosticsExportResult> {
-      const answer = await askInstance(socket, namespace, { action: "export", device }, timeouts.exportMs);
-      if (answer && typeof answer === "object" && (isReport(answer as DiagnosticsExportResult) || "error" in answer)) {
-        return answer as DiagnosticsExportResult;
+      // Start, then ask until it is done: every answer comes at once (see POLL_INTERVAL_MS).
+      const deadline = Date.now() + timeouts.exportMs;
+      const giveUp = (): InstanceUnavailableError =>
+        new InstanceUnavailableError("noAnswer", Math.round(timeouts.exportMs / 1000));
+      const started = await askInstance(socket, namespace, { action: "start", device }, timeouts.listMs);
+      const job = (started as { job?: unknown } | null)?.job;
+      if (typeof job !== "string") {
+        const error = (started as { error?: unknown } | null)?.error;
+        return { error: typeof error === "string" ? error : "" };
       }
-      return { error: "" };
+      for (;;) {
+        const wait = Math.min(timeouts.pollMs ?? POLL_INTERVAL_MS, deadline - Date.now());
+        if (wait <= 0) {
+          throw giveUp();
+        }
+        await new Promise(resolve => setTimeout(resolve, wait));
+        let answer: unknown;
+        try {
+          answer = await askInstance(socket, namespace, { action: "result", job }, timeouts.listMs);
+        } catch (e) {
+          if (e instanceof InstanceUnavailableError && e.reason === "noAnswer") {
+            // One question lost on the way (the connection's own "timeout"): the report goes on, ask again.
+            continue;
+          }
+          throw e;
+        }
+        if (answer && typeof answer === "object") {
+          if ("pending" in answer) {
+            continue;
+          }
+          if ("gone" in answer) {
+            // The instance restarted (its jobs live in memory) or the report was already handed out.
+            throw new InstanceUnavailableError("stopped");
+          }
+          if (isReport(answer as DiagnosticsExportResult) || "error" in answer) {
+            return answer as DiagnosticsExportResult;
+          }
+        }
+        return { error: "" };
+      }
     },
   };
 }

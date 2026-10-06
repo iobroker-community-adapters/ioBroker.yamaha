@@ -11,7 +11,7 @@
   "yd_done": "Opgeslagen als %s.",
   "yd_openIssue": "GitHub-issue openen",
   "yd_exportFailed": "Het rapport kon niet worden gemaakt.",
-  "yd_privacy": "Adressen, serienummers, netwerk- en kamernamen worden door markeringen vervangen voordat het bestand de adapter verlaat. De adapter bewaart geen kopie.",
+  "yd_privacy": "Adressen, serienummers, netwerk- en kamernamen worden door markeringen vervangen voordat het bestand de adapter verlaat. De adapter schrijft niets naar de schijf en houdt het rapport alleen in het geheugen tot je browser het heeft.",
   "yd_generating": "Diagnoserapport wordt gemaakt – de receiver wordt uitgelezen via elk protocol dat hij spreekt. Dit duurt tot een minuut; daarna wordt het bestand aangeboden om te downloaden.",
   "yd_elapsed": "%s s",
   "yd_notRunning": "De instantie draait niet. Start deze en open dit tabblad daarna opnieuw.",

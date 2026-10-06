@@ -1,0 +1,58 @@
+name: Gerät melden / Report a device
+description: Ein Receiver tut nicht, was er soll — mit Diagnosebericht / A receiver does not do what it should — with a diagnostics report
+title: "[Gerät] Modell — kurz beschreiben"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke für deinen Bericht! Mit dem Diagnosebericht sehen wir, was dein Receiver kann und was er geantwortet hat — meist ohne Rückfrage.
+
+        Thanks for the report! The diagnostics report shows what your receiver can do and what it answered — usually without a follow-up question.
+
+  - type: input
+    id: model
+    attributes:
+      label: Receiver-Modell (optional) / Receiver model (optional)
+      description: Steht auch im Diagnosebericht. / Also part of the diagnostics report.
+      placeholder: RX-V6A
+
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Was funktioniert nicht? / What does not work?
+      description: |
+        Was hast du gemacht, was hast du erwartet, was ist passiert? Welcher Datenpunkt, welche Zone?
+
+        What did you do, what did you expect, what happened? Which datapoint, which zone?
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnosebericht / Diagnostics report
+      description: |
+        In den Instanz-Einstellungen: Reiter **Experte** → Receiver wählen → **Diagnosebericht erstellen**, dann die heruntergeladene Datei hier hineinziehen. Am besten direkt nach dem Fehler — der Bericht enthält auch, was davor passiert ist, und die letzten Logzeilen. Adressen, Seriennummern, Netzwerk-, Raum- und Eingangsnamen sind ersetzt.
+
+        In the instance settings: tab **Expert** → pick the receiver → **Create diagnostics report**, then drag the downloaded file in here. Best right after the problem — the report also holds what happened before it and the recent log lines. Addresses, serial numbers, network, room and input names are replaced.
+    validations:
+      required: true
+
+  - type: input
+    id: adapter-version
+    attributes:
+      label: Adapter-Version / Adapter version
+      description: Reiter Instanzen / Instances tab
+      placeholder: "x.y.z"
+    validations:
+      required: true
+
+  - type: textarea
+    id: extras
+    attributes:
+      label: Sonstiges (optional) / Anything else (optional)
+      description: |
+        Bildschirmfotos, Firmware, Besonderheiten deiner Installation.
+
+        Screenshots, firmware, peculiarities of your setup.

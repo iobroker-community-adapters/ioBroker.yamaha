@@ -11,7 +11,7 @@
   "yd_done": "Salvato come %s.",
   "yd_openIssue": "Apri una issue su GitHub",
   "yd_exportFailed": "Impossibile creare il rapporto.",
-  "yd_privacy": "Indirizzi, numeri di serie, nomi di rete e delle stanze vengono sostituiti da segnaposto prima che il file lasci l'adattatore. L'adattatore non conserva alcuna copia.",
+  "yd_privacy": "Indirizzi, numeri di serie, nomi di rete e delle stanze vengono sostituiti da segnaposto prima che il file lasci l'adattatore. L'adattatore non scrive nulla su disco e tiene il rapporto in memoria solo finché il browser non lo riceve.",
   "yd_generating": "Creazione del rapporto di diagnostica — il ricevitore viene letto tramite ogni protocollo che supporta. Richiede fino a un minuto; poi il file viene offerto per il download.",
   "yd_elapsed": "%s s",
   "yd_notRunning": "L'istanza non è in esecuzione. Avviala, poi riapri questa scheda.",

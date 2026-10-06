@@ -17,6 +17,16 @@ const TRANSPORTS = ["ynca", "yxc", "xml"] as const;
 /** Shortest gap after a finished report before the next one of the same device — a double click is not two sweeps. */
 export const DIAGNOSTICS_COOLDOWN_MS = 2_000;
 
+/**
+ * How long a finished report waits for the card to fetch it. The card asks every two seconds; one closed in the
+ * meantime leaves its report behind, and the next diagnostics message after this long drops it — in memory only,
+ * never written anywhere, gone with a restart. No timer: the handler is handed reads only (Y-11 guard).
+ */
+export const DIAGNOSTICS_KEEP_MS = 10 * 60_000;
+
+/** What the card gets when it asks for a report: still being made, gone (restart, fetched, expired), or the result. */
+export type DiagnosticsJobAnswer = { pending: true } | { gone: true } | DiagnosticsReport | { error: string };
+
 /** One device as the admin's diagnostics card lists it. */
 export interface DiagnosticsDevice {
   /** The device id (the object id below the instance). */
@@ -101,15 +111,26 @@ export interface DiagnosticsHost {
 }
 
 /**
- * Answers the admin's `diagnostics` message: `list` names the devices, `export` reads one device and
- * hands back the report as a file (name + JSON). Nothing is stored in the instance — the answer is the
- * only copy, the admin offers it as a download (govee-smart 2.37.0, the same path).
+ * Answers the admin's `diagnostics` message: `list` names the devices, `start` begins one device's report and
+ * answers at once with a job, `result` hands the finished report back as a file (name + JSON). The admin's
+ * browser connection gives up on every answer after 30 s (admin 8.0.23 `lib/js/socket.io.js`: a callback lives
+ * `Date.now() + 3e4`, then it is called with "timeout"), and a report takes up to a minute — so no answer waits
+ * for one (server test 2026-10-06: every report through the Expert tab failed after 33 s). The report lives in
+ * memory until the card fetches it ({@link DIAGNOSTICS_KEEP_MS}); the admin offers it as a download.
+ * `export` (the report in one answer) stays for callers without that limit.
  */
 export class DiagnosticsHandler {
   /** The devices a report is being made for right now — one read at a time per device. */
   private readonly running = new Set<string>();
   /** When the last report per device finished. */
   private readonly finished = new Map<string, number>();
+  /** The reports started through `start`, by job id, until fetched or expired. */
+  private readonly jobs = new Map<
+    string,
+    { device: string; result?: DiagnosticsReport | { error: string }; doneAt?: number }
+  >();
+  /** Numbers the jobs of this run. */
+  private jobCount = 0;
 
   /**
    * @param host the running adapter
@@ -123,16 +144,25 @@ export class DiagnosticsHandler {
   /**
    * Answer one message.
    *
-   * @param payload the message's payload: `{ action: "list" }` or `{ action: "export", device }`
+   * @param payload the message's payload: `{ action: "list" }`, `{ action: "start", device }`,
+   *   `{ action: "result", job }` or `{ action: "export", device }`
    * @returns the answer for the admin
    */
   public async handle(payload: unknown): Promise<unknown> {
-    const { action, device } = (typeof payload === "object" && payload !== null ? payload : {}) as {
+    const { action, device, job } = (typeof payload === "object" && payload !== null ? payload : {}) as {
       action?: unknown;
       device?: unknown;
+      job?: unknown;
     };
+    this.dropUnfetched();
     if (action === "list") {
       return { devices: this.list() };
+    }
+    if (action === "start") {
+      return this.start(typeof device === "string" ? device : "");
+    }
+    if (action === "result") {
+      return this.result(typeof job === "string" ? job : "");
     }
     if (action === "export") {
       return this.export(typeof device === "string" ? device : "");
@@ -155,6 +185,63 @@ export class DiagnosticsHandler {
         connected: device.connected,
       }))
       .sort((a, b) => a.label.localeCompare(b.label));
+  }
+
+  /**
+   * Begin one device's report and answer at once. A second start while it runs gets the same job.
+   *
+   * @param deviceId the device id
+   * @returns the job to ask for, or why there is none
+   */
+  public start(deviceId: string): { job: string } | { error: string } {
+    for (const [id, job] of this.jobs) {
+      if (job.device === deviceId && !job.result) {
+        return { job: id };
+      }
+    }
+    if (!this.host.devices().some(d => d.id === deviceId)) {
+      return { error: `unknown device '${deviceId}'` };
+    }
+    const id = `${deviceId}#${++this.jobCount}`;
+    const job: { device: string; result?: DiagnosticsReport | { error: string }; doneAt?: number } = {
+      device: deviceId,
+    };
+    this.jobs.set(id, job);
+    void this.export(deviceId)
+      .catch((e: unknown) => ({ error: `report failed: ${errText(e)}` }))
+      .then(result => {
+        job.result = result;
+        job.doneAt = this.now();
+      });
+    return { job: id };
+  }
+
+  /** Drop the finished reports nobody fetched within {@link DIAGNOSTICS_KEEP_MS}. */
+  private dropUnfetched(): void {
+    const now = this.now();
+    for (const [id, job] of this.jobs) {
+      if (job.doneAt !== undefined && now - job.doneAt > DIAGNOSTICS_KEEP_MS) {
+        this.jobs.delete(id);
+      }
+    }
+  }
+
+  /**
+   * Answer for a started report: still pending, gone, or the result — handed over once.
+   *
+   * @param id the job id `start` answered
+   * @returns the answer
+   */
+  public result(id: string): DiagnosticsJobAnswer {
+    const job = this.jobs.get(id);
+    if (!job) {
+      return { gone: true };
+    }
+    if (!job.result) {
+      return { pending: true };
+    }
+    this.jobs.delete(id);
+    return job.result;
   }
 
   /**

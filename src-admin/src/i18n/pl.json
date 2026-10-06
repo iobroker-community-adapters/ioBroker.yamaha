@@ -11,7 +11,7 @@
   "yd_done": "Zapisano jako %s.",
   "yd_openIssue": "Otwórz zgłoszenie na GitHubie",
   "yd_exportFailed": "Nie udało się utworzyć raportu.",
-  "yd_privacy": "Adresy, numery seryjne, nazwy sieci i pomieszczeń są zastępowane znacznikami, zanim plik opuści adapter. Adapter nie przechowuje kopii.",
+  "yd_privacy": "Adresy, numery seryjne, nazwy sieci i pomieszczeń są zastępowane znacznikami, zanim plik opuści adapter. Adapter niczego nie zapisuje na dysku i trzyma raport w pamięci tylko do chwili, gdy odbierze go przeglądarka.",
   "yd_generating": "Tworzenie raportu diagnostycznego – amplituner jest odczytywany przez każdy obsługiwany protokół. Trwa to do minuty; potem plik zostanie udostępniony do pobrania.",
   "yd_elapsed": "%s s",
   "yd_notRunning": "Instancja nie działa. Uruchom ją, a następnie ponownie otwórz tę kartę.",

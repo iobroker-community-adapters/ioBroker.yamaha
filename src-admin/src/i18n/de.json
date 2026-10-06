@@ -11,7 +11,7 @@
   "yd_done": "Gespeichert als %s.",
   "yd_openIssue": "GitHub-Issue öffnen",
   "yd_exportFailed": "Der Bericht konnte nicht erstellt werden.",
-  "yd_privacy": "Adressen, Seriennummern, Netzwerk- und Raumnamen werden durch Platzhalter ersetzt, bevor die Datei den Adapter verlässt. Der Adapter behält keine Kopie.",
+  "yd_privacy": "Adressen, Seriennummern, Netzwerk- und Raumnamen werden durch Platzhalter ersetzt, bevor die Datei den Adapter verlässt. Der Adapter schreibt nichts auf die Festplatte und hält den Bericht nur im Speicher, bis dein Browser ihn hat.",
   "yd_generating": "Diagnosebericht wird erstellt – der Receiver wird über jedes Protokoll ausgelesen, das er spricht. Das dauert bis zu einer Minute; danach wird die Datei zum Herunterladen angeboten.",
   "yd_elapsed": "%s s",
   "yd_notRunning": "Die Instanz läuft nicht. Bitte starten und diesen Tab dann erneut öffnen.",

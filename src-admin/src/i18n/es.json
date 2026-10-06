@@ -11,7 +11,7 @@
   "yd_done": "Guardado como %s.",
   "yd_openIssue": "Abrir un issue en GitHub",
   "yd_exportFailed": "No se pudo crear el informe.",
-  "yd_privacy": "Las direcciones, números de serie y nombres de red y de habitaciones se sustituyen por marcadores antes de que el archivo salga del adaptador. El adaptador no guarda ninguna copia.",
+  "yd_privacy": "Las direcciones, números de serie y nombres de red y de habitaciones se sustituyen por marcadores antes de que el archivo salga del adaptador. El adaptador no escribe nada en el disco y solo mantiene el informe en memoria hasta que tu navegador lo tiene.",
   "yd_generating": "Generando el informe de diagnóstico: el receptor se está leyendo por cada protocolo que habla. Tarda hasta un minuto; después se ofrece el archivo para descargar.",
   "yd_elapsed": "%s s",
   "yd_notRunning": "La instancia no se está ejecutando. Iníciela y luego vuelva a abrir esta pestaña.",

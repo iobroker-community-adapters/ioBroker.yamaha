@@ -303,7 +303,13 @@ Instanz-Einstellungen = Tabs `_main` (bisheriger Inhalt) + `_expert` („Experte
 ist die React-Komponente `src-admin/` (Vite + Module Federation, `ConfigCustomYamahaSet/Components/DiagnosticsConfig`),
 gebaut per `npm run build:admin` (`tasks.js`) nach `admin/custom/` — **getrackt** wie bei govee; `build:admin` installiert
 `src-admin` selbst (gemessen 2026-10-06 mit npm 10.9.7 aus frischem Checkout, wie der CI-Job `admin-component`). Gerät wählen → `sendTo diagnostics {action:"export"}` → Download im
-Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht; der Adapter speichert keine Kopie.
+Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht. **Keine Antwort wartet auf den Bericht:** die
+Browser-Verbindung des Admins ruft jede Antwort nach 30 s mit `"timeout"` auf (admin 8.0.23 `lib/js/socket.io.js`,
+`Date.now() + 3e4`), ein Bericht dauert bis zu einer Minute — `start` antwortet sofort mit einem Auftrag, die Karte fragt
+alle 2 s `result` (`pending`/`gone`/Bericht); der fertige Bericht liegt nur im Speicher, bis die Karte ihn abholt; einen nicht
+abgeholten verwirft die nächste Nachricht nach 10 Minuten (`DIAGNOSTICS_KEEP_MS`, ohne Timer — der Wächter Y-11 lässt dem
+Handler nur Lesendes), nie auf der Platte (Server-Test 2026-10-06: jeder Bericht über den Tab
+scheiterte nach 33 s). Der Link „GitHub-Issue öffnen“ öffnet das Formular `device-support.yml` mit Pflicht-Upload.
 `forgetLastTab` löscht den gemerkten Tab, sonst öffnet der Admin ab dem ersten Bericht auf „Experte".
 
 - **Auslesen nur lesend, über die bestehenden Clients und ihre Befehls-Schleuse** (`lib/diagnostics/device-capture.ts`,
