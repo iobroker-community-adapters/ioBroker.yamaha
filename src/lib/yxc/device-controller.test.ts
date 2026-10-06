@@ -578,13 +578,14 @@ describe("YxcDeviceController", () => {
     expect(s.defs.get("living.volume")?.common.unit).toBe("dB");
 
     s.trace.length = 0;
-    s.client.status = { power: "on", volume: 60, actual_volume: { mode: "numeric", value: 30 } };
-    s.fire.push?.({ main: { volume: 60 } });
+    // A raw step count other than the start's, so the value written can only come from this conversion.
+    s.client.status = { power: "on", volume: 70, actual_volume: { mode: "numeric", value: 35 } };
+    s.fire.push?.({ main: { volume: 70 } });
     await flush();
 
     expect(s.trace.filter(e => e.kind === "object" && e.id === "living.volume")).toEqual([]);
     expect(s.defs.get("living.volume")?.common.unit).toBe("dB");
-    expect(s.acks.filter(a => a.id === "living.volume").at(-1)?.value).toBe(-50.5);
+    expect(s.acks.filter(a => a.id === "living.volume").at(-1)?.value).toBe(-45.5);
   });
 
   test("on the other scale without a raw step count, no volume value is written", async () => {
