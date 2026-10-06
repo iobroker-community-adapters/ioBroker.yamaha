@@ -196,7 +196,35 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
   return (
     <Box sx={{ p: 2, maxWidth: 720 }}>
       <Stack spacing={2}>
-        <Typography variant="body2">{I18n.t("yd_intro")}</Typography>
+        <Box data-testid="diag-intro">
+          <Typography variant="body2">{I18n.t("yd_intro")}</Typography>
+          <Typography
+            variant="body2"
+            sx={{ mt: 1 }}
+          >
+            {I18n.t("yd_contains")}
+          </Typography>
+          <Box
+            component="ul"
+            sx={{ m: 0, pl: 3 }}
+          >
+            {(["yd_containsWhat", "yd_containsDatapoints", "yd_containsLog"] as const).map(key => (
+              <Typography
+                key={key}
+                component="li"
+                variant="body2"
+              >
+                {I18n.t(key)}
+              </Typography>
+            ))}
+          </Box>
+          <Typography
+            variant="body2"
+            sx={{ mt: 1 }}
+          >
+            {I18n.t("yd_after")}
+          </Typography>
+        </Box>
 
         {devices.length === 0 ? (
           <Alert
@@ -284,12 +312,32 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
           </Alert>
         ) : null}
 
-        <Typography
-          variant="caption"
-          color="text.secondary"
+        <Alert
+          severity="info"
+          variant="outlined"
+          data-testid="diag-privacy"
         >
-          {I18n.t("yd_privacy")}
-        </Typography>
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 500 }}
+          >
+            {I18n.t("yd_privacyTitle")}
+          </Typography>
+          <Box
+            component="ul"
+            sx={{ m: 0, pl: 3 }}
+          >
+            {(["yd_privacyMarkers", "yd_privacyMemory"] as const).map(key => (
+              <Typography
+                key={key}
+                component="li"
+                variant="body2"
+              >
+                {I18n.t(key)}
+              </Typography>
+            ))}
+          </Box>
+        </Alert>
       </Stack>
     </Box>
   );
