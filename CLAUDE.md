@@ -319,6 +319,8 @@ Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht; der 
   „disconnected“) die letzte Änderung von `info.connection` des Geräts, solange es `false` sagt.
 - **Pseudonymisierung** (`pseudonymiser.ts`): IP/MAC/Mail per Form, Seriennummer/MAC/SSID/Netz-/Standort-/Zonennamen aus
   ihren Fundstellen (YXC-Schlüssel, XML-Tags, YNCA `ZONENAME`), stabile Marker je Datei; Seriennummer behält die letzten 4.
+  Eingangsnamen (krobi 2026-10-06) aus YNCA `INPNAME…`, MusicCast `input_list`, XML `Input_Sel_Item` und dem `input`-Dropdown —
+  nur, wo sie vom Werksnamen abweichen (`USB`, `TUNER` bleiben lesbar).
 
 ## Chroniken — verlegt nach `.claude/dev-history.md` (2026-09-21)
 

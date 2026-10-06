@@ -70,6 +70,58 @@ describe("Pseudonymiser", () => {
     expect(out).toContain("Main Zone");
   });
 
+  // krobi 2026-10-06 ("Ja, ersetzen"): the names the user gave the inputs are replaced like the zone names; a factory
+  // name stays readable — it only says which input it is. The names are the RX-V6A's own, read on the server.
+  it("replaces the input names the user gave, on every protocol, and keeps the factory names", () => {
+    const report = {
+      ynca: { "SYS:INPNAMEHDMI1": "Apple TV", "SYS:INPNAMEUSB": "USB", "SYS:INPNAMEMCLINK": "MusicCast Link" },
+      lines: ["@SYS:INPNAMEHDMI2=Xbox Series X", "@SYS:INPNAMEAUDIO1=AUDIO1"],
+      profile: {
+        subunits: { SYS: { INPNAMEHDMI3: "Playstation 5" } },
+        inputNames: { HDMI_6: "Dreamcast", TUNER: "TUNER" },
+      },
+      "system/getNameText": {
+        input_list: [
+          { id: "hdmi7", text: "Retro PC" },
+          { id: "net_radio", text: "NET RADIO" },
+          { id: "mc_link", text: "MusicCast Link" },
+        ],
+      },
+      xml:
+        "<Input_Sel_Item><Item_1><Param>HDMI4</Param><RW>RW</RW><Title>Playstation 3</Title></Item_1>" +
+        "<Item_2><Param>AUDIO2</Param><RW>R</RW><Title>AUDIO2</Title></Item_2>" +
+        "<Item_3><Param>Main Zone Sync</Param><RW>RW</RW><Title>Main Zone Sync</Title></Item_3></Input_Sel_Item>",
+      scenes: "<Scene_Sel_Item><Item_1><Param>Scene 1</Param><Title>Movie Viewing</Title></Item_1></Scene_Sel_Item>",
+      objectTree: [{ id: "multiroom.zone2.input", states: { HDMI5: "Xbox 360", PHONO: "PHONO" } }],
+    };
+    const out = scrub(report);
+    for (const name of [
+      "Apple TV",
+      "Xbox Series X",
+      "Playstation 5",
+      "Playstation 3",
+      "Dreamcast",
+      "Retro PC",
+      "Xbox 360",
+    ]) {
+      expect(out, name).not.toContain(name);
+    }
+    for (const factory of [
+      "USB",
+      "AUDIO1",
+      "AUDIO2",
+      "TUNER",
+      "NET RADIO",
+      "MusicCast Link",
+      "Main Zone Sync",
+      "PHONO",
+    ]) {
+      expect(out, factory).toContain(factory);
+    }
+    // Only the input list: a scene title is not an input name.
+    expect(out).toContain("Movie Viewing");
+  });
+
   it("finds a name that stands only in a raw YNCA line", () => {
     const out = scrub({ lines: ["@ZONE3:ZONENAME=Gaestezimmer", "@BT:DEVICENAME=Pixel von Max"] });
     expect(out).not.toContain("Gaestezimmer");

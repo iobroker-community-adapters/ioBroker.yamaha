@@ -232,6 +232,6 @@ every protocol it speaks — read only, nothing on the receiver changes — whic
 minute, and your browser saves one file: what the receiver can do and what it answered, its
 datapoints, the adapter's recent log lines (debug lines included, even with the log level at
 info) and whether the musiccast adapter is installed, switched on and running. Addresses, serial
-numbers, network, room and device names are replaced by markers — also when the receiver is off —,
+numbers, network, room, device and input names are replaced by markers — also when the receiver is off —,
 and the adapter keeps no copy. If the instance is not running, the tab says so instead of waiting. Attach
 the file to a [GitHub issue](https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues).
