@@ -1,8 +1,8 @@
 import type { ObjectDef } from "./types";
 
 /**
- * The form of a datapoint that has to be the same whichever protocol serves it (krobi 2026-10-05: "alle 3 protokolle
- * müssen sich konsistent verhalten"): the object type, and in `common` the value type, unit, role, name, read/write,
+ * The form of a datapoint that has to be the same whichever protocol serves it (krobi 2026-10-05: "all 3 protocols
+ * have to behave consistently"): the object type, and in `common` the value type, unit, role, name, read/write,
  * the bounds and the value list.
  */
 

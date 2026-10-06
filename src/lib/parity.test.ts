@@ -10,8 +10,8 @@ import {
 } from "../../test/helpers/parity-harness";
 
 /**
- * Parity of the three protocols (krobi 2026-10-05: "alle 3 protokolle müssen sich konsistent verhalten, für den
- * enduser darf es keinen unterschied welche protokoll genutzt wird"). Every inventory fixture device is read once per
+ * Parity of the three protocols (krobi 2026-10-05: "all 3 protocols have to behave consistently; for the
+ * end user it must make no difference which protocol is used"). Every inventory fixture device is read once per
  * protocol it speaks, each protocol alone and through the real client, controller and transport adapter. A datapoint
  * two protocols build on one receiver must have the same form; every value a protocol reports must have an object.
  *

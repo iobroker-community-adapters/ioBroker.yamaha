@@ -57,9 +57,27 @@ jobs:
           os: ${{ matrix.os }}
           build: true
 
+  # Builds, type-checks and tests the admin custom component (src-admin, the Expert tab's diagnostics card)
+  admin-component:
+    if: contains(github.event.head_commit.message, '[skip ci]') == false
+    needs: [check-and-lint]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.x" # the lowest matrix major
+          cache: npm
+      - run: npm ci
+      - name: Build the admin custom component (Vite / Module Federation)
+        run: npm run build:admin
+      # Needs src-admin/node_modules from the build step; the root test matrix never has them.
+      - name: Type-check, lint and test the component with its own toolchain
+        run: npm run test:admin
+
   # Deploys the final package to NPM
   deploy:
-    needs: [check-and-lint, adapter-tests]
+    needs: [check-and-lint, adapter-tests, admin-component]
 
     # Trigger this step only when a commit on any branch is tagged with a version number
     if: |

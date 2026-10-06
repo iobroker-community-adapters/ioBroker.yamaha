@@ -293,8 +293,8 @@ Ablehnung — ein abgelehnter Wert steht nie länger als ein Rücklesen auf dem 
 
 Instanz-Einstellungen = Tabs `_main` (bisheriger Inhalt) + `_expert` („Experte", Name/Schlüssel wie govee). Der Experte-Tab
 ist die React-Komponente `src-admin/` (Vite + Module Federation, `ConfigCustomYamahaSet/Components/DiagnosticsConfig`),
-gebaut per `npm run build:admin` (`tasks.js`) nach `admin/custom/` — **getrackt** wie bei govee; `src-admin` installiert nur
-mit npm ≥ 11 (npm 10.9 bricht in arborist `edgesOut`). Gerät wählen → `sendTo diagnostics {action:"export"}` → Download im
+gebaut per `npm run build:admin` (`tasks.js`) nach `admin/custom/` — **getrackt** wie bei govee; `build:admin` installiert
+`src-admin` selbst (gemessen 2026-10-06 mit npm 10.9.7 aus frischem Checkout, wie der CI-Job `admin-component`). Gerät wählen → `sendTo diagnostics {action:"export"}` → Download im
 Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht; der Adapter speichert keine Kopie.
 `forgetLastTab` löscht den gemerkten Tab, sonst öffnet der Admin ab dem ersten Bericht auf „Experte".
 

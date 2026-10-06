@@ -83,7 +83,7 @@ export interface ObjectDef {
   reportedValue?: string;
   /**
    * The value labels are names the user gives in the receiver — inputs, scenes, sound programs (krobi
-   * 2026-10-05: „diese dürfen im laufenden betrieb geändert werden“). A running tree takes the new label of
+   * 2026-10-05: "these may change while running"). A running tree takes the new label of
    * a value it already lists; it still never loses a value (Y-01), and every other list keeps the labels it
    * was read in with. All three protocols mark their user-named lists alike (Y-25). Never written to the
    * object.
