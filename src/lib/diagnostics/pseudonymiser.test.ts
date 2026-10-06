@@ -70,6 +70,18 @@ describe("Pseudonymiser", () => {
     expect(out).toContain("Main Zone");
   });
 
+  it("finds a name that stands only in a raw YNCA line", () => {
+    const out = scrub({ lines: ["@ZONE3:ZONENAME=Gaestezimmer", "@BT:DEVICENAME=Pixel von Max"] });
+    expect(out).not.toContain("Gaestezimmer");
+    expect(out).not.toContain("Pixel von Max");
+  });
+
+  it("an empty secret stays empty — the report shows that none is set", () => {
+    const out = scrub({ key: "", password: "geheim" });
+    expect(out).toContain('"key":""');
+    expect(out).toContain('"password":"***"');
+  });
+
   it("replaces a taught value wherever it occurs, the same marker for the same value", () => {
     const out = scrub({ a: "rx at yamaha.fritz.box", b: ["yamaha.fritz.box"] }, p =>
       p.teach("host", "yamaha.fritz.box"),

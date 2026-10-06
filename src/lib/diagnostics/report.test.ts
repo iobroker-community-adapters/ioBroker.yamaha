@@ -156,6 +156,16 @@ describe("diagnostics report: device id and file name (B3)", () => {
     expect(report.fileName).toBe("yamaha_device-1_v3.3.0_2026-10-05_000000.json");
   });
 
+  it("replaces a hostname a device was entered with — it names the user's network", () => {
+    const report = diagnosticsExport(
+      input({
+        device: { id: "rx-v6a-2b3c", ip: "wohnzimmer-avr.fritz.box", connected: false, transports: {} },
+        logs: [{ ts: "t", level: "debug", msg: "rx-v6a-2b3c: connect wohnzimmer-avr.fritz.box failed" }],
+      }),
+    );
+    expect(report.content).not.toContain("wohnzimmer-avr.fritz.box");
+  });
+
   it("replaces an id taken from an address — 3.x and 2.x spelling", () => {
     for (const id of ["192-168-178-41", "192_168_178_41"]) {
       const report = diagnosticsExport(

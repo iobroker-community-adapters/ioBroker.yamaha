@@ -157,22 +157,19 @@ export class DeviceSupervisor {
       // reconnect has already superseded, must not schedule another retry.
       handle.onDrop(reason => this.handleDrop(handle, reason));
     } else {
-      this.endLifetime(lifetime);
+      this.endLifetime();
       this.deps.onConnectionChange(false);
       this.scheduleRetry();
     }
   }
 
   /**
-   * End an attempt's lifetime: whatever it built writes nothing more.
-   *
-   * @param lifetime the lifetime to end (the current one when omitted)
+   * End the current attempt's lifetime: whatever it built writes nothing more. There is only ever one — the attempts
+   * run one at a time, and a failed one ends its own before the next can start.
    */
-  private endLifetime(lifetime = this.lifetime): void {
-    lifetime?.abort();
-    if (this.lifetime === lifetime) {
-      this.lifetime = undefined;
-    }
+  private endLifetime(): void {
+    this.lifetime?.abort();
+    this.lifetime = undefined;
   }
 
   private handleDrop(handle: ConnectionHandle, reason?: Error): void {

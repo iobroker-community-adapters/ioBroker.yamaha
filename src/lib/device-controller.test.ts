@@ -929,6 +929,17 @@ describe("YncaDeviceController unified tuner v2.0.0 (band-routed writes)", () =>
     expect(s.client.sent).toEqual([]);
   });
 
+  test("the band a script just wrote decides its next frequency write, before the device reports it (A20)", async () => {
+    const s = await tunerSetup({ MAIN: { PWR: "On" }, DAB: { BAND: "DAB", FMFREQ: "98.10" } });
+    void s.controller.handleWrite("tuner.band", "FM");
+    // No BAND line from the device yet — the frequency right after still goes out on FM.
+    void s.controller.handleWrite("tuner.frequency", 98500);
+    expect(s.client.sent).toEqual([
+      { subunit: "DAB", func: "BAND", value: "FM" },
+      { subunit: "DAB", func: "FMFREQ", value: "98.50" },
+    ]);
+  });
+
   test("a band write goes to the subunit that owns that band", async () => {
     const classic = await tunerSetup({ MAIN: { PWR: "On" }, TUN: { BAND: "AM", AMFREQ: "1440" } });
     void classic.controller.handleWrite("tuner.band", "AM");
@@ -1341,6 +1352,23 @@ describe("YNCA dropdowns from proof — inputs narrowed by evidence, observed va
     const { objects, deps } = makeDeps(client);
     await new YncaDeviceController("living", deps).start();
     expect(statesOf(objects, "living.input")).toHaveProperty("Spotify");
+  });
+
+  test("the XML declaration the device remembered judges a source absent and adds its input names", async () => {
+    const client = new FakeClient();
+    client.capabilities = {
+      model: "RX-V6A",
+      subunits: { SYS: { MODELNAME: "RX-V6A", VERSION: "1.0" }, MAIN: { PWR: "On", INP: "HDMI1" } },
+    };
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      [MEMORY_KEY.xmlConfig]: { features: { Spotify: false }, inputNames: { HDMI1: "TV", AV7: "Plattenspieler" } },
+    });
+    const { objects, deps } = makeDeps(client);
+    await new YncaDeviceController("living", { ...deps, probeMemory: memory }).start();
+    const inputs = statesOf(objects, "living.input");
+    expect(inputs).not.toHaveProperty("Spotify");
+    expect(inputs).toHaveProperty("AV7");
   });
 
   test("a remembered subunit snapshot of another firmware is not used for narrowing", async () => {

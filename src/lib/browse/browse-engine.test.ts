@@ -375,6 +375,19 @@ describe("BrowseEngine path search — counted pages from the first", () => {
     expect(warned).toEqual([]);
   });
 
+  it("searches from the page it stands on when the device does not turn back — asked once, counted from there", async () => {
+    const { engine, driver, warned } = setup();
+    // Page 2 of sixteen entries, and the device answers Page Up with the same page.
+    const second = window({ totalItems: 16, currentLine: 11, rows: rowsOf("I", "J", "K", "L", "M", "N", "O", "P") });
+    driver.onOp.home = second;
+    driver.onOp.pageUp = second;
+    engine.handleWrite("player.browse.path", "Missing");
+    await flush();
+    // One Page Up, and page 2 of 2 is the last one: no Page Down into nothing.
+    expect(driver.calls).toEqual(["home", "pageUp"]);
+    expect(warned.some(message => message.includes('"Missing" not found'))).toBe(true);
+  });
+
   it("ends at the last page by the count of entries, also when that page is full", async () => {
     const { engine, driver, warned } = setup();
     driver.onOp.home = window({ totalItems: 16, currentLine: 1, rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H") });

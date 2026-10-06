@@ -631,6 +631,8 @@ describe("YxcDeviceController", () => {
     await flush();
 
     expect(s.trace.filter(e => e.kind === "object" && e.id === "living.volume")).toEqual([]);
+    // The new value itself arrives, on the scale the datapoint shows.
+    expect(s.acks.filter(a => a.id === "living.volume").at(-1)?.value).toBe(-40);
   });
 
   // The datapoint carries what the receiver DISPLAYS, `setVolume` takes the raw step count. The

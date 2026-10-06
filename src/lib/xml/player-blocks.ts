@@ -75,7 +75,8 @@ export class XmlPlayerBlocks {
     const answers = new Map<string, XmlPlayInfo | undefined>();
     for (const zone of zones) {
       const input = this.zoneInput.get(zone.key);
-      const source = input === undefined ? undefined : this.inputSources.get(zone.key)?.[input];
+      // A zone without a reported input names no source ("" is no input name).
+      const source = this.inputSources.get(zone.key)?.[input ?? ""];
       const prefix = `${zone.prefix}player`;
       if (source === undefined) {
         if (this.built.has(`${prefix}.playback`)) {

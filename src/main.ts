@@ -1073,7 +1073,8 @@ export class Yamaha extends utils.Adapter {
     await this.stores.update(now => {
       const records = rememberedDevices(now);
       remembered = { records, readable: !now.unreadable.has("discovered") };
-      return records.length === now.discovered.length ? undefined : { discovered: records };
+      // Nothing pruned is nothing written: the store writes an unchanged list not at all (device-stores.ts writeOne).
+      return { discovered: records };
     });
     return remembered;
   }

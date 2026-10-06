@@ -26,7 +26,7 @@ export interface IdentifyDeps {
  * its first request at once and schedules nothing (and no client calls its delay), so it needs no timer — a native
  * one would outlive onUnload. Should that ever change, the question fails loudly instead of hanging.
  */
-const ONE_QUESTION: CommandGateTimers = {
+export const ONE_QUESTION: CommandGateTimers = {
   schedule: () => {
     throw new Error("a gate for one question schedules nothing");
   },

@@ -5147,6 +5147,21 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     expect(mocks.discoveredStore.devices.map(record => record.id)).toEqual(["wx-010-aa22", "wx-010-0c33aa22"]);
   });
 
+  it("a device marked at the start is not judged again when it connects", async () => {
+    mocks.discoveredStore.devices = [{ id: office, ip: "192.168.1.30", identity: officeSerial }];
+    const ctx = setup({ devices: [] });
+    ctx.i.objects.set(office, { type: "device", common: { name: "Büro" }, native: { model: "WX-030" } });
+    ctx.i.rememberedModelOf = () => "WX-030";
+    const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
+    await ctx.i.onReady();
+    await flushPatches(ctx);
+    // The start marks it once; the listing this start goes on with carries the mark, so the connect decides nothing.
+    const marks = extendObject.mock.calls.filter(
+      call => call[0] === office && (call[1] as { native?: { idScheme?: unknown } }).native?.idScheme !== undefined,
+    );
+    expect(marks).toHaveLength(1);
+  });
+
   it("a device already under its final id is only marked — at the start, before it answers", async () => {
     mocks.discoveredStore.devices = [{ id: office, ip: "192.168.1.30", identity: officeSerial }];
     const ctx = setup({ devices: [] }, { hangIds: [office] });
@@ -5382,11 +5397,30 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     ctx.i.rememberedModelOf = () => "WX-030";
     const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
     await ctx.i.onReady();
-    await flush();
+    // The mark would ride the device object's coalescing window — ended here, or a judgement stayed unseen.
+    await flushPatches(ctx);
     const marks = extendObject.mock.calls.filter(
       call => call[0] === office && (call[1] as { native?: { idScheme?: unknown } }).native?.idScheme !== undefined,
     );
     expect(marks).toEqual([]);
     expect(ctx.i.restart).not.toHaveBeenCalled();
+  });
+});
+
+describe("the settings a diagnostics report shows", () => {
+  it("counts the device table rows, never shows an address, and a broken table counts none", () => {
+    const ctx = setup({
+      devices: [
+        { name: "Wohnzimmer", ip: "192.168.1.10" },
+        { name: "Küche", ip: "192.168.1.11" },
+      ],
+    });
+    const config = (ctx.i as unknown as { diagnosticsConfig(): Record<string, unknown> }).diagnosticsConfig();
+    expect(config.deviceTableRows).toBe(2);
+    expect(JSON.stringify(config)).not.toContain("192.168.1.10");
+    ctx.i.config = { devices: "broken" };
+    expect(
+      (ctx.i as unknown as { diagnosticsConfig(): Record<string, unknown> }).diagnosticsConfig().deviceTableRows,
+    ).toBe(0);
   });
 });

@@ -1862,6 +1862,27 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
     });
   });
 
+  test("the read-back after a contents display write shows what the device reports — and nothing when it says nothing", async () => {
+    const get = "Main_Zone|<Cursor_Control><Contents_Display>GetParam</Contents_Display></Cursor_Control>";
+    const answer = (inner: string): string =>
+      `<YAMAHA_AV rsp="GET" RC="0"><Main_Zone><Cursor_Control>${inner}</Cursor_Control></Main_Zone></YAMAHA_AV>`;
+    const s = setup({ Main_Zone: { power: true } });
+    s.client.descriptor = readFixture("desc-rx-a2060.xml");
+    s.client.xmlAnswers[get] = answer("<Contents_Display>On</Contents_Display>");
+    await s.controller.start();
+    s.client.xmlAnswers[get] = answer("<Contents_Display>Off</Contents_Display>");
+    s.acks.length = 0;
+    void s.controller.handleWrite("sound.contentsDisplay", false);
+    await flush();
+    expect(s.acks).toContainEqual({ id: "living.sound.contentsDisplay", value: false });
+    // An answer without the element is no value — not "off".
+    s.client.xmlAnswers[get] = answer("");
+    s.acks.length = 0;
+    void s.controller.handleWrite("sound.contentsDisplay", true);
+    await flush();
+    expect(s.acks.filter(ack => ack.id === "living.sound.contentsDisplay")).toEqual([]);
+  });
+
   test("a zone that does not declare it reads nothing and builds nothing", async () => {
     const s = setup({ Main_Zone: { power: true } });
     s.client.descriptor = readFixture("desc-rx-v675.xml");
@@ -1883,6 +1904,12 @@ describe("declared functions YNCA and MusicCast carry under the same ids (audit 
     expect(sends(s)).toContainEqual({
       zone: "System",
       inner: "<Party_Mode><Volume><Lvl>Down</Lvl></Volume></Party_Mode>",
+    });
+    void s.controller.handleWrite("multiroom.partyVolumeUp", true);
+    await flush();
+    expect(sends(s)).toContainEqual({
+      zone: "System",
+      inner: "<Party_Mode><Volume><Lvl>Up</Lvl></Volume></Party_Mode>",
     });
   });
 

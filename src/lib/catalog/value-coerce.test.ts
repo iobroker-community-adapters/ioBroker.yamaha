@@ -363,6 +363,8 @@ describe("snapToGrid — one tuner grid rule for every protocol (review 2026-10-
     expect(snapToGrid(120000, fm)).toBeUndefined();
     // Half a step of tolerance at the ends.
     expect(snapToGrid(108020, fm)).toBe(108000);
+    // A declared end off the grid: the step past it is not sent, the end is.
+    expect(snapToGrid(29, { min: 0, step: 10, max: 25 })).toBe(25);
   });
   it("keeps the value without a grid, and has no float noise", () => {
     expect(snapToGrid(98123, undefined)).toBe(98123);

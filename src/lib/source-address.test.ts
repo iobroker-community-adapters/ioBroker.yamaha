@@ -17,13 +17,13 @@ describe("the address this start listens, sends and connects on (round 87)", () 
   it("no choice, or the wildcard, is every address — no connection is pinned", () => {
     for (const setting of ["", "0.0.0.0", "::", undefined]) {
       expect(decideSourceAddress(setting, NETS)).toEqual({ address: undefined, missing: undefined });
-      expect(localAddressOption()).toEqual({});
+      expect(localAddressOption()).toStrictEqual({});
     }
   });
 
   it("an address the host does not carry falls back to every address and is named for the warning", () => {
     expect(decideSourceAddress("192.0.2.1", NETS)).toEqual({ address: undefined, missing: "192.0.2.1" });
     expect(sourceAddress()).toBeUndefined();
-    expect(localAddressOption()).toEqual({});
+    expect(localAddressOption()).toStrictEqual({});
   });
 });

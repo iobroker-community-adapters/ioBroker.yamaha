@@ -274,7 +274,8 @@ export class LinkGroup {
       return "sent";
     } catch (e) {
       log.warn(`${deviceId}: leaving the group after the input change failed: ${errText(e)}`);
-      return answeredByDevice(e) ? "refused" : "unavailable";
+      // This leave runs in the background (leaveAfterInputChange): nobody reads its outcome, the warning is the trace.
+      return "unavailable";
     }
   }
 

@@ -53,6 +53,22 @@ describe("the tuner's play info writes only what it carries", () => {
   });
 });
 
+describe("the poll asks the tuner only where there is one", () => {
+  test("a receiver with a tuner is asked its Play_Info on every poll, one without is not", async () => {
+    const h = await tuner(fixture("desc-rx-v675.xml"), onAm);
+    h.poll();
+    await settle();
+    expect(h.client.calls.some(call => call.zone === "Tuner" && (call.inner ?? "").includes("Play_Info"))).toBe(true);
+    const none = xmlHarness({ Main_Zone: { power: true } });
+    none.client.descriptor = fixture("desc-rx-v675.xml");
+    await none.controller.start();
+    none.client.calls.length = 0;
+    none.poll();
+    await settle();
+    expect(none.client.calls.some(call => call.zone === "Tuner")).toBe(false);
+  });
+});
+
 describe("the band of a frequency is its own (review 2026-10-05, A20)", () => {
   test("AM below 2000 kHz, FM above — the declared ranges and a written value alike", () => {
     expect([522, 1710, 1999].map(tunerBandOf)).toEqual(["AM", "AM", "AM"]);

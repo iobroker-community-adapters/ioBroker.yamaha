@@ -179,8 +179,8 @@ export class DiagnosticsHandler {
       let connection: HandleCapture | undefined;
       let connectionNote: string | undefined;
       try {
+        // Not connected: the report says so itself (its default note).
         connection = await device.capture();
-        connectionNote = connection ? undefined : "not connected — no live read";
       } catch (e) {
         connectionNote = `live read failed: ${errText(e)}`;
       }

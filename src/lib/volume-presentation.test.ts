@@ -38,6 +38,20 @@ describe("VolumePresentation", () => {
     expect(volume.toDevice("living.multiroom.zone2.volume", "loud")).toBeNull();
   });
 
+  test("a volume without declared bounds keeps its scale, and only a percent device says so", () => {
+    const lines: string[] = [];
+    const volume = new VolumePresentation(
+      id => id.startsWith("living."),
+      new PerDeviceCaches(),
+      message => void lines.push(message),
+    );
+    const { min: _min, max: _max, ...unbounded } = DB_VOLUME.common;
+    const def: ObjectDef = { ...DB_VOLUME, common: unbounded };
+    expect(volume.present("living.volume", def)).toBe(def);
+    expect(volume.present("office.volume", def)).toBe(def);
+    expect(lines).toEqual(["living.volume: no declared range — keeping the device's own scale instead of percent"]);
+  });
+
   // Review 2026-10-05, A34: the switch converted the STORED value — after a report during the switch, a second time.
   test("the value after a switch comes from the device's last report, not from what is stored", () => {
     const percent = new Set<string>();

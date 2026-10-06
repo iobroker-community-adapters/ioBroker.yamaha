@@ -248,3 +248,12 @@ describe("the speaker pattern write", () => {
     expect(calls).toEqual([{ method: "setSpeakerPattern", args: [3] }]);
   });
 });
+
+describe("the speaker pattern as the device reports it", () => {
+  test("a slot number reads as its pattern name, anything else as no value", () => {
+    const entry = YXC_SYSTEM_CATALOG.find(e => e.state === "advanced.speakers.pattern");
+    expect(entry?.fromStatus?.(2)).toBe("Pattern 2");
+    expect(entry?.fromStatus?.("x")).toBeNull();
+    expect(entry?.fromStatus?.(undefined)).toBeNull();
+  });
+});

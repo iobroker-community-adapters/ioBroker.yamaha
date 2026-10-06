@@ -1,5 +1,6 @@
 import type { Transport } from "../catalog/owner-policy";
 import { CommandGate, type CommandGateTimers } from "./command-gate";
+import { isIPv4, resolveIPv4 } from "../network-interfaces";
 
 /**
  * Minimum spacing between two commands, per transport. YNCA's 100 ms is Yamaha's
@@ -46,6 +47,32 @@ export class GateRegistry {
       },
       { once: true },
     );
+  }
+
+  /**
+   * Hold a connection's gate under its device's address and — for a hostname — under the address it resolves to, the
+   * one a MusicCast Link partner or an event names.
+   *
+   * @param transport the transport
+   * @param address the device's configured address (an IPv4 or a hostname)
+   * @param gate the connection's gate
+   * @param resolve the resolver (injectable for tests)
+   * @returns settles once the hostname is resolved (never rejects)
+   */
+  public async holdAt(
+    transport: Transport,
+    address: string,
+    gate: CommandGate,
+    resolve: (host: string) => Promise<string | undefined> = resolveIPv4,
+  ): Promise<void> {
+    this.hold(transport, address, gate);
+    if (isIPv4(address)) {
+      return;
+    }
+    const ip = await resolve(address);
+    if (ip !== undefined) {
+      this.hold(transport, ip, gate);
+    }
   }
 
   /**

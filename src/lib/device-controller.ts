@@ -256,8 +256,9 @@ export class YncaDeviceController {
     this.sceneTitles = sceneTitlesOf(capabilities.subunits);
     // A zone's four scenes (official lists, ZONE2–4) get the same treatment under the zone.
     this.zoneSceneTitles.clear();
+    // The main zone's entry is never read — its titles are this.sceneTitles — so every zone is read the same way.
     for (const zone of YNCA_ZONES) {
-      const titles = zone.key === "main" ? [] : sceneTitlesOf(capabilities.subunits, zone.subunit);
+      const titles = sceneTitlesOf(capabilities.subunits, zone.subunit);
       if (titles.length > 0) {
         this.zoneSceneTitles.set(zone.key, titles);
       }

@@ -2,6 +2,7 @@ import { LinkGroup } from "./link-group";
 import { distributionSummary } from "./distribution";
 import type { YxcClientLike } from "./client-contract";
 import { CommandGate } from "../lifecycle/command-gate";
+import { YxcRefusalError } from "./http-client";
 import wx30 from "./__fixtures__/WX30_317_208.json";
 
 const flush = async (rounds = 20): Promise<void> => {
@@ -73,6 +74,7 @@ function recording(
  *
  * @param partners the configured partner devices by address
  * @param gate the gate
+ * @param extra further answers of the server, by method (one that throws refuses or stays silent)
  * @returns the link group, the shared call log and the server's group state
  */
 function server(
@@ -81,6 +83,7 @@ function server(
     minSpacingMs: 0,
     timers: { schedule: (h, ms) => setTimeout(h, ms), cancel: t => clearTimeout(t as ReturnType<typeof setTimeout>) },
   }),
+  extra: Record<string, (args: unknown[]) => unknown> = {},
 ): {
   group: LinkGroup;
   calls: Call[];
@@ -112,6 +115,7 @@ function server(
         id === "" ? [] : type === "remove" ? state.roster.filter(ip => !list.includes(ip)) : [...state.roster, ...list];
       return { response_code: 0 };
     },
+    ...extra,
   });
   let dist = distributionSummary(undefined);
   const group = new LinkGroup({
@@ -229,5 +233,37 @@ describe("LinkGroup — one change at a time (review 2026-10-05, A14)", () => {
     group.leaveAfterInputChange();
     await flush();
     expect(calls.filter(c => c.method === "setClientInfo")).toHaveLength(1);
+  });
+});
+
+describe("LinkGroup — a failed change says whether the device refused or did not answer", () => {
+  const refused = (): never => {
+    throw new YxcRefusalError("/dist/x", 3);
+  };
+  const silent = (): never => {
+    throw new Error("connect ECONNREFUSED");
+  };
+
+  test("a link a partner refuses is refused; one it does not answer is unavailable", async () => {
+    for (const [reply, outcome] of [
+      [refused, "refused"],
+      [silent, "unavailable"],
+    ] as const) {
+      const calls: Call[] = [];
+      const kitchen = recording("kitchen", calls, { getFeatures: () => wx30, setClientInfo: reply });
+      const s = server({ "10.0.0.3": kitchen });
+      expect(await s.group.link("10.0.0.3"), outcome).toBe(outcome);
+    }
+  });
+
+  test("leaving the group: refused or unavailable as the server answered", async () => {
+    for (const [reply, outcome] of [
+      [refused, "refused"],
+      [silent, "unavailable"],
+    ] as const) {
+      const s = server({}, undefined, { stopDistribution: reply });
+      s.state.groupId = "abc";
+      expect(await s.group.leave(), outcome).toBe(outcome);
+    }
   });
 });

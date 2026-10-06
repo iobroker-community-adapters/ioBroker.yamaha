@@ -13,7 +13,7 @@ import { TransportConnectionAdapter } from "./lifecycle/transport-connection-ada
 import { RECONNECT_BASE_MS, RECONNECT_MAX_MS, ReconnectStrategy } from "./lifecycle/reconnect-strategy";
 import { CommandGate } from "./lifecycle/command-gate";
 import { COMMAND_SPACING_MS, LIVE_GATES, type GateRegistry } from "./lifecycle/gate-registry";
-import { isIPv4, resolveIPv4 } from "./network-interfaces";
+import { isIPv4 } from "./network-interfaces";
 import type { YncaSubunitCache } from "./ynca/subunit-cache";
 import type { ProbeMemory } from "./lifecycle/probe-memory";
 import type { Transport } from "./catalog/owner-policy";
@@ -324,14 +324,7 @@ export function attemptDevice(
    */
   const gateFor = (transport: Transport): CommandGate => {
     const gate = new CommandGate({ minSpacingMs: COMMAND_SPACING_MS[transport], timers });
-    LIVE_GATES.hold(transport, device.ip, gate);
-    if (!isIPv4(device.ip)) {
-      void resolveIPv4(device.ip).then(ip => {
-        if (ip !== undefined) {
-          LIVE_GATES.hold(transport, ip, gate);
-        }
-      });
-    }
+    void LIVE_GATES.holdAt(transport, device.ip, gate);
     return gate;
   };
   /**

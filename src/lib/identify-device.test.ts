@@ -1,4 +1,4 @@
-import { DEFAULT_IDENTIFY_DEPS, identifyDevice, type IdentifyDeps } from "./identify-device";
+import { DEFAULT_IDENTIFY_DEPS, identifyDevice, ONE_QUESTION, type IdentifyDeps } from "./identify-device";
 import { CommandGate, CommandGateClosedError } from "./lifecycle/command-gate";
 import { LIVE_GATES } from "./lifecycle/gate-registry";
 
@@ -77,5 +77,11 @@ describe("identifyDevice asks through the device's command gate (Y-15)", () => {
     busy.xml.close();
     await expect(yxc).rejects.toBeInstanceOf(CommandGateClosedError);
     await expect(xml).rejects.toBeInstanceOf(CommandGateClosedError);
+  });
+});
+
+describe("the gate of a single question", () => {
+  test("schedules nothing — a timer it asked for would outlive onUnload, so it fails loudly", () => {
+    expect(() => ONE_QUESTION.schedule(() => undefined, 100)).toThrow("a gate for one question schedules nothing");
   });
 });
