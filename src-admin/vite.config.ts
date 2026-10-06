@@ -1,7 +1,6 @@
 // Fleet master — the release run copies this file into every adapter's src-admin/ and keeps only the adapter's own
 // Module-Federation name (the jsonConfig of the adapter refers to it); change it in Entwicklung/.consistency-master.
 import react from "@vitejs/plugin-react";
-import commonjs from "vite-plugin-commonjs";
 import { federation } from "@module-federation/vite";
 import { moduleFederationShared } from "@iobroker/gui-components/modulefederation.admin.config";
 import { readFileSync } from "node:fs";
@@ -23,7 +22,6 @@ const config = {
       shared: moduleFederationShared(JSON.parse(readFileSync("./package.json").toString())),
     }),
     react(),
-    commonjs(),
   ],
   // Vite 8 resolves tsconfig paths natively — replaces the vite-tsconfig-paths plugin.
   resolve: {
