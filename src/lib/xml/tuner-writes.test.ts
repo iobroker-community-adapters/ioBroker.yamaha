@@ -42,6 +42,17 @@ async function tuner(descriptor: string, playInfo: string): Promise<XmlHarness> 
   return h;
 }
 
+describe("the tuner's play info writes only what it carries", () => {
+  test("a field the answer leaves out (RDS, tuned, stereo) writes nothing — never an undefined value", async () => {
+    const h = await tuner(fixture("desc-rx-v675.xml"), onAm);
+    const tunerAcks = h.acks.filter(ack => ack.id.startsWith("living.tuner."));
+    expect(tunerAcks.map(ack => ack.id)).toEqual(
+      expect.arrayContaining(["living.tuner.band", "living.tuner.frequency"]),
+    );
+    expect(tunerAcks.filter(ack => ack.value === undefined)).toEqual([]);
+  });
+});
+
 describe("the band of a frequency is its own (review 2026-10-05, A20)", () => {
   test("AM below 2000 kHz, FM above — the declared ranges and a written value alike", () => {
     expect([522, 1710, 1999].map(tunerBandOf)).toEqual(["AM", "AM", "AM"]);

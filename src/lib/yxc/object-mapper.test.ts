@@ -347,6 +347,16 @@ describe("mapYxcToObjects tree hygiene", () => {
     expect(idList).toContain("power");
   });
 
+  test("the always status fields alone create no zone — also not the main zone", () => {
+    // The only "always" entry left (multiroom.group.streamingEnabled) belongs to the main zone, so the zone 4 case
+    // above no longer reaches the rule: a main zone that advertises nothing must not stand up for that one field.
+    const objs = mapYxcToObjects({
+      zones: [{ id: "main", funcs: [], inputs: [] }],
+      media: [],
+    });
+    expect(objs.map(o => o.id)).toEqual([]);
+  });
+
   test("a zone that offers only inputs still gets its tree", () => {
     const objs = mapYxcToObjects({
       zones: [

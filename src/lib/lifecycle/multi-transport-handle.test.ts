@@ -758,6 +758,20 @@ describe("MultiTransportHandle — who serves a datapoint is learned once and ke
     expect(xml.writes).toEqual([]);
   });
 
+  test("a step key that cannot be read is never pressed a second time over another protocol", async () => {
+    // remote.* stays with its owner for another reason (ownerOnlyWrite) — this key has only `read: false` to stop it.
+    const step = state("tuner.presetUp", "Preset up", { type: "boolean", role: "button", read: false });
+    const ynca = fakeConn("ynca", [step]);
+    const xml = fakeConn("xml", [step]);
+    const s = learnSetup([ynca, xml]);
+    await s.handle.start();
+    ynca.outcome = "refused";
+    s.handle.handleStateChange("living.tuner.presetUp", false, true);
+    await new Promise(resolve => setImmediate(resolve));
+    expect(ynca.writes).toEqual([{ id: "tuner.presetUp", value: true }]);
+    expect(xml.writes).toEqual([]);
+  });
+
   // Forum 85413 (bilberry): in standby YNCA cannot prove its menus, XML serves them. Once YNCA proves them it
   // takes them over — one way, learned, and a drop, a return or a restart in standby changes nothing again.
   test("the YNCA menu proof takes the menus over once and for good", async () => {

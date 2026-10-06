@@ -1353,8 +1353,9 @@ describe("YNCA dropdowns from proof — inputs narrowed by evidence, observed va
       __schema: DISCOVERY_SCHEMA,
       yncaCapabilities: { model: "RX-V473", firmware: "2.0", subunits: client.capabilities.subunits },
     });
+    // A snapshot as one is kept today: it ASKED Spotify and found only MAIN — so Spotify would be judged absent.
     const cache = createSubunitCache(
-      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], model: "RX-V473", firmware: "1.0" },
+      { schema: DISCOVERY_SCHEMA, subunits: ["MAIN"], probed: ["MAIN", "SPOTIFY"], model: "RX-V473", firmware: "1.0" },
       () => {},
     );
     const { objects, deps } = makeDeps(client);

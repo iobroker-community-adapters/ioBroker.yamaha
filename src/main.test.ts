@@ -5378,6 +5378,8 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     mocks.discoveredStore.devices = [{ id: office, ip: "192.168.1.30", identity: officeSerial }];
     const ctx = setup({ devices: [] });
     ctx.i.objects.set(office, { type: "device", common: { name: "Büro" }, native: { model: "WX-030", idScheme: 3 } });
+    // With a model known a judgement could run — without one it ended at "nothing to decide on yet" either way.
+    ctx.i.rememberedModelOf = () => "WX-030";
     const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
     await ctx.i.onReady();
     await flush();
