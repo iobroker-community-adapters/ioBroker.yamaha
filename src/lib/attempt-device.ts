@@ -61,6 +61,8 @@ export interface AttemptDeps extends DeviceTreeDeps {
   yncaSubunitCache: YncaSubunitCache;
   /** Per-device memory for device answers that stay constant while it runs (held by the caller). */
   probeMemory: ProbeMemory;
+  /** See {@link ConnectDeps.firstReady}. */
+  firstReady?(): boolean;
 }
 
 /** One transport to try: its name and a factory building a FRESH connectable (also for reconnects). */
@@ -82,6 +84,12 @@ export interface ConnectDeps extends DeviceTreeDeps {
   };
   /** Whether this device has been shown to have a transport — it answered it before (D1). */
   proven?(transport: Transport): boolean;
+  /**
+   * True the first time this adapter run sees the device ready, false on every return after a drop: the ready line
+   * stands at info once, a return is a state (`info.connection`), not a log line (round 87 inventory suite
+   * "counterpart gone and back", 2026-10-06). Absent: every connect is the first.
+   */
+  firstReady?(): boolean;
 }
 
 /**
@@ -267,7 +275,12 @@ async function connectBuilt(
   }
   // One summary line instead of three per-transport "ready" lines; each controller logs its
   // own readiness at debug level for diagnostics. It names what is live NOW, not what connected.
-  deps.log.info(readyLine(deviceId, running));
+  const line = readyLine(deviceId, running);
+  if (deps.firstReady?.() ?? true) {
+    deps.log.info(line);
+  } else {
+    deps.log.debug(line);
+  }
   return handle;
 }
 

@@ -270,6 +270,8 @@ export class Yamaha extends utils.Adapter {
   private readonly warnedSearch = new Set<string>();
   /** The devices whose connection attempt failed at least once in this session — "offline" proven, not assumed. */
   private readonly failedOnce = this.perDevice.set();
+  /** The devices whose ready line this run has logged at info — a return after a drop logs it at debug. */
+  private readonly readyShown = this.perDevice.set();
   /** deviceId → how many transports it had live at the last report, so a LOSS is visible. */
   private readonly liveTransportCount = this.perDevice.map<number>();
   /** The offline devices a search already said it could not find — said once per outage. */
@@ -2874,6 +2876,11 @@ export class Yamaha extends utils.Adapter {
         registerPush: (ip, onPush, deviceId) => pushReceiver.register(ip, onPush, deviceId),
         pushActive: () => pushReceiver.isListening(),
         pushLiveness,
+        firstReady: () => {
+          const first = !this.readyShown.has(device.id);
+          this.readyShown.add(device.id);
+          return first;
+        },
         scheduleKeepalive: (handler, ms) => {
           if (this.unloading) {
             return () => {};

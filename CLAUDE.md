@@ -405,7 +405,9 @@ schließt mit „network search finished — found N / no Yamaha device answered
 Hintergrund-Polls bleiben `debug`. **Ein Gerät, das aus ist, ist aus** (krobi 2026-09-22: kein Adapter der Flotte
 meldet ein offlines Gerät im Log): „no reachable transport" ist seit demselben Tag `debug` statt `warn`, die
 Dedup-Klasse `ReachabilityDedup` (warn einmal, dann debug) ist mit ihrer Nadel W8 (Welle 3 + Sammeltabelle)
-entfernt — `info.connection` trägt den Zustand.
+entfernt — `info.connection` trägt den Zustand. Dasselbe gilt für die Rückkehr: die `ready`-Zeile steht je Adapterlauf einmal auf `info`
+(`firstReady`, `main.ts` `readyShown`), jede Rückkehr nach einem Abriss auf `debug` (Inventar-Suite „counterpart gone
+and back“, 2026-10-06); die Bereit-Zeile nach einem Firmware-Update (Y-21) bleibt `info`.
 
 **Löschen ist endgültig** (`device-management.ts` `deleteDevice`): Bestätigung in der UI VOR dem Handler
 (dm-utils `confirmation` am Deskriptor, Text nennt die Datenpunkte — `showConfirmation` im Handler wartete

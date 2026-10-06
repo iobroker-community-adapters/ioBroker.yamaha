@@ -289,6 +289,38 @@ describe("connectTransports ends with what is live (audit 2026-09-24, A21/A3)", 
     expect(infos).toEqual([]);
   });
 
+  // Round 87 inventory suite "counterpart gone and back" (2026-10-06): nothing above debug while a counterpart goes
+  // and comes back — the ready line stands at info on the first connect of the run only.
+  test("the ready line is info on the first connect and debug on a return", async () => {
+    const lines: string[] = [];
+    let first = true;
+    const d = {
+      ...deps(),
+      log: {
+        ...silentLog,
+        info: (message: string): void => void lines.push(`info: ${message}`),
+        debug: (message: string): void => void lines.push(`debug: ${message}`),
+      },
+      firstReady: (): boolean => {
+        const was = first;
+        first = false;
+        return was;
+      },
+    };
+    for (let i = 0; i < 2; i++) {
+      const handle = await connectTransports(
+        "living",
+        [{ transport: "yxc", build: () => fakeConn("yxc", [state("volume", "Volume")]) }],
+        d,
+      );
+      handle?.close();
+    }
+    expect(lines.filter(line => line.includes("ready —"))).toEqual([
+      "info: living: ready — MusicCast ✓",
+      "debug: living: ready — MusicCast ✓",
+    ]);
+  });
+
   // A delete or a move closes the supervisor while the attempt still connects: what it built is
   // closed (that also closes the command gate) and the attempt yields nothing.
   test("an aborted attempt closes every transport it built and returns null", async () => {
