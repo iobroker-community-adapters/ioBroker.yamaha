@@ -66,6 +66,14 @@ import type { PushLiveness } from "./push-liveness";
 const KEEPALIVE_MS = 5 * 60 * 1000;
 
 /**
+ * How often the device is asked whether it is still there, between the keepalives — the cadence of the XML poll, so a
+ * device that loses its power shows it on every protocol after the same three unanswered questions. Judged by the
+ * keepalive alone, a MusicCast-only device stayed "connected" for up to 15 minutes (round 87 inventory suite
+ * "counterpart gone and back", 2026-10-06: the WX-030, YSP-1600 and CD-NT670D fixtures missed the fleet's 300 s).
+ */
+const LIVENESS_MS = 60 * 1000;
+
+/**
  * How long a changing write waits for the device's event before its effect is read back and, if the
  * device changed the value without telling, counted against the events (see PushLiveness).
  */
@@ -274,6 +282,7 @@ export class YxcDeviceController {
   private zones: string[] = [];
   private mediaBlocks: string[] = [];
   private cancelKeepalive: (() => void) | undefined;
+  private cancelLiveness: (() => void) | undefined;
   private cancelPush: (() => void) | undefined;
   private readonly dropDetector = new PollDropDetector();
   /** The tuner's current band, cached so a frequency write can supply it (setFreq needs band + freq). */
@@ -316,6 +325,8 @@ export class YxcDeviceController {
   private pushEvents = 0;
   /** {@link pushEvents} when the previous keepalive finished. */
   private eventsAtLastKeepalive = 0;
+  /** {@link pushEvents} at the previous liveness question. */
+  private eventsAtLastLiveness = 0;
   private browseEngine: BrowseEngine | undefined;
   /** `api_version` from getDeviceInfo — below 1.17 a cover comes only as Yamaha's encrypted ymf. */
   private apiVersion: number | undefined;
@@ -624,6 +635,7 @@ export class YxcDeviceController {
       this.handlePush(event);
     }
     this.cancelKeepalive = this.deps.scheduleKeepalive(() => void this.keepalive(), KEEPALIVE_MS);
+    this.cancelLiveness = this.deps.scheduleKeepalive(() => void this.liveness(), LIVENESS_MS);
     // The adapter logs one combined "ready" line across all transports; this stays at debug.
     this.deps.log.debug(`${this.deviceId}: MusicCast device ready (YXC)`);
     return true;
@@ -964,7 +976,7 @@ export class YxcDeviceController {
 
   /**
    * Ask the device once, now: the main zone's status. No answer is a drop — reported at once,
-   * not after the third missed five-minute poll. One probe for a burst of askers (failed
+   * not after the third unanswered liveness question. One probe for a burst of askers (failed
    * writes, the multi-transport handle after another transport dropped): the second and later
    * ones ride on the first.
    */
@@ -974,7 +986,7 @@ export class YxcDeviceController {
 
   /**
    * Register the supervisor's drop handler. MusicCast has no socket-drop event, so a
-   * drop is inferred from a run of failed keepalive polls (see keepalive).
+   * drop is inferred from a run of unanswered polls — the minute's liveness question and the keepalive alike.
    *
    * @param cb invoked once when the device is judged gone
    */
@@ -1019,6 +1031,8 @@ export class YxcDeviceController {
     this.deps.gate.close();
     this.cancelKeepalive?.();
     this.cancelKeepalive = undefined;
+    this.cancelLiveness?.();
+    this.cancelLiveness = undefined;
     // Unregister from the shared push receiver — otherwise a push arriving after
     // teardown would setState on a controller the adapter has already dropped.
     this.cancelPush?.();
@@ -1170,6 +1184,23 @@ export class YxcDeviceController {
       this.dropDetector.record(anyOk);
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}: keepalive poll failed: ${errText(e)}`);
+    }
+  }
+
+  /**
+   * The minute's liveness question (see {@link LIVENESS_MS}): an event since the previous one is proof of life and
+   * asks nothing; otherwise the first zone's status, counted like a keepalive poll.
+   */
+  private async liveness(): Promise<void> {
+    try {
+      if (this.pushEvents !== this.eventsAtLastLiveness) {
+        this.eventsAtLastLiveness = this.pushEvents;
+        this.dropDetector.record(true);
+        return;
+      }
+      this.dropDetector.record(await this.refreshZone(this.zones[0] ?? "main"));
+    } catch (e) {
+      this.deps.log.debug(`${this.deviceId}: liveness question failed: ${errText(e)}`);
     }
   }
 

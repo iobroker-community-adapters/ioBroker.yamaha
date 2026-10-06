@@ -96,6 +96,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 - (krobipd) Fixed: CD receivers with MusicCast get their CD datapoints
 - (krobipd) Fixed: The menu path finds entries on later pages and stops at a folder that does not open; a "not now" answer no longer hides the XML menus
 - (krobipd) Fixed: A powered-off XML receiver goes offline in seconds; read-backs after a command no longer wait behind the poll
+- (krobipd) Fixed: A MusicCast-only device (speaker, soundbar, CD player) that loses power shows as disconnected within three minutes instead of up to fifteen
 - (krobipd) Fixed: The diagnostics report also hides names when the receiver is offline, and the Expert tab no longer waits forever when the instance is stopped
 
 ### 3.2.0 (2026-10-02)

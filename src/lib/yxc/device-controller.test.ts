@@ -247,7 +247,7 @@ function setup(
   trace: Array<{ kind: "object" | "value"; id: string }>;
   /** Set `fn` to hold one id's object write open, proving what waits for it to FINISH. */
   hold: { fn?: (id: string) => Promise<void> | undefined };
-  fire: { push?: (event: unknown) => void; keepalive?: () => void; pushDeviceId?: string };
+  fire: { push?: (event: unknown) => void; keepalive?: () => void; liveness?: () => void; pushDeviceId?: string };
   names: string[];
   cancelled: () => boolean;
   unregistered: () => boolean;
@@ -260,7 +260,12 @@ function setup(
   /** Set by a test to hold one upsert open; see `hold` on the returned setup. */
   const hold: { fn?: (id: string) => Promise<void> | undefined } = {};
   const names: string[] = [];
-  const fire: { push?: (event: unknown) => void; keepalive?: () => void; pushDeviceId?: string } = {};
+  const fire: {
+    push?: (event: unknown) => void;
+    keepalive?: () => void;
+    liveness?: () => void;
+    pushDeviceId?: string;
+  } = {};
   const breakAcks: { on: boolean; only?: string } = { on: false };
   const warnings: string[] = [];
   const infos: string[] = [];
@@ -283,8 +288,13 @@ function setup(
         unregistered = true;
       };
     },
-    scheduleKeepalive: handler => {
-      fire.keepalive = handler;
+    scheduleKeepalive: (handler, ms) => {
+      // The five-minute keepalive and the minute's liveness question.
+      if (ms === 60_000) {
+        fire.liveness = handler;
+      } else {
+        fire.keepalive = handler;
+      }
       return () => {
         cancelled = true;
       };
@@ -1414,6 +1424,45 @@ describe("YxcDeviceController", () => {
       await flush();
     }
     expect(dropped).toBe(1);
+  });
+
+  test("a MusicCast-only device shows an outage after three unanswered liveness questions, not three keepalives", async () => {
+    // Round 87 inventory suite "counterpart gone and back" (2026-10-06): judged by the five-minute keepalive alone, a
+    // device that lost its power stayed "connected" for up to 15 minutes — past the fleet's 300 s.
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    s.client.failStatus = true;
+    for (let i = 0; i < 2; i++) {
+      s.fire.liveness?.();
+      await flush();
+    }
+    expect(dropped).toBe(0);
+    s.fire.liveness?.();
+    await flush();
+    expect(dropped).toBe(1);
+  });
+
+  test("an event since the previous liveness question is proof of life — nothing is asked", async () => {
+    const s = setup(wx10, ysp);
+    await s.controller.start();
+    let dropped = 0;
+    s.controller.onDrop(() => dropped++);
+    s.client.failStatus = true;
+    s.fire.liveness?.();
+    await flush();
+    s.fire.liveness?.();
+    await flush();
+    s.fire.push?.({ main: { volume: 40 } });
+    await flush();
+    const asked = s.client.calls.length;
+    s.fire.liveness?.();
+    await flush();
+    expect(s.client.calls.length).toBe(asked);
+    s.fire.liveness?.();
+    await flush();
+    expect(dropped).toBe(0); // the event reset the count: two unanswered since
   });
 
   test("a single failed poll does not report a drop, and a recovery resets the count", async () => {

@@ -775,10 +775,14 @@ async function playOutage(harness, watch) {
   }
   const outage = { cut: Date.now(), deleted: watch.deleted.length, line: harness.getLogs().length };
   fs.writeFileSync(OUTAGE_FLAG, "");
-  await waitForStates(harness, OUTAGE_SHOWN, "the adapter did not show the outage");
-  const shown = Date.now();
-  await new Promise(resolve => setTimeout(resolve, Math.max(OUTAGE_HOLD_MS, shown - outage.cut)));
-  fs.rmSync(OUTAGE_FLAG);
+  try {
+    await waitForStates(harness, OUTAGE_SHOWN, "the adapter did not show the outage");
+    const shown = Date.now();
+    await new Promise(resolve => setTimeout(resolve, Math.max(OUTAGE_HOLD_MS, shown - outage.cut)));
+  } finally {
+    // A cut that stays on after a failed wait would cut every later suite of the run too.
+    fs.rmSync(OUTAGE_FLAG, { force: true });
+  }
   await waitForStates(harness, before, "the adapter did not show the return");
   await new Promise(resolve => setTimeout(resolve, SETTLE_MS));
   outage.lines = harness
@@ -1345,6 +1349,8 @@ tests.integration(ADAPTER_DIR, {
         await waitForAdapterWork(harness);
         outage = await playOutage(harness, watch);
       });
+      // Mocha may give up on before() while playOutage still waits — the next suite must not start cut.
+      after(() => fs.rmSync(OUTAGE_FLAG, { force: true }));
 
       after(async function () {
         this.timeout(60000);

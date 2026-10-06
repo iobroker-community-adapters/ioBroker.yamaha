@@ -383,6 +383,10 @@ Abriss die übrigen Transporte sofort (`TransportConnection.verifyAlive?()`, opt
 der ersten Zone, Fehlschlag = `dropDetector.report()`, gleichzeitige Frager teilen eine Frage; YNCA urteilt selbst
 über sein Keepalive) — ein stromloses Gerät ist damit ~93 s nach dem Stecker offline (gemessen; YNCA 90 s + eine Abfrage),
 und die schnelle Suche hängt sich dahinter. Nadeln Y30–Y32.
+Ein Gerät NUR mit MusicCast hat keinen zweiten Transport, der den Abriss meldet: es fragt deshalb jede Minute nach
+(`LIVENESS_MS`, Takt der XML-Abfrage; ein Ereignis seit der letzten Frage gilt als Lebenszeichen und fragt nichts) und
+gilt nach drei unbeantworteten Fragen als weg — ≤ 3 min statt bis 15 min (Inventar-Suite „counterpart gone and back“,
+Flotten-Frist 300 s, 2026-10-06).
 
 **Umgezogen oder aus:** Der Verlust EINES Transports (`setTransports` schrumpft) stellt die Suche mit kurzer
 Drossel scharf (`REDISCOVER_QUICK_INTERVAL_MS` 20 s, danach die 5 Minuten) — vorher meldete das Handle „weg"
