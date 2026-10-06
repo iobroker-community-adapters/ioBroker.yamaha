@@ -4,6 +4,8 @@ import type { ClientRequest } from "node:http";
 import { networkInterfaces } from "node:os";
 import { attemptDevice } from "./lib/attempt-device";
 import { isIPv4, resolveIPv4, searchInterfaces } from "./lib/network-interfaces";
+import { chosenAddress } from "./lib/network-address";
+import { decideSourceAddress, sourceAddress } from "./lib/source-address";
 import { isGroupEnabled } from "./lib/catalog/groups";
 import type { ObjectDef } from "./lib/catalog/types";
 import { VolumePresentation } from "./lib/volume-presentation";
@@ -383,7 +385,7 @@ export class Yamaha extends utils.Adapter {
   private storeOwner: DeviceStores | undefined;
   /** The SSDP M-SEARCH and the description fetch; what is in flight is registered here, for the unload to end. */
   private readonly network = new NetworkSearch({
-    networkInterface: () => this.config.networkInterface,
+    networkInterface: () => sourceAddress(),
     setTimeout: (callback, ms) => this.setTimeout(callback, ms),
     log: { info: message => this.log.info(message) },
     warnOnce: (key, message) => this.warnSearchOnce(key, message),
@@ -495,8 +497,7 @@ export class Yamaha extends utils.Adapter {
     const rows = Array.isArray(config.devices) ? config.devices : [];
     return {
       discovery: config.discovery,
-      networkInterfaceSet:
-        typeof config.networkInterface === "string" && !["", "0.0.0.0"].includes(config.networkInterface),
+      networkInterfaceSet: chosenAddress(config.networkInterface) !== undefined,
       xmlPollInterval: config.xmlPollInterval,
       deviceTableRows: rows.length,
       groups: Object.fromEntries(Object.entries(config).filter(([key]) => key.startsWith("group_"))),
@@ -540,6 +541,12 @@ export class Yamaha extends utils.Adapter {
       this.logRing.hook(this.log);
       this.on("message", obj => void this.onMessage(obj));
       this.log.info('starting — a "ready" message will follow for each device');
+      // The address picked in the settings is the only one this start listens, sends and connects on (round 87); one this
+      // host does not carry falls back to every address, said once.
+      const { missing } = decideSourceAddress(this.config.networkInterface);
+      if (missing !== undefined) {
+        this.log.warn(`network address ${missing} is not on this host — using every address`);
+      }
       // The bulk read before the first write: the start marker below is compared in memory, never read
       // back one by one (round 77 resource check); the seed after the migrations refreshes it.
       await this.seedStateMirror();
@@ -933,7 +940,7 @@ export class Yamaha extends utils.Adapter {
    */
   private async startSsdpListener(): Promise<void> {
     const listener = new SsdpListener({
-      interfaces: searchInterfaces(this.config.networkInterface, networkInterfaces()),
+      interfaces: searchInterfaces(sourceAddress(), networkInterfaces()),
       log: this.log,
       onAlive: (notify, address) => this.onSsdpAlive(notify, address),
     });

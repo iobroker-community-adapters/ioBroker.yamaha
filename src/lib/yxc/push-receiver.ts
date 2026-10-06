@@ -1,6 +1,7 @@
 import { createSocket } from "node:dgram";
 import { isIPv4, resolveIPv4 } from "../network-interfaces";
 import { decodeDeviceText } from "../util";
+import { sourceAddress } from "../source-address";
 import { errText } from "../err-text";
 
 /** The UDP port MusicCast devices push unsolicited events to. */
@@ -52,7 +53,9 @@ function defaultFactory(): YxcPushSocket {
       socket.on("listening", handler);
     },
     bind: port => {
-      socket.bind(port);
+      // On the address the user picked, where one is picked: the device sends its events to the address its
+      // subscription came from, and every request leaves from that one (round 87, `source-address.ts`).
+      socket.bind(port, sourceAddress());
     },
     close: () => {
       socket.close();

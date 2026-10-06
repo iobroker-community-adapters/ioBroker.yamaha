@@ -14,7 +14,7 @@
   "duplicateDevice": "Er bestaat al een apparaat met dit IP-adres of deze naam",
   "invalidName": "Deze naam kan niet worden gebruikt",
   "networkInterfaceLabel": "Netwerkinterface",
-  "networkInterfaceTooltip": "Selecteer de netwerkinterface voor het zoeken in het netwerk. Behoud de standaard (0.0.0.0 = alle interfaces), tenzij deze host meerdere netwerkinterfaces heeft.",
+  "networkInterfaceTooltip": "De netwerkinterface die de adapter voor alles gebruikt: het zoeken in het netwerk en elke verbinding met een receiver. Laat de standaard (0.0.0.0 = alle interfaces) staan, tenzij deze host meerdere netwerkinterfaces heeft.",
   "pushPortLabel": "MusicCast-gebeurtenispoort",
   "pushPortTooltip": "UDP-poort waarop MusicCast-apparaten hun wijzigingen melden. Vastgelegd door het protocol; een tweede instantie op deze host kan hem niet delen.",
   "dmAdd": "Yamaha-apparaat toevoegen",

@@ -2,6 +2,7 @@ import { get as httpGet, request as httpRequest, type IncomingMessage } from "no
 import type { CommandGate, CommandPriority } from "../lifecycle/command-gate";
 import { HttpStatusError, readDeviceResponse } from "../util";
 import { errText } from "../err-text";
+import { localAddressOption } from "../source-address";
 
 /**
  * Whether a command path changes something on the device (as opposed to reading). The MusicCast API
@@ -213,10 +214,14 @@ function defaultSend(ip: string): YxcSend {
       };
       const req =
         body === undefined
-          ? httpGet(url, { headers: { ...YXC_SUBSCRIPTION_HEADERS } }, onResponse)
+          ? httpGet(url, { headers: { ...YXC_SUBSCRIPTION_HEADERS }, ...localAddressOption() }, onResponse)
           : httpRequest(
               url,
-              { method: "POST", headers: { "Content-Type": "application/json", ...YXC_SUBSCRIPTION_HEADERS } },
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json", ...YXC_SUBSCRIPTION_HEADERS },
+                ...localAddressOption(),
+              },
               onResponse,
             );
       // Refused, reset, unreachable — and the timeout below, which destroys the request with

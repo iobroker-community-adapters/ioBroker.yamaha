@@ -432,6 +432,16 @@ stehen — ohne den Filter liefe es beim nächsten Start wieder, Löschen per Ne
 
 Beleg: Chat-Analyse 2026-09-22 + vier Advisor-Runden + Server-Test, Mutationswelle 19 (Y1–Y50), Chronik in `.claude/dev-history.md`.
 
+## Netzwerk-Adresse (Flottenregel Runde 87, umgesetzt 2026-10-06)
+
+Die in den Einstellungen gewählte Adresse (`networkInterface`, jsonConfig `type: "ip"`) ist die einzige, auf der der Adapter
+lauscht, sendet und verbindet: SSDP-Suche und -Hörer, YNCA-TCP, MusicCast- und XML-HTTP, der Fund-Abruf und der
+MusicCast-Ereignisport (gebunden auf die Adresse, die Geräte schicken ihre Ereignisse an die Quelle der Anmeldung).
+Was „alle Adressen“ heißt und ob der Rechner eine Adresse trägt, steht im Flotten-Master `lib/network-address.ts`;
+`lib/source-address.ts` hält nur die Entscheidung dieses Starts (`decideSourceAddress` in `onReady`, `localAddressOption`
+für die Clients). Eine Adresse, die der Rechner nicht trägt, fällt auf alle Adressen zurück, mit genau einer `warn`-Zeile.
+Bewacht von den Inventar-Suiten `chosen network address` / `missing network address`.
+
 ## Erreichbarkeit + Anspruch: zwei Regeln, die v1.5.0 eingezogen hat
 
 **1) Kein Anspruch ohne Nachweis (#613):** ein Transport beansprucht `player.browse.*` erst, wenn eine Probe es

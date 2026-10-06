@@ -3,6 +3,7 @@ import { get as httpGet, type ClientRequest } from "node:http";
 import { networkInterfaces } from "node:os";
 import { errText } from "./err-text";
 import { searchInterfaces } from "./network-interfaces";
+import { localAddressOption } from "./source-address";
 import { ssdpHeader } from "./ssdp-header";
 import { readDeviceResponse } from "./util";
 
@@ -170,7 +171,7 @@ export class NetworkSearch {
       return Promise.reject(new Error(`not fetched, the adapter is stopping: ${url}`));
     }
     return new Promise((resolve, reject) => {
-      const req = httpGet(url, res => {
+      const req = httpGet(url, localAddressOption(), res => {
         // Bytes decoded once (a friendlyName "Küche" split inside a character became "K��che" — and a
         // second id for the same device, audit 2026-09-24 A20), capped, and the status judged: a booting
         // receiver's 404/503 is no description, so the NOTIFY retry asks again instead of judging it

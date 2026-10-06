@@ -51,9 +51,10 @@ adapter is not running is only found again by the next network search.
   card removes a device for good. A list holding only the row carried over from the previous
   adapter (its name is an IP address) counts as empty: nobody typed that address, so the search
   stays on and follows that receiver to a new address.
-- **Network Interface** — keep "all addresses" (0.0.0.0) and the search leaves through every network
-  card of your ioBroker machine. Only set it if your server sits in several networks and the search
-  should use a particular one. It has no effect on the receivers themselves.
+- **Network Interface** — keep "all addresses" (0.0.0.0) and the adapter uses every network card of
+  your ioBroker machine. Set it if your server sits in several networks: the search, every connection
+  to a receiver and the MusicCast event port then use only this address. An address the machine does
+  not have is ignored with one warning in the log.
 - **MusicCast event port** — shown, not editable: MusicCast devices push their changes to UDP
   port 41100, the protocol fixes it. It is there so the Admin can warn you when a second
   instance on the same host would take the port.

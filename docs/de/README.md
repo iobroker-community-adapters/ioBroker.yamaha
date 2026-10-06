@@ -53,9 +53,10 @@ umzieht, während der Adapter nicht läuft, findet aber erst die nächste Netzwe
   Karte. Eine Liste, die nur die aus dem Vorgänger-Adapter übernommene Zeile enthält (ihr Name
   ist eine IP-Adresse), gilt als leer: diese Adresse hat niemand getippt, die Suche bleibt an
   und folgt dem Receiver zu einer neuen Adresse.
-- **Netzwerk-Interface** — auf „alle Adressen“ (0.0.0.0) lassen, dann verlässt die Suche jede
-  Netzwerkkarte deines ioBroker-Rechners. Nur setzen, wenn dein Server in mehreren Netzen hängt und die Suche eine
-  bestimmte nehmen soll. Auf die Receiver selbst hat die Einstellung keine Wirkung.
+- **Netzwerk-Interface** — auf „alle Adressen“ (0.0.0.0) lassen, dann nutzt der Adapter jede
+  Netzwerkkarte deines ioBroker-Rechners. Setzen, wenn dein Server in mehreren Netzen hängt: die Suche, jede
+  Verbindung zu einem Receiver und der MusicCast-Ereignisport nutzen dann nur diese Adresse. Eine Adresse, die der
+  Rechner nicht hat, wird mit einer Warnung im Log übergangen.
 - **MusicCast-Ereignisport** — wird angezeigt, ist nicht änderbar: MusicCast-Geräte melden ihre
   Änderungen an den UDP-Port 41100, das legt das Protokoll fest. Das Feld ist da, damit der Admin
   warnen kann, wenn eine zweite Instanz auf demselben Rechner den Port belegen würde.

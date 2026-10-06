@@ -7,7 +7,8 @@ const net = vi.hoisted(() => ({
   sockets: [] as Array<{ handlers: Record<string, (...a: unknown[]) => void>; closed: boolean }>,
 }));
 vi.mock("node:http", () => ({
-  get: (_url: string, cb: (res: unknown) => void) => {
+  // http.get(url, options, cb) — the options carry the source address where one is picked.
+  get: (_url: string, _options: unknown, cb: (res: unknown) => void) => {
     const req = { on: () => req, setTimeout: () => req, destroy: () => undefined };
     queueMicrotask(() => {
       const handlers: Record<string, (...a: unknown[]) => void> = {};

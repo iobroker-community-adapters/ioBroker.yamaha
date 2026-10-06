@@ -1,4 +1,5 @@
 import { connect } from "node:net";
+import { localAddressOption } from "../source-address";
 import { LineBuffer } from "./line-buffer";
 import { decodeLine, encodeCommand, encodeGet, type YncaMessage } from "./protocol";
 import { buildCapabilities, type YncaCapabilities } from "./capability";
@@ -123,7 +124,8 @@ export type SocketFactory = (host: string, port: number) => YncaSocket;
  * @returns a socket wrapper over a node:net connection
  */
 function defaultFactory(host: string, port: number): YncaSocket {
-  const socket = connect({ host, port });
+  // From the address the user picked, where one is picked (round 87, `source-address.ts`).
+  const socket = connect({ host, port, ...localAddressOption() });
   // Guard the initial connect: a device that never answers (a MusicCast-only
   // speaker has no YNCA port) must fail fast, so the parallel connect attempt
   // (attempt-device.ts) settles on the transports that answered instead of waiting for

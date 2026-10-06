@@ -429,7 +429,8 @@ vi.mock("node:os", async importOriginal => {
   return { ...actual, default: { ...actual, networkInterfaces }, networkInterfaces };
 });
 vi.mock("node:http", () => ({
-  get: (url: string, cb: (res: unknown) => void) => {
+  // http.get(url, options, cb) — the options carry the source address where one is picked.
+  get: (url: string, _options: unknown, cb: (res: unknown) => void) => {
     net.httpCalls.push(url);
     const handlers: Record<string, Array<(...a: unknown[]) => void>> = {};
     const req = {
@@ -1841,6 +1842,7 @@ describe("Yamaha auto-discovery", () => {
     });
 
     it("starts the listener on the search's interfaces when the search is on, and closes it on unload", async () => {
+      net.interfaces.value = { en0: [{ address: "10.0.0.5", family: "IPv4", internal: false, cidr: "10.0.0.5/24" }] };
       const ctx = setup({ devices: [], networkInterface: "10.0.0.5" });
       await ctx.i.onReady();
       await flush();
@@ -1849,6 +1851,18 @@ describe("Yamaha auto-discovery", () => {
       expect(mocks.listeners[0].start).toHaveBeenCalledTimes(1);
       await new Promise<void>(resolve => ctx.i.onUnload(resolve));
       expect(mocks.listeners[0].close).toHaveBeenCalledTimes(1);
+    });
+
+    // Round 87: an address the host does not carry falls back to every address, said in exactly one warning.
+    it("an address the host does not carry: the listener takes every address, and one warning says so", async () => {
+      net.interfaces.value = { en0: [{ address: "10.0.0.7", family: "IPv4", internal: false, cidr: "10.0.0.7/24" }] };
+      const ctx = setup({ devices: [], networkInterface: "10.0.0.5" });
+      await ctx.i.onReady();
+      await flush();
+      expect(mocks.listeners[0].deps.interfaces).toEqual(["10.0.0.7"]);
+      const named = ctx.i.log.warn.mock.calls.filter(c => String(c[0]).includes("10.0.0.5"));
+      expect(named).toEqual([["network address 10.0.0.5 is not on this host — using every address"]]);
+      await new Promise<void>(resolve => ctx.i.onUnload(resolve));
     });
 
     // An announcement is read against the RUNNING set; heard before the table rows ran, a moved

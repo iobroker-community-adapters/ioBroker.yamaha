@@ -38,11 +38,6 @@ describe("searchInterfaces", () => {
     expect(result).not.toContain("fe80::1");
   });
 
-  it("accepts the numeric family 4 from older Node releases", () => {
-    const legacy = { en0: [nif("10.0.0.9", 4 as unknown as string, false)] };
-    expect(searchInterfaces("", legacy)).toEqual(["10.0.0.9"]);
-  });
-
   it("returns empty when no usable interface exists (caller falls back to the default route)", () => {
     expect(searchInterfaces("", { lo0: [nif("127.0.0.1", "IPv4", true)] })).toEqual([]);
     expect(searchInterfaces("", {})).toEqual([]);

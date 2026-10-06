@@ -92,6 +92,43 @@ function adapterEnv(...hooks) {
  */
 const HOOK = path.join(__dirname, "inventory-hook.cjs");
 
+// Round 87 (krobi 2026-10-02 23:26): the suite "counterpart gone and back" cuts every counterpart with
+// test/network-hook.js (fleet master), the LAST hook of its starts; the switch is on while OUTAGE_FLAG exists.
+const NETWORK_HOOK = path.join(__dirname, "network-hook.js");
+const OUTAGE_FLAG = path.join(RESOURCE_DIR, "outage");
+// How long the adapter may take to show the outage, and to show the return.
+const OUTAGE_DEADLINE_MS = 300000;
+// Once the adapter shows the outage, every counterpart stays gone at least this long and at least as long again as the
+// adapter took to show it — several of its own cycles, so a deletion after N missed cycles falls inside the window.
+const OUTAGE_HOLD_MS = 30000;
+// Round 87 (krobi 2026-10-03 00:27, 11:38): the address the user picks in the instance settings (jsonConfig `type: "ip"`)
+// is the only one the adapter listens, sends and connects on — the cloud included; one the host does not carry falls back
+// to every address with exactly one warning. ADDRESS_KEY is the native key of that field, undefined where the adapter
+// offers no choice; CHOSEN_ADDRESS the first non-internal IPv4 of this machine (loopback is internal — several adapters
+// treat it as missing); MISSING_ADDRESS one no machine carries (TEST-NET-1, RFC 5737).
+const ADDRESS_KEY = (() => {
+  const file = path.join(ADAPTER_DIR, "admin", "jsonConfig.json");
+  const find = node => {
+    for (const [key, value] of Object.entries(node?.items ?? {})) {
+      if (value?.type === "ip") {
+        return key;
+      }
+      const inner = find(value);
+      if (inner) {
+        return inner;
+      }
+    }
+    return undefined;
+  };
+  return fs.existsSync(file) ? find(JSON.parse(fs.readFileSync(file, "utf8"))) : undefined;
+})();
+const CHOSEN_ADDRESS = Object.values(require("node:os").networkInterfaces())
+  .flat()
+  .find(i => (i.family === "IPv4" || i.family === 4) && !i.internal)?.address;
+const MISSING_ADDRESS = "192.0.2.1";
+/** A table row whose name is the adapter's own `info` (suite "a name that is the adapter's own"); nothing answers there. */
+const RESERVED_ROW = { name: "info", ip: "127.0.0.252" };
+
 /**
  * Every object write of the adapter in this suite, and which of them changed nothing (round 61). An unchanged
  * rewrite still goes to the database and to every subscriber — the adapter writes only what differs. The FIRST
@@ -196,6 +233,43 @@ const FIXTURE_NATIVE = { ...MANIFEST_NATIVE };
  * checks that it arrived there. This release moves no datapoint.
  */
 const MOVES = {};
+/**
+ * Round 87: adapter-specific like FIXTURE_NATIVE — the states that show an outage of EVERY counterpart, each with the
+ * value it takes then: the instance's `info.connection`, and each device's (added per run, showsEveryDevice).
+ */
+const OUTAGE_SHOWN = { "info.connection": false };
+/** Round 87: every fixture device of this run shows the outage in its own `info.connection` too. */
+function showsEveryDevice() {
+  for (const device of fixtures.devices) {
+    OUTAGE_SHOWN[`${device.id}.info.connection`] = false;
+  }
+}
+/**
+ * Drive the adapter with the fixtures. yamaha's fixtures are the device table (fixtureNative, set before the start):
+ * the adapter connects to them on its own, so feeding them is waiting until every fixture device is built.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ */
+async function feedFixtures(harness) {
+  await waitForAdapterWork(harness);
+}
+/**
+ * Round 87 (krobi 2026-10-03 00:04): the device table carries a row named `info` (RESERVED_ROW, put in by the suite
+ * before the start — the table is read at the start); wait until the adapter has handled it: it drops the row with a
+ * warning naming the id it would have taken. A device id the adapter builds from a model is guarded by the same
+ * reserved list (`RESERVED_DEVICE_IDS`).
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ */
+async function feedReservedNames(harness) {
+  const deadline = Date.now() + 60000;
+  while (
+    !harness.getLogs().some(l => l.from === `${ADAPTER}.0` && l.level === "warn" && l.message.includes('"info"'))
+  ) {
+    assert.ok(Date.now() < deadline, "the adapter never said it dropped the table row named info");
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+}
 /** The room a user put every previous device and one of its datapoints into (upgrade suite). */
 const SEEDED_ROOM = "enum.rooms.inventory_upgrade";
 
@@ -657,6 +731,195 @@ async function seedInstanceData(harness, previous) {
   fs.writeFileSync(path.join(dir, "excluded.json"), JSON.stringify([EXCLUDED_BEFORE]));
 }
 
+/**
+ * Round 87: wait until every state named (ids without the namespace) holds the wanted value.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {Record<string, unknown>} wanted id → value
+ * @param {string} what what did not happen, in the failure message
+ */
+async function waitForStates(harness, wanted, what) {
+  const deadline = Date.now() + OUTAGE_DEADLINE_MS;
+  for (;;) {
+    const wrong = [];
+    for (const [id, val] of Object.entries(wanted)) {
+      const state = await harness.states.getStateAsync(`${NS}${id}`);
+      if (state?.val !== val) {
+        wrong.push(`${id} = ${JSON.stringify(state?.val)}, want ${JSON.stringify(val)}`);
+      }
+    }
+    if (wrong.length === 0) {
+      return;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`${what} (deadline ${OUTAGE_DEADLINE_MS} ms):\n${wrong.join("\n")}`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+}
+
+/**
+ * Round 87 (krobi 2026-10-02 23:26: no datapoint is deleted or emptied because a device is gone — the adapter shows
+ * whether it is reachable): cut every counterpart, hold, bring it back. Returns when each phase began and the adapter's
+ * own log lines of the outage and of the return.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {{ deleted: string[] }} watch the suite's write watcher (watchObjectWrites)
+ */
+async function playOutage(harness, watch) {
+  assert.ok(Object.keys(OUTAGE_SHOWN).length > 0, "OUTAGE_SHOWN names no state — nothing would show the outage");
+  const before = {};
+  for (const [id, val] of Object.entries(OUTAGE_SHOWN)) {
+    before[id] = (await harness.states.getStateAsync(`${NS}${id}`))?.val;
+    assert.notStrictEqual(before[id], val, `${id} already shows the outage before the cut`);
+  }
+  const outage = { cut: Date.now(), deleted: watch.deleted.length, line: harness.getLogs().length };
+  fs.writeFileSync(OUTAGE_FLAG, "");
+  await waitForStates(harness, OUTAGE_SHOWN, "the adapter did not show the outage");
+  const shown = Date.now();
+  await new Promise(resolve => setTimeout(resolve, Math.max(OUTAGE_HOLD_MS, shown - outage.cut)));
+  fs.rmSync(OUTAGE_FLAG);
+  await waitForStates(harness, before, "the adapter did not show the return");
+  await new Promise(resolve => setTimeout(resolve, SETTLE_MS));
+  outage.lines = harness
+    .getLogs()
+    .slice(outage.line)
+    .filter(l => l.from === `${ADAPTER}.0`);
+  return outage;
+}
+
+/** Round 87: the network records (`<pid>.net`, test/network-hook.js) present now — a suite reads only the ones after. */
+function networkFiles() {
+  return new Set(fs.readdirSync(RESOURCE_DIR).filter(f => f.endsWith(".net")));
+}
+
+/**
+ * Round 87: what the adapter's processes since `seen` listened, bound, joined, sent and connected — a test hook's own
+ * entries (`hook`) left out.
+ *
+ * @param {Set<string>} seen the record files before the suite's start (networkFiles)
+ */
+function networkUse(seen) {
+  return fs
+    .readdirSync(RESOURCE_DIR)
+    .filter(f => f.endsWith(".net") && !seen.has(f))
+    .flatMap(f =>
+      fs
+        .readFileSync(path.join(RESOURCE_DIR, f), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map(l => JSON.parse(l)),
+    )
+    .filter(r => !r.hook);
+}
+
+/**
+ * Round 87: every place the adapter used another address than `address` — a server on another address, a connection
+ * from another source, a UDP socket on every address that joins no group on `address`, a group joined elsewhere, a
+ * datagram that leaves from another address or, for multicast, through another interface.
+ *
+ * @param {object[]} use the records (networkUse)
+ * @param {string} address the chosen address
+ */
+function offTheAddress(use, address) {
+  const wrong = [];
+  const sockets = new Map();
+  for (const r of use) {
+    if (r.kind === "listen" && r.host !== address) {
+      wrong.push(`listens on ${r.host}:${r.port}`);
+    }
+    if (r.kind === "connect" && r.localAddress !== address) {
+      wrong.push(`connects to ${r.host}:${r.port} from ${r.localAddress ?? "any address"}`);
+    }
+    if (r.kind === "join" && r.iface !== address) {
+      wrong.push(`joins ${r.group} on ${r.iface ?? "the default interface"}`);
+    }
+    if (r.id !== undefined) {
+      const s = sockets.get(r.id) ?? { joins: 0, egress: [], sends: [] };
+      if (r.kind === "bind") s.bind = r;
+      if (r.kind === "join") s.joins++;
+      if (r.kind === "egress") s.egress.push(r.iface);
+      if (r.kind === "send") s.sends.push(r);
+      sockets.set(r.id, s);
+    }
+  }
+  for (const s of sockets.values()) {
+    const bound = s.bind?.address;
+    if (s.bind && bound !== address && s.joins === 0) {
+      wrong.push(`UDP socket on ${bound}:${s.bind.port}`);
+    }
+    for (const t of s.sends) {
+      const multicast = /^2(2[4-9]|3\d)\./.test(t.host);
+      if (multicast ? !s.egress.includes(address) : bound !== address) {
+        wrong.push(
+          `sends to ${t.host}:${t.port} from ${multicast ? (s.egress.at(-1) ?? "the default interface") : (bound ?? "any address")}`,
+        );
+      }
+    }
+  }
+  return [...new Set(wrong)];
+}
+
+/**
+ * Round 87 (krobi 2026-10-02 23:52, F-05 of fakeroku as the fleet rule): a client from another network gets no answer —
+ * every server and UDP port the adapter opened on `address` is asked once from 127.0.0.1. A TCP reply counts unless it is
+ * an HTTP status of 400 or above; any UDP reply counts.
+ *
+ * @param {object[]} use the records (networkUse)
+ * @param {string} address the chosen address
+ */
+async function askFromAnotherNetwork(use, address) {
+  const answered = [];
+  const asked = new Set();
+  for (const r of use) {
+    if (r.kind === "listen" && !asked.has(`tcp ${r.port}`)) {
+      asked.add(`tcp ${r.port}`);
+      const reply = await new Promise(resolve => {
+        let data = "";
+        const socket = require("node:net").connect({ host: address, port: r.port, localAddress: "127.0.0.1" });
+        const wait = setTimeout(() => socket.destroy(), 1500);
+        socket.on("connect", () => socket.write("GET / HTTP/1.0\r\n\r\n"));
+        socket.on("data", d => (data += d));
+        socket.on("error", () => {});
+        socket.on("close", () => {
+          clearTimeout(wait);
+          resolve(data);
+        });
+      });
+      const status = /^HTTP\/\d(?:\.\d)? (\d{3})/.exec(reply);
+      if (reply && !(status && Number(status[1]) >= 400)) {
+        answered.push(`TCP ${address}:${r.port} answered a client from 127.0.0.1`);
+      }
+    }
+    if (r.kind === "bind" && r.port && !asked.has(`udp ${r.port}`)) {
+      asked.add(`udp ${r.port}`);
+      const reply = await new Promise(resolve => {
+        const socket = require("node:dgram").createSocket("udp4");
+        const wait = setTimeout(() => {
+          socket.close();
+          resolve(false);
+        }, 1500);
+        socket.on("message", () => {
+          clearTimeout(wait);
+          socket.close();
+          resolve(true);
+        });
+        socket.bind(0, "127.0.0.1", () =>
+          socket.send(
+            'M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: "ssdp:discover"\r\nMX: 1\r\nST: ssdp:all\r\n\r\n',
+            r.port,
+            address,
+          ),
+        );
+      });
+      if (reply) {
+        answered.push(`UDP ${address}:${r.port} answered a sender from 127.0.0.1`);
+      }
+    }
+  }
+  return answered;
+}
+
 tests.integration(ADAPTER_DIR, {
   controllerVersion: "stable",
   defineAdditionalTests({ suite }) {
@@ -1058,6 +1321,211 @@ tests.integration(ADAPTER_DIR, {
         assert.deepStrictEqual(percent, truth, "the percent tree carries other volume datapoints than the default one");
       });
     });
+
+    // Round 87 (krobi 2026-10-02 23:26): every counterpart gone — a power cut, every network path of the adapter
+    // process fails — and back. The adapter shows it in OUTAGE_SHOWN and does nothing else: no object is deleted or
+    // written, and the log stays quiet (krobi 2026-10-03: an outage is a state, for a device and a cloud alike).
+    suite("counterpart gone and back", getHarness => {
+      let harness;
+      let watch;
+      let restarts;
+      let outage;
+      before(async function () {
+        this.timeout(3 * OUTAGE_DEADLINE_MS + 120000);
+        harness = getHarness();
+        clearInstanceData(harness);
+        watch = await watchObjectWrites(harness);
+        await resetInstanceNative(harness, await fixtureNative());
+        showsEveryDevice();
+        await setSystemLanguage(harness, FIRST_LANGUAGE);
+        restarts = playControllerRestarts(harness, watch, HOOK, NETWORK_HOOK);
+        await harness.startAdapterAndWait(false, adapterEnv(HOOK, NETWORK_HOOK));
+        await feedFixtures(harness);
+        await restarts.done;
+        await waitForAdapterWork(harness);
+        outage = await playOutage(harness, watch);
+      });
+
+      after(async function () {
+        this.timeout(60000);
+        await harness?.stopAdapter();
+        await fixtures?.stop();
+      });
+
+      it("cuts every network path of the adapter", function () {
+        const markers = fs.readdirSync(RESOURCE_DIR).filter(f => f.endsWith(".outage"));
+        assert.ok(
+          markers.length > 0,
+          "the outage switch never went on in an adapter process — a start without NETWORK_HOOK as its last hook",
+        );
+        const replaced = markers.flatMap(f => JSON.parse(fs.readFileSync(path.join(RESOURCE_DIR, f), "utf8")).replaced);
+        assert.deepStrictEqual(
+          replaced,
+          [],
+          `patches of the outage switch a later hook replaced:\n${replaced.join("\n")}`,
+        );
+      });
+
+      it("deletes no object while its counterpart is gone", function () {
+        const lost = [...new Set(watch.deleted.slice(outage.deleted))];
+        assert.deepStrictEqual(lost, [], `objects deleted during the outage or the return:\n${lost.join("\n")}`);
+      });
+
+      it("writes no object while its counterpart is gone", function () {
+        const written = [...new Set(watch.times.filter(([, t]) => t >= outage.cut).map(([id]) => id))];
+        assert.deepStrictEqual(written, [], `objects written during the outage or the return:\n${written.join("\n")}`);
+      });
+
+      it("logs nothing above debug while its counterpart is gone", function () {
+        const loud = outage.lines
+          .filter(l => !["debug", "silly"].includes(l.level))
+          .map(l => `${l.level}: ${l.message}`);
+        assert.deepStrictEqual(loud, [], `log lines above debug during the outage or the return:\n${loud.join("\n")}`);
+      });
+
+      it("restarts at most once for its own instance object", function () {
+        assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
+      });
+    });
+
+    // Round 87 (krobi 2026-10-03 00:04): a device, account or entry named `info` never takes the place of the adapter's
+    // own `info` channel — `info` and everything below it stay exactly what a fresh installation has.
+    suite("a name that is the adapter's own", getHarness => {
+      let harness;
+      let watch;
+      let restarts;
+      let live;
+      before(async function () {
+        this.timeout(600000);
+        harness = getHarness();
+        clearInstanceData(harness);
+        watch = await watchObjectWrites(harness);
+        const native = await fixtureNative();
+        await resetInstanceNative(harness, { ...native, devices: [...native.devices, RESERVED_ROW] });
+        await setSystemLanguage(harness, FIRST_LANGUAGE);
+        restarts = playControllerRestarts(harness, watch, HOOK);
+        await harness.startAdapterAndWait(false, adapterEnv(HOOK));
+        await feedFixtures(harness);
+        await feedReservedNames(harness);
+        await restarts.done;
+        await waitForAdapterWork(harness);
+        live = await dumpObjects(harness);
+      });
+
+      after(async function () {
+        this.timeout(60000);
+        await harness?.stopAdapter();
+        await fixtures?.stop();
+      });
+
+      it("keeps its own info channel", function () {
+        const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
+        const own = id => id === `${NS}info` || id.startsWith(`${NS}info.`);
+        const ids = [...new Set([...Object.keys(current), ...Object.keys(live)])].filter(own);
+        const taken = ids.filter(id => canonical(live[id] ?? null) !== canonical(current[id] ?? null));
+        const gone = [...new Set(watch.deleted)].filter(own);
+        assert.deepStrictEqual(
+          [...taken, ...gone],
+          [],
+          `objects below info that differ from a fresh installation or were deleted:\n${[...taken, ...gone].join("\n")}`,
+        );
+      });
+
+      it("restarts at most once for its own instance object", function () {
+        assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
+      });
+    });
+
+    // Round 87 (krobi 2026-10-03 00:27/00:28, 11:38): with an address chosen, the adapter listens, sends and connects
+    // there and nowhere else — the cloud included — and a client from another network gets no answer.
+    if (ADDRESS_KEY) {
+      suite("chosen network address", getHarness => {
+        let harness;
+        let restarts;
+        let use;
+        let strangers;
+        before(async function () {
+          this.timeout(600000);
+          assert.ok(CHOSEN_ADDRESS, "this machine carries no non-internal IPv4 address to choose");
+          harness = getHarness();
+          clearInstanceData(harness);
+          const seen = networkFiles();
+          await resetInstanceNative(harness, { ...(await fixtureNative()), [ADDRESS_KEY]: CHOSEN_ADDRESS });
+          restarts = playControllerRestarts(harness, null, HOOK, NETWORK_HOOK);
+          await harness.startAdapterAndWait(false, adapterEnv(HOOK, NETWORK_HOOK));
+          await feedFixtures(harness);
+          await restarts.done;
+          await waitForAdapterWork(harness);
+          use = networkUse(seen);
+          strangers = await askFromAnotherNetwork(use, CHOSEN_ADDRESS);
+        });
+
+        after(async function () {
+          this.timeout(60000);
+          await harness?.stopAdapter();
+          await fixtures?.stop();
+        });
+
+        it("uses only the chosen address", function () {
+          assert.ok(
+            use.length > 0,
+            "the network hook recorded nothing — a start without NETWORK_HOOK as its last hook",
+          );
+          const wrong = offTheAddress(use, CHOSEN_ADDRESS);
+          assert.deepStrictEqual(wrong, [], `network use off ${CHOSEN_ADDRESS}:\n${wrong.join("\n")}`);
+        });
+
+        it("answers no client from another network", function () {
+          assert.deepStrictEqual(strangers, [], `answers to another network:\n${strangers.join("\n")}`);
+        });
+
+        it("restarts at most once for its own instance object", function () {
+          assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
+        });
+      });
+
+      // Round 87 (krobi 2026-10-02 23:52, F-06 of fakeroku as the fleet rule): an address the host does not carry —
+      // the adapter falls back to every address, keeps working, and says so in exactly one warning.
+      suite("missing network address", getHarness => {
+        let harness;
+        let restarts;
+        let lines;
+        before(async function () {
+          this.timeout(600000);
+          harness = getHarness();
+          clearInstanceData(harness);
+          await resetInstanceNative(harness, { ...(await fixtureNative()), [ADDRESS_KEY]: MISSING_ADDRESS });
+          restarts = playControllerRestarts(harness, null, HOOK, NETWORK_HOOK);
+          await harness.startAdapterAndWait(false, adapterEnv(HOOK, NETWORK_HOOK));
+          // The fixtures reach the adapter on every address — that it keeps working. No waitForAdapterWork: a
+          // missing address may keep the adapter's state short of green (fakeroku F-06: yellow until changed).
+          await feedFixtures(harness);
+          await restarts.done;
+          lines = harness.getLogs().filter(l => l.from === `${ADAPTER}.0` && l.message.includes(MISSING_ADDRESS));
+        });
+
+        after(async function () {
+          this.timeout(60000);
+          await harness?.stopAdapter();
+          await fixtures?.stop();
+        });
+
+        it("falls back to every address and warns once", function () {
+          const said = lines
+            .filter(l => l.level === "warn" || l.level === "error")
+            .map(l => `${l.level}: ${l.message}`);
+          assert.deepStrictEqual(
+            said.length === 1 && said[0].startsWith("warn: "),
+            true,
+            `lines naming ${MISSING_ADDRESS}:\n${said.join("\n")}`,
+          );
+        });
+
+        it("restarts at most once for its own instance object", function () {
+          assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
+        });
+      });
+    }
 
     const previousFile = process.env.INVENTORY_PREVIOUS;
     if (previousFile && fs.existsSync(previousFile)) {

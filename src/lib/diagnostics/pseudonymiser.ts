@@ -1,3 +1,4 @@
+import { chosenAddress } from "../network-address";
 import { decodeXmlText } from "../xml/entities";
 
 /**
@@ -110,7 +111,7 @@ function caseless(kind: PersonalKind): boolean {
  * @returns true for the unspecified address, masks and loopback
  */
 function isNeutralAddress(address: string): boolean {
-  return address === "0.0.0.0" || address.startsWith("255.") || address.startsWith("127.");
+  return chosenAddress(address) === undefined || address.startsWith("255.") || address.startsWith("127.");
 }
 
 /**

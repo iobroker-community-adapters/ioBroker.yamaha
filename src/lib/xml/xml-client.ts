@@ -10,6 +10,7 @@ import {
 } from "./protocol";
 import type { CommandGate, CommandPriority } from "../lifecycle/command-gate";
 import { readDeviceResponse } from "../util";
+import { localAddressOption } from "../source-address";
 
 /** The receiver's XML control endpoint. */
 const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
@@ -59,6 +60,7 @@ function defaultPoster(ip: string, payload: string): Promise<string> {
       {
         host: ip,
         port: 80,
+        ...localAddressOption(),
         path: CONTROL_PATH,
         method: "POST",
         timeout: REQUEST_TIMEOUT_MS,
@@ -81,8 +83,9 @@ function defaultPoster(ip: string, payload: string): Promise<string> {
  */
 function defaultGetter(ip: string, path: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const req = request({ host: ip, port: 80, path, method: "GET", timeout: REQUEST_TIMEOUT_MS }, res =>
-      readResponse(res, resolve, reject),
+    const req = request(
+      { host: ip, port: 80, ...localAddressOption(), path, method: "GET", timeout: REQUEST_TIMEOUT_MS },
+      res => readResponse(res, resolve, reject),
     );
     req.on("error", reject);
     req.on("timeout", () => req.destroy(new Error("XML request timeout")));

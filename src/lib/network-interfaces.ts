@@ -1,5 +1,5 @@
 import { lookup } from "node:dns/promises";
-import type { NetworkInterfaceInfo } from "node:os";
+import { chosenAddress, localNets, type InterfaceMap } from "./network-address";
 
 /**
  * The interface addresses an SSDP search must leave from.
@@ -16,23 +16,15 @@ import type { NetworkInterfaceInfo } from "node:os";
  * @param ifaces the host interfaces (from `os.networkInterfaces()`)
  * @returns the addresses to search from — the one configured, else every non-internal IPv4
  */
-export function searchInterfaces(
-  configured: string | undefined,
-  ifaces: Record<string, NetworkInterfaceInfo[] | undefined>,
-): string[] {
-  if (configured && configured !== "0.0.0.0") {
-    return [configured];
+export function searchInterfaces(configured: string | undefined, ifaces: InterfaceMap): string[] {
+  // What counts as "every address" and which interfaces count stands once, in the fleet master.
+  const chosen = chosenAddress(configured);
+  if (chosen !== undefined) {
+    return [chosen];
   }
-  const addresses: string[] = [];
-  for (const list of Object.values(ifaces)) {
-    for (const info of list ?? []) {
-      // family is "IPv4" on modern Node, 4 on older releases — accept both; skip loopback/internal.
-      if (!info.internal && (info.family === "IPv4" || (info.family as unknown) === 4)) {
-        addresses.push(info.address);
-      }
-    }
-  }
-  return addresses;
+  return localNets(ifaces)
+    .filter(net => net.family === "IPv4")
+    .map(net => net.address);
 }
 
 /**
