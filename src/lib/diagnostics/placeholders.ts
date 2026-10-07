@@ -4,7 +4,14 @@
 // privacy it keeps (DB-04, krobi 2026-09-22: the promise is kept, not only made), and names the user gave stand in it
 // only as placeholders (DB-05). The core every adapter shares: stable
 // placeholders per report, addresses, hardware ids and mail addresses found by their form, names found as whole words in
-// any case and with any separator, in values and in object keys alike.
+// values and in object keys alike.
+// A name matches in exactly two spellings (round 98, measured on yamaha 2026-10-07): as the user wrote it, and all in lower
+// case with a space, `_` or `-` between its words — the form an object id takes (`demo.0.living_room`). `_` and `-` belong
+// to the word, so a name never matches inside a longer token, and other casings never match: a name the user took from a
+// protocol word ("Radio") must leave the protocol's own tokens (`net_radio`, `NET RADIO`) readable. A device that reports a
+// name in yet another spelling registers that spelling with `name()` itself. Every other kind (a serial number, a network
+// or host name, an id) is no word of any protocol and is replaced wherever it stands, in any case, also inside a longer
+// token (`rx-v6a-ABC123`, `WLAN-ABC123_5G`) — the old adapter cores replaced known values that way.
 // Order for every text: the adapter blanks secrets first, then this replaces, then the report is cut to size.
 // What else is personal (serial numbers, network names, an adapter's own fields) the adapter registers with `name()`.
 
@@ -24,6 +31,26 @@ const HARDWARE =
   /(?<![0-9A-Fa-f:-])[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}(?:(?:[:-][0-9A-Fa-f]{2}){2})?(?![0-9A-Fa-f:-])/g;
 /** A MAC address without separators: twelve hex digits with at least one letter and one digit. */
 const BARE_MAC = /(?<![0-9A-Za-z])(?=[0-9A-Fa-f]*[A-Fa-f])(?=[0-9A-Fa-f]*\d)[0-9A-Fa-f]{12}(?![0-9A-Za-z])/g;
+/**
+ * Where a registered value matches. A `name`: as written or all in lower case with a space, `_` or `-` between its words,
+ * never inside a longer token (`_` and `-` count as part of a word). Any other kind: those spellings in any case, anywhere.
+ *
+ * @param value the registered value
+ * @param kind its placeholder kind, `name` when not given
+ * @returns the pattern
+ */
+export function valuePattern(value: string, kind = "name"): RegExp {
+  const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const words = value
+    .toLowerCase()
+    .split(/[\s_-]+/)
+    .map(escape);
+  const forms = `(?:${escape(value)}|${words.join("[ _-]")})`;
+  return kind === "name"
+    ? new RegExp(`(?<![\\p{L}\\p{N}_-])${forms}(?![\\p{L}\\p{N}_-])`, "gu")
+    : new RegExp(forms, "giu");
+}
+
 /** A mail address — it starts only where a word starts, so a long text without `@` is read in linear time. */
 const MAIL = /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 
@@ -34,7 +61,7 @@ const MAIL = /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
 export class Placeholders {
   private readonly known = new Map<string, string>();
   private readonly counts = new Map<string, number>();
-  private readonly names = new Map<string, string>();
+  private readonly names = new Map<string, { placeholder: string; kind: string }>();
 
   /**
    * The placeholder for one value.
@@ -58,7 +85,7 @@ export class Placeholders {
 
   /**
    * Register a name the user gave (a device, room or network name) or any other personal value: from now on it is
-   * replaced wherever it stands as a whole word — in any case, and with spaces, `_` or `-` between its words.
+   * replaced wherever it stands as a whole word, as written or in the lower-case id form (`valuePattern`).
    *
    * @param value the real value (blank ones are ignored)
    * @param kind the placeholder's word, `name` when not given
@@ -70,7 +97,7 @@ export class Placeholders {
       return value;
     }
     const placeholder = this.mark(kind, trimmed);
-    this.names.set(trimmed, placeholder);
+    this.names.set(trimmed, { placeholder, kind });
     return placeholder;
   }
 
@@ -84,12 +111,8 @@ export class Placeholders {
   public text(text: string): string {
     let out = text;
     const names = [...this.names.entries()].sort(([a], [b]) => b.length - a.length);
-    for (const [name, placeholder] of names) {
-      const words = name.split(/[\s_-]+/).map(word => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-      out = out.replace(
-        new RegExp(`(?<![\\p{L}\\p{N}])${words.join("[\\s_-]+")}(?![\\p{L}\\p{N}])`, "giu"),
-        placeholder,
-      );
+    for (const [name, { placeholder, kind }] of names) {
+      out = out.replace(valuePattern(name, kind), placeholder);
     }
     out = out.replace(MAIL, match => this.mark("mail", match));
     out = out.replace(HARDWARE, match => this.mark("mac", match.replace(/-/g, ":")));
@@ -134,14 +157,14 @@ export class Placeholders {
 }
 
 /**
- * The canary check every adapter's report test runs: which of the real values still stand in the finished report, in
- * any case.
+ * The canary check every adapter's report test runs: which of the real values still stand in the finished report — in
+ * exactly the spellings `text()` replaces for their kind (`valuePattern`).
  *
  * @param report the report text
  * @param secrets the real values that must not appear
+ * @param kind their placeholder kind — the same one `name()` registered them with
  * @returns the ones that leaked
  */
-export function leaked(report: string, secrets: readonly string[]): string[] {
-  const lower = report.toLowerCase();
-  return secrets.filter(secret => secret.length > 0 && lower.includes(secret.toLowerCase()));
+export function leaked(report: string, secrets: readonly string[], kind: string): string[] {
+  return secrets.filter(secret => secret.trim().length > 0 && valuePattern(secret.trim(), kind).test(report));
 }

@@ -53,7 +53,7 @@ describe("Placeholders", () => {
     expect(Date.now() - started).toBeLessThan(2_000);
   });
 
-  it("replaces a registered name as a whole word in any case and with any separator, longest first", () => {
+  it("replaces a registered name as written or in its lower-case id form, longest first", () => {
     const p = new Placeholders();
     expect(p.name("Living Room")).toBe("name-1");
     expect(p.name("Living")).toBe("name-2");
@@ -61,8 +61,31 @@ describe("Placeholders", () => {
     expect(p.text("Living Room lamp, Living area, LivingRoom, Home WiFi")).toBe(
       "name-1 lamp, name-2 area, LivingRoom, network-1",
     );
-    expect(p.text("demo.0.living_room.power, living-room, LIVING  ROOM, home_wifi_5g")).toBe(
-      "demo.0.name-1.power, name-1, name-1, network-1_5g",
+    expect(p.text("demo.0.living_room.power, living-room, living room, LIVING ROOM, home_wifi_5g")).toBe(
+      "demo.0.name-1.power, name-1, name-1, LIVING ROOM, network-1_5g",
+    );
+  });
+
+  it("leaves a protocol token alone that only contains a name the user took from a protocol word", () => {
+    // yamaha 2026-10-07: an input named "Radio" turned `net_radio` and `NET RADIO` into `net_name-1` / `NET name-1`
+    const p = new Placeholders();
+    p.name("Radio");
+    expect(p.deep({ net_radio: { input: "net_radio" }, "MAIN:INP": "NET RADIO" })).toEqual({
+      net_radio: { input: "net_radio" },
+      "MAIN:INP": "NET RADIO",
+    });
+    expect(p.text("input Radio, net-radio, radio_station, radio-tuner, RADIO, demo.0.radio.power")).toBe(
+      "input name-1, net-radio, radio_station, radio-tuner, RADIO, demo.0.name-1.power",
+    );
+  });
+
+  it("replaces a value of any other kind wherever it stands, in any case", () => {
+    // yamaha 2026-10-07 (security review of 27b0ac6): a serial or a network name inside a longer token stayed readable
+    const p = new Placeholders();
+    expect(p.name("ABC123", "serial")).toBe("serial-1");
+    expect(p.name("Home WiFi", "network")).toBe("network-1");
+    expect(p.text("host rx-v6a-ABC123, id rx-v6a-abc123x, WLAN home_wifi_5G, HOME WIFI")).toBe(
+      "host rx-v6a-serial-1, id rx-v6a-serial-1x, WLAN network-1_5G, network-1",
     );
   });
 
@@ -86,13 +109,24 @@ describe("Placeholders", () => {
 describe("Placeholders.deep with keys that meet", () => {
   it("keeps both values when two keys become the same placeholder", () => {
     const p = new Placeholders();
-    p.name("Kitchen");
-    expect(p.deep({ Kitchen: 1, kitchen: 2, KITCHEN: 3 })).toEqual({ "name-1": 1, "name-1#2": 2, "name-1#3": 3 });
+    p.name("Living Room");
+    expect(p.deep({ "Living Room": 1, living_room: 2, "living-room": 3, LIVINGROOM: 4 })).toEqual({
+      "name-1": 1,
+      "name-1#2": 2,
+      "name-1#3": 3,
+      LIVINGROOM: 4,
+    });
   });
 });
 
 describe("leaked", () => {
-  it("names every real value that still stands in the report, in any case", () => {
-    expect(leaked('{"ip":"address-1","name":"kitchen"}', ["10.0.0.1", "Kitchen", ""])).toEqual(["Kitchen"]);
+  it("names every real value that still stands in the report, in the spellings the replacement covers", () => {
+    expect(leaked('{"ip":"address-1","name":"demo.0.kitchen"}', ["10.0.0.1", "Kitchen", " "], "name")).toEqual([
+      "Kitchen",
+    ]);
+    expect(leaked('{"input":"NET RADIO","id":"net_radio"}', ["Radio"], "name")).toEqual([]);
+    expect(leaked('{"ip":"10.0.0.10"}', ["10.0.0.1"], "name")).toEqual([]);
+    expect(leaked('{"host":"rx-v6a-abc123"}', ["ABC123"], "serial")).toEqual(["ABC123"]);
+    expect(leaked('{"host":"rx-v6a-abc123"}', ["ABC123"], "name")).toEqual([]);
   });
 });

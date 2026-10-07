@@ -97,10 +97,10 @@ describe("diagnostics report of a device that is not connected (B1)", () => {
   // Round 97 (DB-04): the canary every report test runs — none of the real values stands in the finished report.
   it("leaks none of the device's real values", () => {
     const text = reportText({ profile: { capabilityProfile } });
-    expect(
-      leaked(text, ["Wohnzimmer", "Kinderzimmer", "Terrasse", "Balkon", "0C1D2E3F", "0A1B2B3C", "00A0DED4F504"]),
-    ).toEqual([]);
-    expect(leaked(text, ["192.168.178.40"])).toEqual([]);
+    expect(leaked(text, ["Wohnzimmer", "Kinderzimmer", "Terrasse", "Balkon"], "name")).toEqual([]);
+    expect(leaked(text, ["0C1D2E3F", "0A1B2B3C"], "serial")).toEqual([]);
+    expect(leaked(text, ["00A0DED4F504"], "mac")).toEqual([]);
+    expect(leaked(text, ["192.168.178.40"], "address")).toEqual([]);
   });
 
   it("shows the stored profile as the object it holds, not as a JSON text", () => {
