@@ -108,10 +108,10 @@ löscht und leert nichts. Belege und Befund: `.claude/dev-history.md` 2026-10-02
 - **Erst die Form, dann der Wert:** solange das Einlesen offen ist, bekommt ein Datenpunkt, dessen gespeichertes Objekt eine
   andere Form hat als die gebaute (Typ; bei Zahlen Einheit, Grenzen, Schritt — `formDiffers`), keinen Wert; der Abschluss
   gibt ihm Form und Wert (Server-Test 2026-10-06: ein Wahrheitswert im Text-Datenpunkt `sound.adaptiveDrc`). Bewacht von der
-  Inventar-Suite „upgrade with the receivers switched off“; die Aufstiegs-Suite misst das Update mit eingeschalteten
-  Prüfgeräten (`fixtures.power(true)`) gegen eine Neuinstallation auf DENSELBEN Antworten (Suite „fresh installation with
-  the receivers switched on“) — das committete Inventar ist im Standby gelesen, eingeschaltet beweist der RX-V473 kein
-  YNCA-Menü (#613).
+  Inventar-Suite „upgrade with the receivers switched off“ (`fixtures.power(false)`: Mitschnitt-Zustand). Sonst starten
+  die Prüfgeräte eingeschaltet — das committete Inventar ist die vollständig eingelesene Neuinstallation (Werkbank
+  2026-10-07: die Aufstiegs-Suite vergleicht in Vorlagenform gegen `INVENTORY`); eingeschaltet beweist der RX-V473 kein
+  YNCA-Menü (#613), sein Baum trägt also keinen unbewiesenen Menü-Anspruch.
 - **Firmware-Update:** ein anderer Stand (YNCA `SYS:VERSION`, MusicCast `system_version`, XML `version`; leer zählt nicht)
   schreibt `new firmware found (alt → neu) — reading the receiver again, this can take a few minutes` und öffnet das Einlesen;
   sein Abschluss schreibt dieselbe Bereit-Zeile wie der Start (`readyLine`).

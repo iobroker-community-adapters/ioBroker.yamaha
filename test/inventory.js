@@ -288,8 +288,6 @@ const RUN_STATE_NATIVE = ["capabilityProfile", "probeCache", "yncaAvail", "purge
 const YNCA_REFRESH_MS = 40000;
 
 let fixtures;
-/** The tree a fresh installation builds with the receivers switched on — the upgrade suite's reference. */
-let freshSwitchedOn;
 
 /**
  * Bring up the fake devices and route the adapter to them.
@@ -1612,6 +1610,8 @@ tests.integration(ADAPTER_DIR, {
           await seedInstanceData(harness, previous);
           await restoreMaskedSecrets(harness);
           await resetInstanceNative(harness, await fixtureNative({}, devicesNotFinal(previous).length > 0));
+          // Back to the state the captures show — the fixtures start switched on.
+          fixtures.power(false);
           await setSystemLanguage(harness, FIRST_LANGUAGE);
           restarts = playControllerRestarts(harness, watch, HOOK);
           await harness.startAdapterAndWait(false, adapterEnv(HOOK));
@@ -1682,40 +1682,6 @@ tests.integration(ADAPTER_DIR, {
         });
       });
 
-      // The reference for the upgrade below: a fresh installation on the SAME switched-on answers. The committed
-      // inventory is read in standby, where a YNCA menu is claimed unproven; switched on, the fixtures (standby
-      // captures, only MAIN:PWR flipped) refuse every list function and the read-in proves no menu. An upgrade is
-      // judged against what a fresh installation builds from the same device answers, never against another state.
-      suite("fresh installation with the receivers switched on", getHarness => {
-        let harness;
-        let restarts;
-        before(async function () {
-          this.timeout(600000);
-          harness = getHarness();
-          clearInstanceData(harness);
-          await resetInstanceNative(harness, await fixtureNative());
-          fixtures.power(true);
-          await setSystemLanguage(harness, FIRST_LANGUAGE);
-          restarts = playControllerRestarts(harness, null, HOOK);
-          await harness.startAdapterAndWait(false, adapterEnv(HOOK));
-          await waitForAdapterWork(harness);
-          await restarts.done;
-          await waitForAdapterWork(harness);
-        });
-
-        after(async function () {
-          this.timeout(60000);
-          await harness?.stopAdapter();
-          await fixtures?.stop();
-        });
-
-        it("builds the reference tree", async function () {
-          this.timeout(30000);
-          freshSwitchedOn = await dumpObjects(harness);
-          assert.ok(Object.keys(freshSwitchedOn).length > 0, "no objects created — fixtures did not reach the adapter");
-        });
-      });
-
       suite("upgrade from the previous release", getHarness => {
         let harness;
         let watch;
@@ -1735,7 +1701,7 @@ tests.integration(ADAPTER_DIR, {
           await seedInstanceData(harness, previous);
           await restoreMaskedSecrets(harness);
           maskedLeft = await maskedSecretsLeft(harness);
-          roomMembers = await seedRoom(harness, previous, freshSwitchedOn);
+          roomMembers = await seedRoom(harness, previous, JSON.parse(fs.readFileSync(INVENTORY, "utf8")));
           // The device table in the form the previous release left it. From 2.x that is the
           // address only (the id derived from it): a device whose model and serial the stored tree
           // knows moves to its 3.0.0 id at this start; the others tell theirs at the first contact
@@ -1743,9 +1709,6 @@ tests.integration(ADAPTER_DIR, {
           // or a reboot. From 3.0.0 on the table carries the final id next to the address; a 3.x tree
           // started with 2.x rows is a state no installation reaches.
           await resetInstanceNative(harness, await fixtureNative({}, devicesNotFinal(previous).length > 0));
-          // The update is read in with the receivers switched on (Y-01) — the suite above proves the switched-off side.
-          // After fixtureNative: it brings up fresh fake devices, in the state their captures show.
-          fixtures.power(true);
           // The inventory was written in FIRST_LANGUAGE: labels an adapter localises itself (`states`)
           // only compare in the same language.
           await setSystemLanguage(harness, FIRST_LANGUAGE);
@@ -1786,7 +1749,7 @@ tests.integration(ADAPTER_DIR, {
 
         it("every current object carries the current texts and roles", async function () {
           this.timeout(60000);
-          const current = freshSwitchedOn;
+          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
           const live = await dumpObjects(harness);
           const stale = [];
           for (const [id, obj] of Object.entries(current)) {
@@ -1887,7 +1850,7 @@ tests.integration(ADAPTER_DIR, {
 
         it("objects the release removed are gone (no leftovers)", async function () {
           this.timeout(60000);
-          const current = freshSwitchedOn;
+          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
           const live = await dumpObjects(harness);
           const leftovers = Object.keys(previous).filter(id => !(id in current) && id in live);
           assert.deepStrictEqual(leftovers, [], `leftover objects:\n${leftovers.join("\n")}`);
@@ -1906,7 +1869,7 @@ tests.integration(ADAPTER_DIR, {
         // A kept object that is deleted and created anew makes the suite judge a fresh object, not the
         // upgraded one (hassemu v1.43.1: the stale cleanup removed 18 seeded clients before the dump).
         it("deletes no object the release keeps", function () {
-          const current = freshSwitchedOn;
+          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
           const lost = [...new Set(watch.deleted)].filter(id => id in previous && id in current);
           assert.deepStrictEqual(lost, [], `kept objects deleted during the upgrade:\n${lost.join("\n")}`);
         });
@@ -1967,7 +1930,7 @@ tests.integration(ADAPTER_DIR, {
         // a datapoint created because the old one was recorded is exactly that).
         it("creates nothing a fresh installation lacks", async function () {
           this.timeout(30000);
-          const current = freshSwitchedOn;
+          const current = JSON.parse(fs.readFileSync(INVENTORY, "utf8"));
           const live = await dumpObjects(harness);
           const extra = Object.keys(live).filter(id => !(id in current));
           assert.deepStrictEqual(extra, [], `objects a fresh installation does not have:\n${extra.join("\n")}`);

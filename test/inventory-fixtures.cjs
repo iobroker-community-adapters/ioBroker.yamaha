@@ -299,6 +299,10 @@ async function startFixtureDevices() {
     const answers = fixture.ynca ? { ...fixture.ynca.answers } : undefined;
     if (answers) {
       yncaAnswers.push({ answers, captured: answers["MAIN:PWR"] });
+      // Switched on by default: a fresh installation is read in completely only from a receiver that is on (Y-01).
+      if (answers["MAIN:PWR"] !== undefined) {
+        answers["MAIN:PWR"] = "On";
+      }
     }
     const ynca = answers ? await startYnca(answers) : undefined;
     // One HTTP port per device serves BOTH HTTP protocols by path, like the real port 80; a
