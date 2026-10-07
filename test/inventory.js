@@ -108,6 +108,9 @@ const HANG_DEADLINE_MS = 120000;
 // Round 100 (krobi 2026-10-07 10:14: API limits are defined in the adapter and checked): the one place the adapter defines
 // the limits of every counterpart it calls — it imports the file itself, and the suite counts every call against it.
 const API_LIMITS = path.join(ADAPTER_DIR, "src", "lib", "api-limits.json");
+// Round 101 (krobi 2026-10-07 15:54, GV-13 as the fleet rule: never `ack: true` unless the device confirmed): how long
+// after the last command the suite waits — no counterpart answers in that time, so no command may be confirmed.
+const COMMAND_WINDOW_MS = 30000;
 // Round 87 (krobi 2026-10-03 00:27, 11:38): the address the user picks in the instance settings (jsonConfig `type: "ip"`)
 // is the only one the adapter listens, sends and connects on — the cloud included; one the host does not carry falls back
 // to every address with exactly one warning. ADDRESS_KEY is the native key of that field, undefined where the adapter
@@ -1042,6 +1045,76 @@ function fits(call, match) {
   return Object.entries(match).every(([key, value]) => call[key] === value);
 }
 
+/**
+ * Round 101 (krobi 2026-10-07 15:54): a value the adapter can be told for a writable state — another entry of `states`,
+ * the other boolean (a button: a press), a number inside min/max other than now, another colour, the current text; null
+ * where none exists (the state gets no command).
+ *
+ * @param {Record<string, any>} common the state's common
+ * @param {any} now its value now
+ */
+function commandValue(common, now) {
+  if (common.states && typeof common.states === "object") {
+    const keys = Array.isArray(common.states) ? common.states.map(String) : Object.keys(common.states);
+    const next = keys.find(k => k !== String(now));
+    if (next === undefined) {
+      return null;
+    }
+    return common.type === "number" ? Number(next) : common.type === "boolean" ? next === "true" : next;
+  }
+  if (common.type === "boolean") {
+    return String(common.role ?? "").startsWith("button") ? true : now !== true;
+  }
+  if (common.type === "number") {
+    const min = typeof common.min === "number" ? common.min : 0;
+    const max = typeof common.max === "number" ? common.max : min + 100;
+    const step = typeof common.step === "number" && common.step > 0 ? common.step : 1;
+    const pick = now === min ? Math.min(max, min + step) : min;
+    return pick === now ? null : pick;
+  }
+  if (common.type === "string" && typeof now === "string" && now !== "") {
+    return /^#[0-9a-f]{6}$/i.test(now) ? (now.toLowerCase() === "#123456" ? "#654321" : "#123456") : now;
+  }
+  return null;
+}
+
+/**
+ * Round 101 (krobi 2026-10-07 15:54, GV-13 as the fleet rule for every adapter that talks to devices: "never set ack true
+ * unless the device confirmed it"): every counterpart hangs and nothing reaches the adapter any more (the
+ * network hook with `*` in HANG_FLAG), then every writable state of the adapter gets one command (commandValue), and the
+ * suite waits COMMAND_WINDOW_MS. Returns the commands, every `ack: true` the adapter wrote on them, and every call the
+ * hook counted with a command as its cause — the calls a command made, awaited or not.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ */
+async function playCommands(harness) {
+  const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
+  const writable = list.rows.map(r => r.value).filter(o => o?.type === "state" && o.common?.write !== false);
+  const run = { writes: [], acks: [], since: Date.now() };
+  const acknowledged = (id, state) => {
+    if (id.startsWith(NS) && state?.ack === true && state.from === `system.adapter.${ADAPTER}.0`) {
+      run.acks.push([id, state.ts]);
+    }
+  };
+  fs.writeFileSync(HANG_FLAG, "*");
+  harness.on("stateChange", acknowledged);
+  try {
+    for (const obj of writable) {
+      const val = commandValue(obj.common, (await harness.states.getStateAsync(obj._id))?.val ?? null);
+      if (val !== null) {
+        run.writes.push({ id: obj._id, val, t: Date.now() });
+        await harness.states.setStateAsync(obj._id, { val, ack: false });
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, COMMAND_WINDOW_MS));
+  } finally {
+    harness.removeListener("stateChange", acknowledged);
+    fs.rmSync(HANG_FLAG, { force: true });
+  }
+  run.calls = readCalls().filter(c => c.t >= run.since && c.cause !== undefined && !c.kind.startsWith("hang-"));
+  return run;
+}
+
 /** Round 87: the network records (`<pid>.net`, test/network-hook.js) present now — a suite reads only the ones after. */
 function networkFiles() {
   return new Set(fs.readdirSync(RESOURCE_DIR).filter(f => f.endsWith(".net")));
@@ -1756,6 +1829,64 @@ tests.integration(ADAPTER_DIR, {
           }
         }
         assert.deepStrictEqual(over, [], `calls above a declared limit:\n${over.join("\n")}`);
+      });
+    });
+
+    // Round 101 (krobi 2026-10-07 15:54, GV-13 as the fleet rule): no counterpart answers, every writable state gets
+    // one command — a command that reached a counterpart stays unconfirmed (`ack: false`), and where the adapter has
+    // writable states at least one command reaches a counterpart (otherwise the suite judged nothing).
+    suite("a command nobody answers stays unconfirmed", getHarness => {
+      let harness;
+      let watch;
+      let restarts;
+      let command;
+      before(async function () {
+        this.timeout(
+          COMMAND_WINDOW_MS + OUTAGE_DEADLINE_MS + STOP_DEADLINE_MS + RESTART_DELAY_MS + START_DEADLINE_MS + 120000,
+        );
+        harness = getHarness();
+        clearInstanceData(harness);
+        watch = await watchObjectWrites(harness);
+        await resetInstanceNative(harness, await fixtureNative());
+        showsEveryDevice();
+        await setSystemLanguage(harness, FIRST_LANGUAGE);
+        restarts = playControllerRestarts(harness, watch, HOOK, NETWORK_HOOK);
+        await harness.startAdapterAndWait(false, adapterEnv(HOOK, NETWORK_HOOK));
+        await feedFixtures(harness);
+        await restarts.done;
+        await waitForAdapterWork(harness);
+        command = await playCommands(harness);
+      });
+      // Mocha may give up on before() while playCommands still waits — the next suite must not start silenced.
+      after(() => fs.rmSync(HANG_FLAG, { force: true }));
+
+      after(async function () {
+        this.timeout(60000);
+        await harness?.stopAdapter();
+        await fixtures?.stop();
+      });
+
+      it("confirms no command no counterpart answered", function () {
+        const reached = new Set(command.calls.map(c => c.cause));
+        const confirmed = command.writes
+          .filter(w => reached.has(w.id) && command.acks.some(([id, ts]) => id === w.id && ts >= w.t))
+          .map(w => `${w.id} = ${JSON.stringify(w.val)}`);
+        assert.deepStrictEqual(
+          confirmed,
+          [],
+          `acknowledged although no counterpart answered:\n${confirmed.join("\n")}`,
+        );
+      });
+
+      it("reaches a counterpart with its commands", function () {
+        assert.ok(
+          command.writes.length === 0 || command.calls.length > 0,
+          `none of ${command.writes.length} commands reached a counterpart in its own context — a queue that started before the command, or no device command at all: the suite judged nothing`,
+        );
+      });
+
+      it("restarts at most once for its own instance object", function () {
+        assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
       });
     });
 

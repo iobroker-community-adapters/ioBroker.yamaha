@@ -15,6 +15,8 @@ const fs = require("node:fs");
 const net = require("node:net");
 const dgram = require("node:dgram");
 const path = require("node:path");
+const { AsyncLocalStorage } = require("node:async_hooks");
+const { EventEmitter } = require("node:events");
 
 const dir = process.env.RESOURCE_PROBE_DIR;
 if (!dir) {
@@ -69,12 +71,30 @@ const record = (entry, hook = byHook()) =>
 //    connection — one JSON line per call in RESOURCE_PROBE_DIR/<pid>.calls, against the limits the adapter declares in
 //    src/lib/api-limits.json (round 100, krobi 2026-10-07 10:14: API limits are defined in the adapter and checked).
 const calls = path.join(dir, `${process.pid}.calls`);
+// 5. It names the command behind a call (round 101, krobi 2026-10-07 15:54, GV-13 as the fleet rule: never `ack: true`
+//    unless the device confirmed): a state change the adapter gets with `ack: false` runs its listeners inside an async
+//    context that carries the state's id, and every call made from there — awaited or not, through promises, timers and
+//    sockets created on the way — is counted with `cause`. A call from a loop that started before the command (a queue
+//    worker created at the start) carries no cause.
+const command = new AsyncLocalStorage();
+const emitEvent = EventEmitter.prototype.emit;
+function causeEmit(event, ...args) {
+  if (event === "stateChange" && typeof args[0] === "string" && args[1] && args[1].ack === false) {
+    return command.run(args[0], () => emitEvent.call(this, event, ...args));
+  }
+  return emitEvent.call(this, event, ...args);
+}
+EventEmitter.prototype.emit = causeEmit;
 let nested = 0;
 const count = (kind, host, port, hook = byHook()) => {
   if (nested > 0 || keep.has(Number(port)) || hook) {
     return;
   }
-  fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind, host, port })}\n`);
+  const cause = command.getStore();
+  fs.appendFileSync(
+    calls,
+    `${JSON.stringify(cause === undefined ? { t: Date.now(), kind, host, port } : { t: Date.now(), kind, host, port, cause })}\n`,
+  );
 };
 const ids = new WeakMap();
 let nextId = 0;
@@ -89,13 +109,15 @@ const down = () => fs.existsSync(flag);
 //    `hang` in RESOURCE_PROBE_DIR names a host, a connection to it never completes, a fetch to it never settles, a
 //    datagram to it is dropped — a device that is there and does not answer, which a refusal would not show. When the
 //    adapter gives such an attempt up (closes the socket, aborts the fetch) a `hang-end` line goes into the call log.
+//    Round 101: `*` in the file lets EVERY counterpart hang and keeps every answer away — nothing arrives on an open
+//    connection either, and no datagram — a command then reaches no device that could confirm it.
 const hangFlag = path.join(dir, "hang");
+const hangWord = () => (fs.existsSync(hangFlag) ? fs.readFileSync(hangFlag, "utf8").trim() : "");
 const hung = host => {
-  if (!fs.existsSync(hangFlag)) {
-    return false;
-  }
-  return String(host) === fs.readFileSync(hangFlag, "utf8").trim();
+  const word = hangWord();
+  return word !== "" && (word === "*" || String(host) === word);
 };
+const silent = () => hangWord() === "*";
 let hangNext = false;
 // A device that hangs takes the connection and never answers: the hung connection goes to this black hole, opened before
 // the listen record below is patched (no record), so the adapter's own timeouts — connect, TLS, request — run as with a
@@ -132,8 +154,11 @@ const optionsOf = args => {
 
 // Outgoing TCP and TLS (TLS opens its socket through net): http, MQTT clients, and undici behind fetch.
 const open = new Set();
-const track = socket => {
+// Round 101: where each connection goes, as connect named it — a command written on it later is counted for that target
+const targets = new WeakMap();
+const track = (socket, opts) => {
   open.add(socket);
+  targets.set(socket, { host: opts.host ?? "localhost", port: Number(opts.port) });
   socket.once("close", () => open.delete(socket));
 };
 const connect = net.Socket.prototype.connect;
@@ -150,7 +175,7 @@ function cutConnect(...args) {
     const name = typeof host === "string" ? host : opts.host;
     hangStart(name);
     this.once("close", () => hangEnd(name));
-    track(this);
+    track(this, opts);
     return connect.call(this, { port: blackHole, host: "127.0.0.1" });
   }
   const result = connect.apply(this, args);
@@ -170,13 +195,37 @@ function cutConnect(...args) {
       localAddress: opts.localAddress,
     });
   }
-  track(this);
+  track(this, opts);
   if (down()) {
     process.nextTick(() => this.destroy(refused()));
   }
   return result;
 }
 net.Socket.prototype.connect = cutConnect;
+// Round 101: while everything hangs, nothing the counterparts send reaches the adapter on a connection opened before.
+const socketEmit = net.Socket.prototype.emit;
+function cutSocketEmit(event, ...args) {
+  if (event === "data" && open.has(this) && silent()) {
+    return false;
+  }
+  return socketEmit.call(this, event, ...args);
+}
+net.Socket.prototype.emit = cutSocketEmit;
+// Round 101: a command written on a connection opened before it (a device protocol on one socket, MQTT) reaches that
+// counterpart too — counted with its cause, only while everything hangs, so the counts the limits judge stay as they were.
+const socketWrite = net.Socket.prototype.write;
+function causeWrite(...args) {
+  const cause = command.getStore();
+  const target = targets.get(this);
+  if (cause !== undefined && target !== undefined && open.has(this) && silent()) {
+    fs.appendFileSync(
+      calls,
+      `${JSON.stringify({ t: Date.now(), kind: "tcp", host: target.host, port: target.port, cause })}\n`,
+    );
+  }
+  return socketWrite.apply(this, args);
+}
+net.Socket.prototype.write = causeWrite;
 
 // HTTP requests: the real host before any fixture hook reroutes it (this hook loads last, the adapter captures these).
 for (const mod of [require("node:http"), require("node:https")]) {
@@ -242,7 +291,7 @@ function cutServerEmit(event, ...args) {
       args[0].destroy();
       return false;
     }
-    track(args[0]);
+    track(args[0], { host: args[0].remoteAddress, port: args[0].remotePort });
   }
   return serverEmit.call(this, event, ...args);
 }
@@ -314,7 +363,10 @@ const sentTo = new Set();
 const hookSockets = new WeakMap();
 const send = dgram.Socket.prototype.send;
 function cutSend(...args) {
-  const at = args.findIndex(a => typeof a === "number");
+  // send(msg, port, address) or send(msg, offset, length, port, address), as node:dgram reads it — round 101: the first
+  // number was taken for the port, so the offset form (govee's LAN client) counted `localhost:0` and never hung
+  const portAt = typeof args[1] === "number" && typeof args[2] === "number" ? 3 : 1;
+  const at = typeof args[portAt] === "number" ? portAt : -1;
   const target = { port: args[at], host: typeof args[at + 1] === "string" ? args[at + 1] : "localhost" };
   const key = `${idOf(this)} ${target.host}:${target.port}`;
   // an unbound socket binds first and calls send again itself — that second call is the datagram
@@ -345,7 +397,7 @@ function cutSend(...args) {
 dgram.Socket.prototype.send = cutSend;
 const emit = dgram.Socket.prototype.emit;
 function cutEmit(event, ...args) {
-  if (event === "message" && down()) {
+  if (event === "message" && (down() || silent())) {
     return false;
   }
   return emit.call(this, event, ...args);
@@ -356,6 +408,9 @@ dgram.Socket.prototype.emit = cutEmit;
 function replaced() {
   const out = [];
   if (net.Socket.prototype.connect !== cutConnect) out.push("net.Socket.prototype.connect");
+  if (net.Socket.prototype.emit !== cutSocketEmit) out.push("net.Socket.prototype.emit");
+  if (net.Socket.prototype.write !== causeWrite) out.push("net.Socket.prototype.write");
+  if (EventEmitter.prototype.emit !== causeEmit) out.push("EventEmitter.prototype.emit");
   if (net.Server.prototype.listen !== recordListen) out.push("net.Server.prototype.listen");
   if (net.Server.prototype.emit !== cutServerEmit) out.push("net.Server.prototype.emit");
   if (Object.getOwnPropertyDescriptor(globalThis, "fetch")?.get !== getFetch) out.push("globalThis.fetch");
