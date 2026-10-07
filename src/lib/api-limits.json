@@ -1,0 +1,40 @@
+{
+  "counterparts": [
+    {
+      "name": "Yamaha receiver, YNCA",
+      "match": { "port": 50000, "kind": "tcp" },
+      "limits": [
+        {
+          "max": 10,
+          "seconds": 1,
+          "per": "host",
+          "source": "Yamaha YNCA specification: at least 100 ms between two commands (ynca-python protocol.py) — the command gate's YNCA spacing"
+        },
+        {
+          "max": 7,
+          "seconds": 60,
+          "per": "host",
+          "source": "own cap: one YNCA connection per receiver, a new one only after the reconnect backoff (1 s doubling to 60 s, at most 20 % earlier — lifecycle/reconnect-strategy.ts) — at most 7 attempts in a minute; measured 6 through the outage and hang suites, 2026-10-07"
+        }
+      ]
+    },
+    {
+      "name": "Yamaha receiver, MusicCast and XML (HTTP)",
+      "match": { "port": 80, "kind": "http" },
+      "limits": [
+        {
+          "max": 50,
+          "seconds": 1,
+          "per": "host",
+          "source": "own cap: requests to one receiver run one at a time through its command gate (Y-15); measured 40 within a second during a read-in against fixtures that answer at once, 2026-10-07"
+        },
+        {
+          "max": 100,
+          "seconds": 60,
+          "per": "host",
+          "source": "own cap: one read-in plus the steady polls (XML status every 60 s, MusicCast liveness every 60 s and keepalive every 5 min); measured 67 within a minute through the outage and hang suites, 2026-10-07"
+        }
+      ]
+    }
+  ]
+}

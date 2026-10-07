@@ -1,6 +1,7 @@
 "use strict";
 // Loaded into the adapter process by test/inventory.js as the LAST hook of `adapterEnv()` — in the suites "counterpart
-// gone and back", "chosen network address" and "missing network address" — so its patches sit outside every fixture hook.
+// gone and back", "one counterpart hangs", "chosen network address" and "missing network address" — so its patches sit
+// outside every fixture hook.
 // 1. It records where the process listens, binds, joins multicast groups, sends and connects: one JSON line per call in
 //    RESOURCE_PROBE_DIR/<pid>.net (krobi 2026-10-03 00:27: the chosen address is the only one the adapter uses).
 // 2. It plays a power cut of every counterpart: while the file `outage` exists in RESOURCE_PROBE_DIR, every network path
@@ -64,6 +65,17 @@ const byHook = () => {
 };
 const record = (entry, hook = byHook()) =>
   fs.appendFileSync(log, `${JSON.stringify(hook ? { ...entry, hook } : entry)}\n`);
+// 3. It counts every call to a counterpart with its time — each HTTP request, each fetch, each UDP datagram, each raw TCP
+//    connection — one JSON line per call in RESOURCE_PROBE_DIR/<pid>.calls, against the limits the adapter declares in
+//    src/lib/api-limits.json (round 100, krobi 2026-10-07 10:14: API limits are defined in the adapter and checked).
+const calls = path.join(dir, `${process.pid}.calls`);
+let nested = 0;
+const count = (kind, host, port, hook = byHook()) => {
+  if (nested > 0 || keep.has(Number(port)) || hook) {
+    return;
+  }
+  fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind, host, port })}\n`);
+};
 const ids = new WeakMap();
 let nextId = 0;
 const idOf = socket => {
@@ -73,6 +85,42 @@ const idOf = socket => {
   return ids.get(socket);
 };
 const down = () => fs.existsSync(flag);
+// 4. It lets ONE counterpart hang (round 100, krobi 2026-10-07 10:12: one device never blocks another): while the file
+//    `hang` in RESOURCE_PROBE_DIR names a host, a connection to it never completes, a fetch to it never settles, a
+//    datagram to it is dropped — a device that is there and does not answer, which a refusal would not show. When the
+//    adapter gives such an attempt up (closes the socket, aborts the fetch) a `hang-end` line goes into the call log.
+const hangFlag = path.join(dir, "hang");
+const hung = host => {
+  if (!fs.existsSync(hangFlag)) {
+    return false;
+  }
+  return String(host) === fs.readFileSync(hangFlag, "utf8").trim();
+};
+let hangNext = false;
+// A device that hangs takes the connection and never answers: the hung connection goes to this black hole, opened before
+// the listen record below is patched (no record), so the adapter's own timeouts — connect, TLS, request — run as with a
+// real device.
+let blackHole = 0;
+const hole = net.createServer(socket => socket.on("error", () => {}));
+hole.listen(0, "127.0.0.1", () => {
+  blackHole = hole.address().port;
+});
+hole.unref();
+// Each hung attempt that ends writes `hang-end`; when the last open one of a host has ended, `hang-idle` follows — the
+// moment the adapter has given that counterpart up for now (one channel with a short deadline is not giving it up).
+const hangOpen = new Map();
+const hangStart = host => {
+  hangOpen.set(host, (hangOpen.get(host) ?? 0) + 1);
+  fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-start", host })}\n`);
+};
+const hangEnd = host => {
+  fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-end", host })}\n`);
+  const left = (hangOpen.get(host) ?? 1) - 1;
+  hangOpen.set(host, left);
+  if (left === 0) {
+    fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-idle", host })}\n`);
+  }
+};
 const refused = () => Object.assign(new Error("connect ECONNREFUSED (outage switch)"), { code: "ECONNREFUSED" });
 const reset = () => Object.assign(new Error("read ECONNRESET (outage switch)"), { code: "ECONNRESET" });
 const optionsOf = args => {
@@ -91,11 +139,30 @@ const track = socket => {
 const connect = net.Socket.prototype.connect;
 function cutConnect(...args) {
   const opts = optionsOf(args);
+  // an http agent hands its request options on, with `path: null` — only a string path is a local socket
+  if (!keep.has(Number(opts.port)) && typeof opts.path !== "string" && (hangNext || hung(opts.host ?? "localhost"))) {
+    const host = hangNext || opts.host;
+    hangNext = false;
+    // an HTTP request to a hung host was counted where it began; a raw connection is counted here
+    if (!/node:_http_(client|agent)|node:https/.test(new Error().stack || "")) {
+      count("tcp", opts.host ?? "localhost", Number(opts.port));
+    }
+    const name = typeof host === "string" ? host : opts.host;
+    hangStart(name);
+    this.once("close", () => hangEnd(name));
+    track(this);
+    return connect.call(this, { port: blackHole, host: "127.0.0.1" });
+  }
   const result = connect.apply(this, args);
   if (keep.has(Number(opts.port))) {
     return result;
   }
-  if (opts.path === undefined) {
+  // Round 100: an http agent hands `path: null` on — the record missed every HTTP and TLS connection until then, so
+  // "chosen network address" never saw one (krobi 2026-10-03 11:38: the chosen address holds for the cloud too)
+  if (typeof opts.path !== "string") {
+    if (!/node:_http_(client|agent)|node:https/.test(new Error().stack || "")) {
+      count("tcp", opts.host ?? "localhost", Number(opts.port));
+    }
     record({
       kind: "connect",
       host: opts.host ?? "localhost",
@@ -110,6 +177,48 @@ function cutConnect(...args) {
   return result;
 }
 net.Socket.prototype.connect = cutConnect;
+
+// HTTP requests: the real host before any fixture hook reroutes it (this hook loads last, the adapter captures these).
+for (const mod of [require("node:http"), require("node:https")]) {
+  const secure = mod === require("node:https");
+  for (const name of ["request", "get"]) {
+    const original = mod[name];
+    mod[name] = function countRequest(...args) {
+      const first = args[0];
+      let host;
+      let port;
+      if (typeof first === "string" || first instanceof URL) {
+        const url = new URL(String(first));
+        host = url.hostname;
+        port = Number(url.port) || (secure ? 443 : 80);
+      } else if (first && typeof first === "object") {
+        host = first.hostname ?? first.host ?? "localhost";
+        port = Number(first.port) || (secure ? 443 : 80);
+      }
+      if (host !== undefined) {
+        count("http", String(host).replace(/:\d+$/, ""), port);
+      }
+      // a fixture hook below that calls http.request again is the same call, not a second one
+      nested++;
+      if (host !== undefined && hung(String(host).replace(/:\d+$/, ""))) {
+        hangNext = String(host).replace(/:\d+$/, "");
+        // a pooled keep-alive connection would answer it: the hung request opens its own
+        const at = typeof args[1] === "object" && args[1] !== null && typeof args[1] !== "function" ? 1 : 0;
+        if (at === 0 && (typeof args[0] === "string" || args[0] instanceof URL)) {
+          args.splice(1, 0, { agent: false });
+        } else {
+          args[at] = { ...args[at], agent: false };
+        }
+      }
+      try {
+        return original.apply(this, args);
+      } finally {
+        nested--;
+        hangNext = false;
+      }
+    };
+  }
+}
 
 // Listening TCP servers (http, fastify): the address the server really holds, once it listens.
 const listen = net.Server.prototype.listen;
@@ -141,8 +250,31 @@ net.Server.prototype.emit = cutServerEmit;
 
 // fetch: wrapped at the call, so a fixture hook that assigns globalThis.fetch is cut as well.
 let current = globalThis.fetch;
-const cutFetch = (...args) =>
-  down() ? Promise.reject(new TypeError("fetch failed", { cause: refused() })) : current(...args);
+const cutFetch = (...args) => {
+  try {
+    const url = new URL(args[0] instanceof Request ? args[0].url : String(args[0]));
+    count("http", url.hostname, Number(url.port) || (url.protocol === "https:" ? 443 : 80));
+  } catch {
+    // not a URL fetch would accept either — it rejects on its own
+  }
+  let target;
+  try {
+    target = new URL(args[0] instanceof Request ? args[0].url : String(args[0])).hostname;
+  } catch {
+    target = undefined;
+  }
+  if (target !== undefined && hung(target)) {
+    const signal = args[1]?.signal ?? (args[0] instanceof Request ? args[0].signal : undefined);
+    hangStart(target);
+    return new Promise((_resolve, reject) => {
+      signal?.addEventListener("abort", () => {
+        hangEnd(target);
+        reject(signal.reason ?? new DOMException("aborted", "AbortError"));
+      });
+    });
+  }
+  return down() ? Promise.reject(new TypeError("fetch failed", { cause: refused() })) : current(...args);
+};
 function getFetch() {
   return current && cutFetch;
 }
@@ -179,16 +311,30 @@ function recordEgress(iface) {
 }
 dgram.Socket.prototype.setMulticastInterface = recordEgress;
 const sentTo = new Set();
+const hookSockets = new WeakMap();
 const send = dgram.Socket.prototype.send;
 function cutSend(...args) {
   const at = args.findIndex(a => typeof a === "number");
   const target = { port: args[at], host: typeof args[at + 1] === "string" ? args[at + 1] : "localhost" };
   const key = `${idOf(this)} ${target.host}:${target.port}`;
+  // an unbound socket binds first and calls send again itself — that second call is the datagram
+  let bound = true;
+  try {
+    this.address();
+  } catch {
+    bound = false;
+  }
+  if (at !== -1 && bound) {
+    if (!hookSockets.has(this)) {
+      hookSockets.set(this, byHook());
+    }
+    count("udp", target.host, target.port, hookSockets.get(this));
+  }
   if (at !== -1 && !sentTo.has(key)) {
     sentTo.add(key);
     record({ kind: "send", id: idOf(this), host: target.host, port: target.port });
   }
-  if (!down()) {
+  if (!down() && !(at !== -1 && hung(target.host))) {
     return send.apply(this, args);
   }
   const cb = args.find(a => typeof a === "function");

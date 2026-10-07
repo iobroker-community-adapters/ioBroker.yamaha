@@ -1,15 +1,19 @@
 import type { Transport } from "../catalog/owner-policy";
+import { spacingMs } from "../api-limits";
 import { CommandGate, type CommandGateTimers } from "./command-gate";
 import { isIPv4, resolveIPv4 } from "../network-interfaces";
 
 /**
- * Minimum spacing between two commands, per transport. YNCA's 100 ms is Yamaha's
- * specification (`ynca-python` protocol.py: "YNCA spec specifies that there should be at
- * least 100 milliseconds between commands"). The HTTP transports have no documented
- * spacing — 0 ms, but they still run through a gate, which serialises them so an embedded
- * device never faces a burst of parallel requests.
+ * Minimum spacing between two commands, per transport. YNCA's comes from its limit in `api-limits.json` (Yamaha's
+ * specification, `ynca-python` protocol.py: "YNCA spec specifies that there should be at least 100 milliseconds between
+ * commands"). The HTTP transports have no documented spacing — 0 ms, but they still run through a gate, which serialises
+ * them so an embedded device never faces a burst of parallel requests.
  */
-export const COMMAND_SPACING_MS: Readonly<Record<Transport, number>> = { ynca: 100, yxc: 0, xml: 0 };
+export const COMMAND_SPACING_MS: Readonly<Record<Transport, number>> = {
+  ynca: spacingMs("Yamaha receiver, YNCA", 1),
+  yxc: 0,
+  xml: 0,
+};
 
 /**
  * The command gates of the device connections that run in this process, by transport and by every address their

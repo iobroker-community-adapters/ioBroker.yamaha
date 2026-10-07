@@ -101,6 +101,13 @@ const OUTAGE_DEADLINE_MS = 300000;
 // Once the adapter shows the outage, every counterpart stays gone at least this long and at least as long again as the
 // adapter took to show it — several of its own cycles, so a deletion after N missed cycles falls inside the window.
 const OUTAGE_HOLD_MS = 30000;
+// Round 100 (krobi 2026-10-07 10:12: one device never blocks another): while HANG_FLAG names a host, the network hook lets
+// that one counterpart hang — it takes nothing and answers nothing. How long the other counterparts may take to be reached.
+const HANG_FLAG = path.join(RESOURCE_DIR, "hang");
+const HANG_DEADLINE_MS = 120000;
+// Round 100 (krobi 2026-10-07 10:14: API limits are defined in the adapter and checked): the one place the adapter defines
+// the limits of every counterpart it calls — it imports the file itself, and the suite counts every call against it.
+const API_LIMITS = path.join(ADAPTER_DIR, "src", "lib", "api-limits.json");
 // Round 87 (krobi 2026-10-03 00:27, 11:38): the address the user picks in the instance settings (jsonConfig `type: "ip"`)
 // is the only one the adapter listens, sends and connects on — the cloud included; one the host does not carry falls back
 // to every address with exactly one warning. ADDRESS_KEY is the native key of that field, undefined where the adapter
@@ -938,6 +945,103 @@ async function playReports(harness, watch) {
   return run;
 }
 
+/** Round 100: every call the network hook counted so far (`<pid>.calls`), oldest first. */
+function readCalls() {
+  return fs
+    .readdirSync(RESOURCE_DIR)
+    .filter(f => f.endsWith(".calls"))
+    .flatMap(f =>
+      fs
+        .readFileSync(path.join(RESOURCE_DIR, f), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map(l => ({ ...JSON.parse(l), pid: f.slice(0, -".calls".length) })),
+    )
+    .sort((a, b) => a.t - b.t);
+}
+
+/** Round 100: one channel to a counterpart — the kind of call, the host and the port. */
+function channel(c) {
+  return `${c.kind} ${c.host}:${c.port}`;
+}
+
+/**
+ * Round 100 (krobi 2026-10-07 10:12: one device never blocks another): the counterpart the adapter reached first in the
+ * starts before this suite hangs from the start of the next one — it takes the connection and never answers. The verdict
+ * compares with `hang-idle`, the moment the adapter has no attempt at it open any more: a start loop that awaits the hung
+ * device reaches the others only after that. A queue shared by every device AFTER their first contact is not seen — a
+ * measured boundary (round 100, yamaha copy with one planted MusicCast queue: green). Returns it
+ * and every channel of the OTHER counterparts in those starts (a device reached over one channel can still wait on the hung
+ * one over another); `hung` is null where there are fewer than two counterparts — the rule does not apply there.
+ */
+function startHang() {
+  const calls = readCalls().filter(c => !c.kind.startsWith("hang-"));
+  const hosts = [...new Set(calls.map(c => c.host))];
+  if (hosts.length < 2) {
+    return { hung: null, others: [], since: Date.now() };
+  }
+  fs.writeFileSync(HANG_FLAG, hosts[0]);
+  const others = [...new Set(calls.filter(c => c.host !== hosts[0]).map(channel))];
+  return { hung: hosts[0], others, since: Date.now() };
+}
+
+/**
+ * Round 100: wait until every other counterpart was reached, at most HANG_DEADLINE_MS, then let the hung one go. Returns
+ * every call since the start; feedFixtures runs alongside, because it may wait for the hung counterpart too.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {{ hung: string | null, others: string[], since: number }} hang what startHang chose
+ */
+async function playHang(harness, hang, restarts) {
+  try {
+    if (hang.hung === null) {
+      return { ...hang, calls: [] };
+    }
+    const fed = feedFixtures(harness).then(
+      () => undefined,
+      err => err,
+    );
+    let calls = [];
+    for (;;) {
+      // A restart the host plays ends the process, and its hung connections close as if it gave up: only the process
+      // started last is judged, its deadline counting from its own first call (a restart costs it nothing).
+      await restarts.done;
+      const all = readCalls().filter(c => c.t >= hang.since);
+      const pid = [...new Set(all.map(c => c.pid))].at(-1);
+      calls = all.filter(c => c.pid === pid);
+      if (hang.others.every(k => calls.some(c => !c.kind.startsWith("hang-") && channel(c) === k))) {
+        break;
+      }
+      if (Date.now() > (calls[0]?.t ?? hang.since) + HANG_DEADLINE_MS) {
+        break;
+      }
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    void fed;
+    return { ...hang, calls };
+  } finally {
+    fs.rmSync(HANG_FLAG, { force: true });
+  }
+}
+
+/**
+ * Round 100 (krobi 2026-10-07 10:14): the limits the adapter defines — `counterparts[]`, each with `name`, `match`
+ * (`host`, `port`, `kind`: http, tcp or udp — every field given must fit) and `limits[]` (`max` calls in `seconds`, `per`
+ * account or host, and the `source`: a link to the documentation, a measurement with its date, or the adapter's own cap).
+ */
+function apiLimits() {
+  assert.ok(
+    fs.existsSync(API_LIMITS),
+    "src/lib/api-limits.json is missing — the adapter defines no limit for the counterparts it calls",
+  );
+  return JSON.parse(fs.readFileSync(API_LIMITS, "utf8")).counterparts;
+}
+
+/** Round 100: whether a counted call belongs to a declared counterpart. */
+function fits(call, match) {
+  return Object.entries(match).every(([key, value]) => call[key] === value);
+}
+
 /** Round 87: the network records (`<pid>.net`, test/network-hook.js) present now — a suite reads only the ones after. */
 function networkFiles() {
   return new Set(fs.readdirSync(RESOURCE_DIR).filter(f => f.endsWith(".net")));
@@ -1557,6 +1661,101 @@ tests.integration(ADAPTER_DIR, {
 
       it("restarts at most once for its own instance object", function () {
         assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
+      });
+    });
+
+    // Round 100 (krobi 2026-10-07 10:12/10:14): one counterpart hangs from the start — the adapter reaches every other one
+    // before it gives up on the hung one, so one device never blocks another. Every call of this run and the one before
+    // goes to a counterpart the adapter declares in src/lib/api-limits.json, and stays within every limit there.
+    suite("one counterpart hangs", getHarness => {
+      let harness;
+      let watch;
+      let restarts;
+      let hang;
+      before(async function () {
+        this.timeout(HANG_DEADLINE_MS + STOP_DEADLINE_MS + RESTART_DELAY_MS + START_DEADLINE_MS + 120000);
+        harness = getHarness();
+        clearInstanceData(harness);
+        watch = await watchObjectWrites(harness);
+        await resetInstanceNative(harness, await fixtureNative());
+        showsEveryDevice();
+        await setSystemLanguage(harness, FIRST_LANGUAGE);
+        restarts = playControllerRestarts(harness, watch, HOOK, NETWORK_HOOK);
+        hang = startHang();
+        await harness.startAdapterAndWait(false, adapterEnv(HOOK, NETWORK_HOOK));
+        hang = await playHang(harness, hang, restarts);
+      });
+      // Mocha may give up on before() while playHang still waits — the next suite must not start with a hung counterpart.
+      after(() => fs.rmSync(HANG_FLAG, { force: true }));
+
+      after(async function () {
+        this.timeout(60000);
+        await harness?.stopAdapter();
+        await fixtures?.stop();
+      });
+
+      it("reaches every other counterpart before it gives up on a hung one", function () {
+        assert.ok(
+          hang.hung === null || hang.calls.some(c => c.kind === "hang-start" && c.host === hang.hung),
+          `${hang.hung} never hung — a pooled connection or a hook below answered for it`,
+        );
+        const end = hang.calls.find(c => c.kind === "hang-idle" && c.host === hang.hung)?.t ?? Infinity;
+        const late = hang.others.filter(
+          k => !(hang.calls.find(c => !c.kind.startsWith("hang-") && channel(c) === k)?.t < end),
+        );
+        assert.deepStrictEqual(
+          late,
+          [],
+          `reached only after the adapter gave up on the hung ${hang.hung}, or never:\n${late.join("\n")}`,
+        );
+      });
+
+      it("restarts at most once for its own instance object", function () {
+        assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
+      });
+
+      it("calls only counterparts it declares", function () {
+        const declared = apiLimits();
+        const unknown = [
+          ...new Set(
+            readCalls()
+              .filter(c => !c.kind.startsWith("hang-") && !declared.some(d => fits(c, d.match)))
+              .map(c => `${c.kind} ${c.host}:${c.port}`),
+          ),
+        ];
+        assert.deepStrictEqual(
+          unknown,
+          [],
+          `calls to counterparts src/lib/api-limits.json does not declare:\n${unknown.join("\n")}`,
+        );
+      });
+
+      it("stays within every limit it declares", function () {
+        const calls = readCalls().filter(c => !c.kind.startsWith("hang-"));
+        const over = [];
+        for (const d of apiLimits()) {
+          for (const limit of d.limits) {
+            const lanes = new Map();
+            for (const c of calls.filter(c => fits(c, d.match))) {
+              const lane = limit.per === "host" ? c.host : "account";
+              lanes.set(lane, [...(lanes.get(lane) ?? []), c.t]);
+            }
+            for (const [lane, times] of lanes) {
+              for (let i = 0, j = 0; j < times.length; j++) {
+                while (times[j] - times[i] >= limit.seconds * 1000) {
+                  i++;
+                }
+                if (j - i + 1 > limit.max) {
+                  over.push(
+                    `${d.name} (${lane}): ${j - i + 1} calls within ${limit.seconds} s, at most ${limit.max} (${limit.source})`,
+                  );
+                  break;
+                }
+              }
+            }
+          }
+        }
+        assert.deepStrictEqual(over, [], `calls above a declared limit:\n${over.join("\n")}`);
       });
     });
 

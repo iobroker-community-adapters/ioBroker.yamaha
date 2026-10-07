@@ -70,6 +70,7 @@
   "main": "build/main.js",
   "files": [
     "build/",
+    "src/lib/api-limits.json",
     "admin/",
     "io-package.json",
     "LICENSE"
