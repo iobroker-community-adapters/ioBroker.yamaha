@@ -126,6 +126,12 @@ const CHOSEN_ADDRESS = Object.values(require("node:os").networkInterfaces())
   .flat()
   .find(i => (i.family === "IPv4" || i.family === 4) && !i.internal)?.address;
 const MISSING_ADDRESS = "192.0.2.1";
+// Round 97 (krobi 2026-10-06 19:07–19:14, page "Diagnosebericht — Flottenstandard"): an adapter with a diagnostics
+// report carries the fleet master src/lib/diagnostics/report-jobs.ts; the card asks every REPORT_POLL_MS whether a
+// started report is done, and gives up after REPORT_DEADLINE_MS.
+const DIAGNOSTICS_REPORT = fs.existsSync(path.join(ADAPTER_DIR, "src", "lib", "diagnostics", "report-jobs.ts"));
+const REPORT_POLL_MS = 2000;
+const REPORT_DEADLINE_MS = 180000;
 /** A table row whose name is the adapter's own `info` (suite "a name that is the adapter's own"); nothing answers there. */
 const RESERVED_ROW = { name: "info", ip: "127.0.0.252" };
 
@@ -828,6 +834,108 @@ async function playOutage(harness, watch) {
     .slice(outage.line)
     .filter(l => l.from === `${ADAPTER}.0`);
   return outage;
+}
+
+/**
+ * Round 97: one `diagnostics` message to the adapter and its answer, as the admin card sends it.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {{ action: string }} message the message
+ */
+function askDiagnostics(harness, message) {
+  const answer = new Promise(resolve => harness.sendTo(`${ADAPTER}.0`, "diagnostics", message, resolve));
+  return withinDeadline(answer, REPORT_DEADLINE_MS, `no answer to the diagnostics message ${message.action}`);
+}
+
+/**
+ * Round 97 (DB-01: a report is made and downloaded, never stored by the adapter): every file in the instance's data
+ * folder and in the file store of its namespace, with size and modification time.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ */
+function instanceFiles(harness) {
+  const files = {};
+  const walk = dir => {
+    for (const entry of fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }) : []) {
+      const file = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(file);
+      } else {
+        const stat = fs.statSync(file);
+        files[path.relative(harness.testDir, file)] = `${stat.size} ${stat.mtimeMs}`;
+      }
+    }
+  };
+  const data = path.join(harness.testDir, "iobroker-data");
+  walk(path.join(data, `${ADAPTER}.0`));
+  walk(path.join(data, "files", `${ADAPTER}.0`));
+  return files;
+}
+
+/**
+ * Round 97 (krobi 2026-10-06, DB-01 to DB-13): ask for every device's report the way the admin card does — `list`, then
+ * `start` and `result` every REPORT_POLL_MS until it is done — first with every counterpart there, then with every
+ * counterpart gone (the outage switch, until OUTAGE_SHOWN shows it). Returns the devices and reports of both rounds, the
+ * files, state keys and deletions before and after, the window of the reports, and every value the adapter wrote while
+ * the counterparts were gone and it made the reports.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {{ deleted: string[] }} watch the suite's write watcher (watchObjectWrites)
+ */
+async function playReports(harness, watch) {
+  await harness.enableSendTo();
+  const fetchReport = async device => {
+    const started = await askDiagnostics(harness, { action: "start", device });
+    assert.ok(
+      typeof started?.job === "string",
+      `start of the report for ${device} answered ${JSON.stringify(started)}`,
+    );
+    const deadline = Date.now() + REPORT_DEADLINE_MS;
+    for (;;) {
+      await new Promise(resolve => setTimeout(resolve, REPORT_POLL_MS));
+      const answer = await askDiagnostics(harness, { action: "result", job: started.job });
+      if (!answer?.pending) {
+        return { device, answer };
+      }
+      assert.ok(Date.now() < deadline, `the report for ${device} was not done (deadline ${REPORT_DEADLINE_MS} ms)`);
+    }
+  };
+  const run = {
+    files: instanceFiles(harness),
+    keys: new Set(await harness.states.getKeys(`${NS}*`)),
+    deleted: watch.deleted.length,
+    start: Date.now(),
+    reports: [],
+    offline: [],
+    writes: [],
+  };
+  run.devices = (await askDiagnostics(harness, { action: "list" }))?.devices ?? [];
+  for (const device of run.devices) {
+    run.reports.push(await fetchReport(device.value));
+  }
+  const record = (id, state) => {
+    if (id.startsWith(NS) && (!state || state.from === `system.adapter.${ADAPTER}.0`)) {
+      run.writes.push(id);
+    }
+  };
+  fs.writeFileSync(OUTAGE_FLAG, "");
+  try {
+    await waitForStates(harness, OUTAGE_SHOWN, "the adapter did not show the outage");
+    // past the gap a finished report keeps before the same device's next one
+    await new Promise(resolve => setTimeout(resolve, REPORT_POLL_MS));
+    harness.on("stateChange", record);
+    run.offlineDevices = (await askDiagnostics(harness, { action: "list" }))?.devices ?? [];
+    for (const device of run.offlineDevices) {
+      run.offline.push(await fetchReport(device.value));
+    }
+  } finally {
+    harness.removeListener("stateChange", record);
+    run.end = Date.now();
+    fs.rmSync(OUTAGE_FLAG, { force: true });
+  }
+  run.filesAfter = instanceFiles(harness);
+  run.keysAfter = await harness.states.getKeys(`${NS}*`);
+  return run;
 }
 
 /** Round 87: the network records (`<pid>.net`, test/network-hook.js) present now — a suite reads only the ones after. */
@@ -1583,6 +1691,101 @@ tests.integration(ADAPTER_DIR, {
             true,
             `lines naming ${MISSING_ADDRESS}:\n${said.join("\n")}`,
           );
+        });
+
+        it("restarts at most once for its own instance object", function () {
+          assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
+        });
+      });
+    }
+
+    // Round 97 (krobi 2026-10-06 19:07–19:14): the diagnostics report of every device, asked for like the admin card,
+    // with every counterpart there and with every counterpart gone. A report adds no datapoint ("db-10 NIEMALS!"),
+    // writes no value and no file (DB-01) — and an unconnected device is listed as such and not read live (DB-03).
+    if (DIAGNOSTICS_REPORT) {
+      suite("diagnostics report", getHarness => {
+        let harness;
+        let watch;
+        let restarts;
+        let reports;
+        before(async function () {
+          this.timeout(3 * OUTAGE_DEADLINE_MS + 120000);
+          harness = getHarness();
+          clearInstanceData(harness);
+          watch = await watchObjectWrites(harness);
+          await resetInstanceNative(harness, await fixtureNative());
+          showsEveryDevice();
+          await setSystemLanguage(harness, FIRST_LANGUAGE);
+          restarts = playControllerRestarts(harness, watch, HOOK, NETWORK_HOOK);
+          await harness.startAdapterAndWait(false, adapterEnv(HOOK, NETWORK_HOOK));
+          await feedFixtures(harness);
+          await restarts.done;
+          await waitForAdapterWork(harness);
+          reports = await playReports(harness, watch);
+        });
+        // Mocha may give up on before() while playReports still waits — the next suite must not start cut.
+        after(() => fs.rmSync(OUTAGE_FLAG, { force: true }));
+
+        after(async function () {
+          this.timeout(60000);
+          await harness?.stopAdapter();
+          await fixtures?.stop();
+        });
+
+        it("hands over a report for every device", function () {
+          assert.ok(reports.devices.length > 0, "the adapter lists no device — feedFixtures gives it none");
+          const version = require(path.join(ADAPTER_DIR, "io-package.json")).common.version.replace(
+            /[.*+?^${}()|[\]\\]/g,
+            "\\$&",
+          );
+          const name = new RegExp(`^${ADAPTER}_[A-Za-z0-9_-]+_v${version}_\\d{4}-\\d{2}-\\d{2}_\\d{6}\\.json$`);
+          const wrong = [...reports.reports, ...reports.offline]
+            .filter(
+              ({ answer }) =>
+                !name.test(answer?.fileName) || JSON.parse(answer.content).adapter !== `iobroker.${ADAPTER}`,
+            )
+            .map(({ device, answer }) => `${device}: ${JSON.stringify(answer).slice(0, 300)}`);
+          assert.deepStrictEqual(
+            wrong,
+            [],
+            `no report, or not named <adapter>_<device-id>_v<version>_<date>_<time>.json:\n${wrong.join("\n")}`,
+          );
+        });
+
+        it("lists an unconnected device as such and does not read it live", function () {
+          const listed = reports.offlineDevices.filter(d => d.connected !== false).map(d => d.value);
+          assert.deepStrictEqual(
+            listed,
+            [],
+            `listed as connected while every counterpart is gone:\n${listed.join("\n")}`,
+          );
+          const read = reports.offline
+            .filter(({ answer }) => JSON.parse(answer?.content ?? "{}").connected !== false)
+            .map(({ device }) => device);
+          assert.deepStrictEqual(read, [], `reports that do not say the device was not connected:\n${read.join("\n")}`);
+        });
+
+        it("adds no datapoint and writes no value for a report", function () {
+          const written = [
+            ...new Set(watch.times.filter(([, t]) => t >= reports.start && t <= reports.end).map(([id]) => id)),
+          ];
+          const added = reports.keysAfter.filter(id => !reports.keys.has(id));
+          const lost = [...new Set(watch.deleted.slice(reports.deleted))];
+          const shown = new Set(Object.keys(OUTAGE_SHOWN).map(id => `${NS}${id}`));
+          const values = [...new Set(reports.writes.filter(id => !shown.has(id)))];
+          const all = [
+            ...written.map(id => `object ${id}`),
+            ...added.map(id => `state ${id}`),
+            ...lost.map(id => `deleted ${id}`),
+            ...values.map(id => `value ${id}`),
+          ];
+          assert.deepStrictEqual(all, [], `the reports added, wrote or deleted:\n${all.join("\n")}`);
+        });
+
+        it("writes no file for a report", function () {
+          const files = [...new Set([...Object.keys(reports.files), ...Object.keys(reports.filesAfter)])];
+          const changed = files.filter(f => reports.files[f] !== reports.filesAfter[f]);
+          assert.deepStrictEqual(changed, [], `files the reports wrote, changed or removed:\n${changed.join("\n")}`);
         });
 
         it("restarts at most once for its own instance object", function () {
