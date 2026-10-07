@@ -302,15 +302,15 @@ Ablehnung — ein abgelehnter Wert steht nie länger als ein Rücklesen auf dem 
 Instanz-Einstellungen = Tabs `_main` (bisheriger Inhalt) + `_expert` („Experte", Name/Schlüssel wie govee). Der Experte-Tab
 ist die React-Komponente `src-admin/` (Vite + Module Federation, `ConfigCustomYamahaSet/Components/DiagnosticsConfig`),
 gebaut per `npm run build:admin` (`tasks.js`) nach `admin/custom/` — **getrackt** wie bei govee; `build:admin` installiert
-`src-admin` selbst (gemessen 2026-10-06 mit npm 10.9.7 aus frischem Checkout, wie der CI-Job `admin-component`). Gerät wählen → `sendTo diagnostics {action:"export"}` → Download im
-Browser, mit Hinweis + mitlaufenden Sekunden, solange der Bericht entsteht. **Keine Antwort wartet auf den Bericht:** die
-Browser-Verbindung des Admins ruft jede Antwort nach 30 s mit `"timeout"` auf (admin 8.0.23 `lib/js/socket.io.js`,
-`Date.now() + 3e4`), ein Bericht dauert bis zu einer Minute — `start` antwortet sofort mit einem Auftrag, die Karte fragt
-alle 2 s `result` (`pending`/`gone`/Bericht); der fertige Bericht liegt nur im Speicher, bis die Karte ihn abholt; einen nicht
-abgeholten verwirft die nächste Nachricht nach 10 Minuten (`DIAGNOSTICS_KEEP_MS`, ohne Timer — der Wächter Y-11 lässt dem
-Handler nur Lesendes), nie auf der Platte (Server-Test 2026-10-06: jeder Bericht über den Tab
-scheiterte nach 33 s). Der Link „GitHub-Issue öffnen“ öffnet das Formular `device-support.yml` mit Pflicht-Upload.
-`forgetLastTab` löscht den gemerkten Tab, sonst öffnet der Admin ab dem ersten Bericht auf „Experte".
+`src-admin` selbst (gemessen 2026-10-06 mit npm 10.9.7 aus frischem Checkout, wie der CI-Job `admin-component`).
+**Seit Werkbank-Runde 97 (2026-10-07) Flottenstandard** (Seite „Diagnosebericht — Flottenstandard“, `Entwicklung/
+CLAUDE_ADMIN_UI.md` § „Diagnosekarte und Reiter“): die Karte, `diagnosticsApi.ts`, `diagnosticsTexts.ts`, `tabMemory.ts`
+und unter `src/lib/diagnostics/` `byte-ring`, `log-ring`, `placeholders`, `report-file`, `report-jobs` sind Stufe-1-Master,
+byte-gleich. Der Ablauf (`start` sofort, `result` alle 2 s, weil der Admin-Browser jede Antwort nach 30 s abbricht; Bericht
+nur im Speicher bis zum Abholen; Rahmen mit `readMe`, Version, Zeit, `connected`; Dateiname) gehört dem Master `ReportJobs`.
+yamaha liefert nur `YamahaReportSource` (`diagnostics-handler.ts` — der Dateiname bleibt, Wächter Y-11 liest ihn): Geräte,
+das Live-Lesen eines verbundenen Receivers (der Mitschnitt wird davor genommen) und den Inhalt (`report.ts`
+`buildReportBody`).
 
 - **Auslesen nur lesend, über die bestehenden Clients und ihre Befehls-Schleuse** (`lib/diagnostics/device-capture.ts`,
   eingehängt in `attempt-device.ts` per `TransportConnectionAdapter.readWith`, durchgereicht Handle → Supervisor): YNCA
@@ -331,10 +331,12 @@ scheiterte nach 33 s). Der Link „GitHub-Issue öffnen“ öffnet das Formular 
   Verbindung. Der Bericht nimmt den Schnappschuss VOR seiner Live-Abfrage (`trail()`), sonst schöbe diese die Vorgeschichte
   aus den Ringen. Nichts davon wird Datenpunkt (Y-24). „Getrennt seit“ nimmt nach einem Neustart (Verlauf ohne
   „disconnected“) die letzte Änderung von `info.connection` des Geräts, solange es `false` sagt.
-- **Pseudonymisierung** (`pseudonymiser.ts`): IP/MAC/Mail per Form, Seriennummer/MAC/SSID/Netz-/Standort-/Zonennamen aus
-  ihren Fundstellen (YXC-Schlüssel, XML-Tags, YNCA `ZONENAME`), stabile Marker je Datei; Seriennummer behält die letzten 4.
-  Eingangsnamen (krobi 2026-10-06) aus YNCA `INPNAME…`, MusicCast `input_list`, XML `Input_Sel_Item` und dem `input`-Dropdown —
-  nur, wo sie vom Werksnamen abweichen (`USB`, `TUNER` bleiben lesbar).
+- **Platzhalter** (Master `placeholders.ts`: Adressen, MACs, Mail per Form; Namen als ganzes Wort): yamaha sammelt in
+  `personal-values.ts` (`PersonalValues`), was keine Form hat — Seriennummer/MAC/SSID/Netz-/Standort-/Zonennamen aus ihren
+  Fundstellen (YXC-Schlüssel, XML-Tags, YNCA `ZONENAME`), UUIDs (`analytics_info`, UPnP-UDN), Eingangsnamen (krobi
+  2026-10-06; YNCA `INPNAME…`, MusicCast `input_list`, XML `Input_Sel_Item`, `input`-Dropdown — nur, wo sie vom Werksnamen
+  abweichen) — und meldet sie mit `name()`; Geheimnisse leert `blankSecrets` vorher. Ein Name nur aus Protokollwörtern
+  („Radio“) wird nicht ersetzt — der Master ersetzt ganze Wörter mit `_`/`-` als Grenze und träfe sonst `net_radio`.
 
 ## Chroniken — verlegt nach `.claude/dev-history.md` (2026-09-21)
 

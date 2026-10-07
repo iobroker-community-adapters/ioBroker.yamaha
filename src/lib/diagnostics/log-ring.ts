@@ -1,3 +1,8 @@
+// Fleet master (.consistency-master/src/lib/diagnostics/log-ring.ts) — never edit the copy in an adapter.
+//
+// Diagnostics report standard (krobi 2026-10-06, page "Diagnosebericht — Flottenstandard", C2): the adapter's last log
+// lines at every level, also debug, for the report.
+
 /** One log line as the diagnostics report shows it. */
 export interface LogLine {
   /** When it was logged (ISO time). */
@@ -11,7 +16,7 @@ export interface LogLine {
 /** The log levels the ring records. */
 const LEVELS = ["silly", "debug", "info", "warn", "error"] as const;
 
-/** Lines kept — about a busy hour of a three-protocol receiver at debug level, a few hundred kilobytes. */
+/** Lines kept — about a busy hour of a device at debug level, a few hundred kilobytes. */
 export const LOG_RING_SIZE = 2000;
 
 /** The logger surface the ring hooks into. */
@@ -67,7 +72,7 @@ export class LogRing {
    * The lines about one device: those naming it (its id or address) and those naming no other
    * device (adapter-wide lines — discovery, the push receiver, the start).
    *
-   * A name counts only as a whole token: `rx-v473` is not named by `rx-v473-2: ready`, nor `10.0.0.5`
+   * A name counts only as a whole token: `lamp` is not named by `lamp-2: ready`, nor `10.0.0.5`
    * by `10.0.0.50 answered` — a substring match gave a device the lines of every device whose id or
    * address merely starts like its own (review 2026-10-05, B4).
    *
@@ -85,7 +90,7 @@ export class LogRing {
 /**
  * One pattern that finds any of the given names as a whole token. Ids and addresses are made of
  * letters, digits, `-` and `_` (and the dots of an address, which end a token like any other
- * character: `yamaha.0.rx-v473.power` names `rx-v473`), so a neighbouring letter, digit, `-` or `_`
+ * character: `demo.0.lamp.power` names `lamp`), so a neighbouring letter, digit, `-` or `_`
  * means the text is part of a longer name.
  *
  * @param names the names (empty ones are skipped)

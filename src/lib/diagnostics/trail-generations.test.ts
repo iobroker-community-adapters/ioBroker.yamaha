@@ -1,6 +1,6 @@
 import { readTransport, startFixtures, type FixtureDevice } from "../../../test/helpers/parity-harness";
 import type { Transport } from "../catalog/owner-policy";
-import { diagnosticsExport, type ReportInput } from "./report";
+import { buildReportBody, type ReportInput } from "./report";
 import { TrafficRecorder, type TrafficSource } from "./traffic-recorder";
 
 // Plan „Diagnosebericht“ (krobi 2026-10-06): every generation the inventory fixtures carry — YNCA 2012+ (R-N500,
@@ -20,8 +20,6 @@ const SOURCE: Record<Transport, TrafficSource> = { ynca: "ynca", yxc: "musiccast
  */
 function reportOf(device: FixtureDevice, recorder: TrafficRecorder): string {
   const input: ReportInput = {
-    adapterVersion: "3.3.0",
-    now: new Date(Date.UTC(2026, 9, 6)),
     environment: {
       node: "v22",
       platform: "linux x64",
@@ -36,7 +34,7 @@ function reportOf(device: FixtureDevice, recorder: TrafficRecorder): string {
     logs: [],
     trail: recorder.snapshot(),
   };
-  return diagnosticsExport(input).content;
+  return JSON.stringify(buildReportBody(input).content);
 }
 
 describe("the diagnostics trail over every fixture generation", () => {

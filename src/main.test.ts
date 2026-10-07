@@ -5540,9 +5540,10 @@ describe("the diagnostics report through the adapter", () => {
     const later = { debug: vi.fn(), info: (m: string) => void lines.push(m), warn: (m: string) => void lines.push(m) };
     (ctx.i as unknown as { log: unknown }).log = later;
     const diagnostics = (ctx.i as unknown as { diagnostics: { handle(p: unknown): Promise<unknown> } }).diagnostics;
-    expect(await diagnostics.handle({ action: "export", device: "nope" })).toEqual({ error: "unknown device 'nope'" });
-    const host = (diagnostics as unknown as { host: { log: unknown } }).host;
-    expect(host.log).toBe(later);
+    expect(await diagnostics.handle({ action: "start", device: "nope" })).toEqual({ error: "unknown device 'nope'" });
+    const source = (diagnostics as unknown as { source: { host: { log: unknown }; log: unknown } }).source;
+    expect(source.host.log).toBe(later);
+    expect(source.log).toBe(later);
   });
 });
 

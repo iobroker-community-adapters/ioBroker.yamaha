@@ -14,7 +14,7 @@ import type { Transport } from "../catalog/owner-policy";
  *   are left out of that comparison, or a playing source would push everything else out (govee #50: 100 of 100 log
  *   lines were LAN search answers).
  * - R2: every source has its own ring with its own byte limit.
- * - R3: an entry is kept whole or dropped whole — the pseudonymiser learns names from closing XML tags, a body cut in the
+ * - R3: an entry is kept whole or dropped whole — the placeholders learn names from closing XML tags, a body cut in the
  *   middle would carry a name it never learned. An entry over {@link ENTRY_MAX_BYTES} keeps only its size.
  */
 

@@ -3,7 +3,9 @@ import type { DeviceIdentity } from "../device-identity";
 import { isIPv4 } from "../network-interfaces";
 import type { HandleCapture, TransportCapture } from "./types";
 import type { LogLine } from "./log-ring";
-import { Pseudonymiser, type PersonalKind } from "./pseudonymiser";
+import { blankSecrets, PersonalValues, type PersonalKind } from "./personal-values";
+import { Placeholders } from "./placeholders";
+import type { ReportBody } from "./report-jobs";
 import type { HistoryEvent, TrafficSnapshot } from "./traffic-recorder";
 
 /** One instance of the musiccast adapter. */
@@ -88,12 +90,8 @@ export interface ObjectTreeEntry {
   ack?: boolean;
 }
 
-/** Everything a report is made of. */
+/** Everything a report body is made of — the frame (adapter, version, time, `connected`) is the master's. */
 export interface ReportInput {
-  /** The adapter version making the report. */
-  adapterVersion: string;
-  /** The time of the report. */
-  now: Date;
   /** The installation around the adapter. */
   environment: EnvironmentSnapshot;
   /** The device as the adapter knows it. */
@@ -126,7 +124,7 @@ export interface ReportInput {
   offlineSince?: string;
 }
 
-/** A command datapoint whose value is a name the user gives — taught to the pseudonymiser before the walk. */
+/** A command datapoint whose value is a name the user gives — registered before the placeholders replace. */
 const NAME_COMMAND = /(?:^|\.)(?:zoneName|name)$/;
 
 /**
@@ -179,42 +177,6 @@ function lastReasonPerTransport(history: readonly HistoryEvent[]): Record<string
 }
 
 /**
- * The file name a report is saved under. It has to explain itself to whoever receives it: model and
- * device id tell two receivers apart, adapter version and time say what was measured when.
- *
- * @param deviceId the device id as the report shows it — pseudonymised (see {@link diagnosticsExport})
- * @param adapterVersion the adapter version
- * @param now the export time
- * @returns the file name
- */
-export function diagnosticsFileName(deviceId: string, adapterVersion: string, now: Date): string {
-  const iso = now.toISOString();
-  const day = iso.slice(0, 10);
-  const time = iso.slice(11, 19).replace(/:/g, "");
-  // A serial marker's ellipsis (`serial-1-…AA22`) has no place in a file name.
-  const id = deviceId.replace(/…/g, "").replace(/[^a-z0-9-]+/gi, "_");
-  return `yamaha_${id}_v${adapterVersion}_${day}_${time}.json`;
-}
-
-/**
- * The report as the admin offers it for download: the JSON, and the file name — taken from the device id
- * as the REPORT shows it, so an id the adapter derived from a typed room name or an address, or the whole
- * serial a second device of the same model carries in its id, does not leave in the file name either
- * (review 2026-10-05, B3).
- *
- * @param input what the report is made of
- * @returns the file name and the report JSON
- */
-export function diagnosticsExport(input: ReportInput): { fileName: string; content: string } {
-  const report = buildDiagnosticsReport(input);
-  const id = (report.device as { id?: unknown } | undefined)?.id;
-  return {
-    fileName: diagnosticsFileName(typeof id === "string" ? id : "device", input.adapterVersion, input.now),
-    content: JSON.stringify(report, null, 2),
-  };
-}
-
-/**
  * What a device id gives away. An id the adapter built from the model (`rx-v473`, counted on: `rx-v473-2`)
  * or from the model and the serial's last four characters (`rx-v6a-2b3c`) tells nothing the report does not
  * show anyway; the whole serial a second device of a model carries (`wx-010-0b11aa22`) is a serial like any
@@ -224,7 +186,7 @@ export function diagnosticsExport(input: ReportInput): { fileName: string; conte
  *
  * @param id the device id
  * @param model the device's model, when known
- * @returns what to teach the pseudonymiser, or undefined when the id gives nothing away
+ * @returns what to register with the placeholders, or undefined when the id gives nothing away
  */
 export function personalIdPart(
   id: string,
@@ -246,7 +208,7 @@ export function personalIdPart(
 /**
  * The device object's `native` as the report shows it. The capability profile — and the profile of the
  * releases before 2.7.0 — is stored as a JSON TEXT; parsed, the reader sees its structure and the
- * pseudonymiser reaches the zone names, serials and MACs inside it, which a text hid from every rule that
+ * placeholders reach the zone names, serials and MACs inside it, which a text hid from every rule that
  * looks at keys: the most common report, the one of a device that is not connected, carried the room names
  * in clear (review 2026-10-05, B1). A text that does not parse stays a text.
  *
@@ -272,32 +234,22 @@ function readableProfile(native: Record<string, unknown> | undefined): Record<st
 }
 
 /**
- * Build the diagnostics report for one device: the installation, the device as the adapter knows it,
- * who serves which datapoint, what the device answered when it was just read (verbatim, per protocol),
- * the remembered profile, the object tree and the adapter's recent log lines — pseudonymised, so it can
- * be attached to a public issue.
+ * Build the diagnostics report body for one device: the installation, the device as the adapter knows it, who serves
+ * which datapoint, what the device answered when it was just read (verbatim, per protocol), the remembered profile, the
+ * object tree and the adapter's recent log lines — with placeholders, so it can be attached to a public issue. The
+ * frame around it (adapter, version, time, `connected`) is the master's (`ReportJobs`).
  *
  * @param input what the report is made of
- * @returns the report, ready for `JSON.stringify`
+ * @returns the body and the device id as the report shows it — the file name takes it from there, so an id the
+ *   adapter derived from a typed room name or an address does not leave in the file name either (review 2026-10-05, B3)
  */
-export function buildDiagnosticsReport(input: ReportInput): Record<string, unknown> {
+export function buildReportBody(input: ReportInput): ReportBody {
   const { device, connection } = input;
   const captures: Partial<Record<string, TransportCapture>> = {};
   for (const capture of connection?.captures ?? []) {
     captures[capture.transport] = capture;
   }
-  const report: Record<string, unknown> = {
-    // As in govee-smart: the privacy statement lives at the export button; what only the file can say is that its
-    // markers stop at its own edge.
-    readMe: {
-      what: "Diagnostics export of one Yamaha device, for a GitHub issue. Pseudonymised.",
-      markers:
-        "Markers (device-1, ip-private-1, name-1, …) are stable INSIDE this file only. " +
-        "Never compare them across two exports.",
-    },
-    adapter: "iobroker.yamaha",
-    version: input.adapterVersion,
-    exportedAt: input.now.toISOString(),
+  const body = blankSecrets({
     environment: input.environment,
     device: {
       id: device.id,
@@ -306,7 +258,6 @@ export function buildDiagnosticsReport(input: ReportInput): Record<string, unkno
       address: device.ip,
       source: device.source ?? null,
       identity: device.identity ?? null,
-      connected: device.connected,
       transports: device.transports,
       volumeAsPercent: device.volumeAsPercent ?? false,
       musiccastEvents: device.pushEvents ?? null,
@@ -329,30 +280,31 @@ export function buildDiagnosticsReport(input: ReportInput): Record<string, unkno
     profile: readableProfile(input.profile),
     objectTree: input.objectTree,
     recentLogs: input.logs,
-  };
-  const pseudonymiser = new Pseudonymiser();
-  pseudonymiser.teach("serial", device.identity?.serial);
-  pseudonymiser.teach("mac", device.identity?.mac);
+  }) as Record<string, unknown>;
+  const places = new Placeholders();
+  const personal = new PersonalValues(places);
+  personal.teach("serial", device.identity?.serial);
+  personal.teach("mac", device.identity?.mac);
   if (!isIPv4(device.ip)) {
-    pseudonymiser.teach("host", device.ip);
+    personal.teach("host", device.ip);
   }
   // The display name — the one the adapter knows now and the one it remembered (the profile's `label`).
   for (const label of [device.label, input.profile?.label]) {
     if (typeof label === "string" && label !== device.id && label !== device.model) {
-      pseudonymiser.teach("name", label);
+      personal.teach("name", label);
     }
   }
   // A name the user wrote through the adapter stands in the command list under its datapoint, not under a key the
-  // pseudonymiser knows.
+  // collector knows.
   for (const command of input.trail?.commands ?? []) {
     if (NAME_COMMAND.test(command.id) && typeof command.value === "string") {
-      pseudonymiser.teach("name", command.value);
+      personal.teach("name", command.value);
     }
   }
   const idPart = personalIdPart(device.id, device.model);
   if (idPart) {
-    pseudonymiser.teach(idPart.kind, idPart.value);
+    personal.teach(idPart.kind, idPart.value);
   }
-  pseudonymiser.learn(report);
-  return pseudonymiser.walk(report) as Record<string, unknown>;
+  personal.learn(body);
+  return { fileId: places.text(device.id), content: places.deep(body) as Record<string, unknown> };
 }

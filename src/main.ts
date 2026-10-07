@@ -66,10 +66,11 @@ import {
 } from "./lib/lifecycle/capability-profile";
 import { emptyLearnedTree } from "./lib/lifecycle/learned-tree";
 import {
-  DiagnosticsHandler,
+  YamahaReportSource,
   type DiagnosticsDeviceState,
   type DiagnosticsHost,
 } from "./lib/diagnostics/diagnostics-handler";
+import { ReportJobs } from "./lib/diagnostics/report-jobs";
 import { LogRing } from "./lib/diagnostics/log-ring";
 import { TrafficRecorder } from "./lib/diagnostics/traffic-recorder";
 
@@ -348,7 +349,7 @@ export class Yamaha extends utils.Adapter {
   /** When this run started — the report says how long the instance has been up. */
   private readonly startedAt = Date.now();
   /** Answers the admin's diagnostics card (list the devices, read one and hand back its report). */
-  private readonly diagnostics = new DiagnosticsHandler(this.diagnosticsHost());
+  private readonly diagnostics = new ReportJobs(new YamahaReportSource(this.diagnosticsHost()));
   /** Per device, the last write to its device object — the next one waits for it (see writeDeviceObject). */
   private readonly deviceObjectWrites = this.perDevice.map<Promise<unknown>>();
   /** The devices whose id is final under the 3.0.0 rule (`native.idScheme`) — see checkIdDecision. */

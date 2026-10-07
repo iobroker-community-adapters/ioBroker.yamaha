@@ -7,11 +7,11 @@ describe("LogRing", () => {
     const log: HookableLog = { ...original };
     const ring = new LogRing(10, () => 0);
     ring.hook(log);
-    log.debug("rx-v6a-2b3c: swept");
-    log.warn("rx-v6a-2b3c: refused");
-    expect(original.debug).toHaveBeenCalledWith("rx-v6a-2b3c: swept");
-    expect(original.warn).toHaveBeenCalledWith("rx-v6a-2b3c: refused");
-    expect(ring.about(["rx-v6a-2b3c"], []).map(line => line.level)).toEqual(["debug", "warn"]);
+    log.debug("dev-2b3c: swept");
+    log.warn("dev-2b3c: refused");
+    expect(original.debug).toHaveBeenCalledWith("dev-2b3c: swept");
+    expect(original.warn).toHaveBeenCalledWith("dev-2b3c: refused");
+    expect(ring.about(["dev-2b3c"], []).map(line => line.level)).toEqual(["debug", "warn"]);
   });
 
   it("keeps only the newest lines", () => {
@@ -24,12 +24,12 @@ describe("LogRing", () => {
 
   it("gives a device its own lines and the adapter-wide ones, not another device's", () => {
     const ring = new LogRing();
-    ring.add("info", "rx-v6a-2b3c: ready");
-    ring.add("info", "wx-030-f504: ready");
+    ring.add("info", "dev-2b3c: ready");
+    ring.add("info", "dev-f504: ready");
     ring.add("info", "network search finished");
     ring.add("debug", "10.0.0.5 answered");
-    expect(ring.about(["rx-v6a-2b3c", "10.0.0.5"], ["wx-030-f504", "10.0.0.6"]).map(line => line.msg)).toEqual([
-      "rx-v6a-2b3c: ready",
+    expect(ring.about(["dev-2b3c", "10.0.0.5"], ["dev-f504", "10.0.0.6"]).map(line => line.msg)).toEqual([
+      "dev-2b3c: ready",
       "network search finished",
       "10.0.0.5 answered",
     ]);
@@ -39,19 +39,19 @@ describe("LogRing", () => {
   // starts like its own.
   it("matches ids and addresses as whole tokens, not as prefixes of a longer one", () => {
     const ring = new LogRing();
-    ring.add("info", "rx-v473-2: ready — YNCA ✓");
+    ring.add("info", "lamp-2: ready");
     ring.add("debug", "10.0.0.50: description fetch failed");
-    ring.add("info", "rx-v473: ready — YNCA ✓");
-    ring.add("debug", "state yamaha.0.rx-v473.power written");
+    ring.add("info", "lamp: ready");
+    ring.add("debug", "state demo.0.lamp.power written");
     ring.add("debug", "connected to 10.0.0.5.");
-    expect(ring.about(["rx-v473", "10.0.0.5"], ["rx-v473-2", "10.0.0.50"]).map(line => line.msg)).toEqual([
-      "rx-v473: ready — YNCA ✓",
-      "state yamaha.0.rx-v473.power written",
+    expect(ring.about(["lamp", "10.0.0.5"], ["lamp-2", "10.0.0.50"]).map(line => line.msg)).toEqual([
+      "lamp: ready",
+      "state demo.0.lamp.power written",
       "connected to 10.0.0.5.",
     ]);
     // And the other way round: the longer id gets its own lines, never the shorter one's.
-    expect(ring.about(["rx-v473-2", "10.0.0.50"], ["rx-v473", "10.0.0.5"]).map(line => line.msg)).toEqual([
-      "rx-v473-2: ready — YNCA ✓",
+    expect(ring.about(["lamp-2", "10.0.0.50"], ["lamp", "10.0.0.5"]).map(line => line.msg)).toEqual([
+      "lamp-2: ready",
       "10.0.0.50: description fetch failed",
     ]);
   });

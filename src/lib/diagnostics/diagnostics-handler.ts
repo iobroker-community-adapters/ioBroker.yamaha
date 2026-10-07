@@ -1,10 +1,10 @@
 import type { DeviceIdentity } from "../device-identity";
-import { errText } from "../err-text";
 import type { HandleCapture } from "./types";
 import type { LogRing } from "./log-ring";
 import type { TrafficSnapshot } from "./traffic-recorder";
+import type { ReportBody, ReportSource, ReportSourceDevice } from "./report-jobs";
 import {
-  diagnosticsExport,
+  buildReportBody,
   type EnvironmentSnapshot,
   type InstanceInfo,
   type MusiccastStatus,
@@ -13,37 +13,6 @@ import {
 
 /** The protocol flags a device carries under `info.transports`. */
 const TRANSPORTS = ["ynca", "yxc", "xml"] as const;
-
-/** Shortest gap after a finished report before the next one of the same device — a double click is not two sweeps. */
-export const DIAGNOSTICS_COOLDOWN_MS = 2_000;
-
-/**
- * How long a finished report waits for the card to fetch it. The card asks every two seconds; one closed in the
- * meantime leaves its report behind, and the next diagnostics message after this long drops it — in memory only,
- * never written anywhere, gone with a restart. No timer: the handler is handed reads only (Y-11 guard).
- */
-export const DIAGNOSTICS_KEEP_MS = 10 * 60_000;
-
-/** What the card gets when it asks for a report: still being made, gone (restart, fetched, expired), or the result. */
-export type DiagnosticsJobAnswer = { pending: true } | { gone: true } | DiagnosticsReport | { error: string };
-
-/** One device as the admin's diagnostics card lists it. */
-export interface DiagnosticsDevice {
-  /** The device id (the object id below the instance). */
-  value: string;
-  /** What the card shows. */
-  label: string;
-  /** Whether it is connected — an unconnected device still gets a report, without the live read. */
-  connected: boolean;
-}
-
-/** A finished report: the file name and the JSON text. */
-export interface DiagnosticsReport {
-  /** The name to save it under. */
-  fileName: string;
-  /** The report JSON. */
-  content: string;
-}
 
 /** One running device, as the adapter knows it. */
 export interface DiagnosticsDeviceState {
@@ -111,212 +80,105 @@ export interface DiagnosticsHost {
 }
 
 /**
- * Answers the admin's `diagnostics` message: `list` names the devices, `start` begins one device's report and
- * answers at once with a job, `result` hands the finished report back as a file (name + JSON). The admin's
- * browser connection gives up on every answer after 30 s (admin 8.0.23 `lib/js/socket.io.js`: a callback lives
- * `Date.now() + 3e4`, then it is called with "timeout"), and a report takes up to a minute — so no answer waits
- * for one (server test 2026-10-06: every report through the Expert tab failed after 33 s). The report lives in
- * memory until the card fetches it ({@link DIAGNOSTICS_KEEP_MS}); the admin offers it as a download.
- * `export` (the report in one answer) stays for callers without that limit.
+ * yamaha's side of the fleet master `ReportJobs` (page "Diagnosebericht — Flottenstandard"): its devices, the live read
+ * of a connected receiver over every protocol it speaks (read only, through the running clients), and the report body.
+ * The trail (traffic, commands, connection history) is taken BEFORE the live read — that read goes through the same
+ * clients and would push the history out of the rings it is meant to stand beside (plan „Diagnosebericht“).
  */
-export class DiagnosticsHandler {
-  /** The devices a report is being made for right now — one read at a time per device. */
-  private readonly running = new Set<string>();
-  /** When the last report per device finished. */
-  private readonly finished = new Map<string, number>();
-  /** The reports started through `start`, by job id, until fetched or expired. */
-  private readonly jobs = new Map<
-    string,
-    { device: string; result?: DiagnosticsReport | { error: string }; doneAt?: number }
-  >();
-  /** Numbers the jobs of this run. */
-  private jobCount = 0;
+export class YamahaReportSource implements ReportSource<HandleCapture | undefined> {
+  public readonly adapter = "yamaha";
+  /** The trail per device, taken at the start of its live read and used by its body. */
+  private readonly trails = new Map<string, TrafficSnapshot | undefined>();
 
   /**
    * @param host the running adapter
-   * @param now the clock (injectable for tests)
    */
-  public constructor(
-    private readonly host: DiagnosticsHost,
-    private readonly now: () => number = Date.now,
-  ) {}
+  public constructor(private readonly host: DiagnosticsHost) {}
 
-  /**
-   * Answer one message.
-   *
-   * @param payload the message's payload: `{ action: "list" }`, `{ action: "start", device }`,
-   *   `{ action: "result", job }` or `{ action: "export", device }`
-   * @returns the answer for the admin
-   */
-  public async handle(payload: unknown): Promise<unknown> {
-    const { action, device, job } = (typeof payload === "object" && payload !== null ? payload : {}) as {
-      action?: unknown;
-      device?: unknown;
-      job?: unknown;
-    };
-    this.dropUnfetched();
-    if (action === "list") {
-      return { devices: this.list() };
-    }
-    if (action === "start") {
-      return this.start(typeof device === "string" ? device : "");
-    }
-    if (action === "result") {
-      return this.result(typeof job === "string" ? job : "");
-    }
-    if (action === "export") {
-      return this.export(typeof device === "string" ? device : "");
-    }
-    return { error: `unknown diagnostics action '${String(action)}'` };
+  /** @returns the adapter version */
+  public get version(): string {
+    return this.host.version;
+  }
+
+  /** @returns the adapter log */
+  public get log(): { info(message: string): void; warn(message: string): void } {
+    return this.host.log;
+  }
+
+  /** @returns every running device, connected or not — a report is wanted exactly when a device misbehaves */
+  public devices(): ReportSourceDevice[] {
+    return this.host.devices().map(device => ({ id: device.id, label: device.label, connected: device.connected }));
   }
 
   /**
-   * The devices the card lists — every running one, connected or not: a report is wanted exactly when
-   * a device misbehaves.
+   * Read one connected receiver live.
    *
-   * @returns the devices, by label
+   * @param id the device id
+   * @returns what the running connection read; undefined when it lost the connection meanwhile
    */
-  public list(): DiagnosticsDevice[] {
-    return this.host
-      .devices()
-      .map(device => ({
-        value: device.id,
-        label: device.label && device.label !== device.id ? `${device.label} (${device.id})` : device.id,
-        connected: device.connected,
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+  public async readLive(id: string): Promise<HandleCapture | undefined> {
+    const device = this.device(id);
+    this.trails.set(id, device.trail?.());
+    this.host.log.info(`${id}: reading the device for a diagnostics report — this takes up to a minute`);
+    return device.capture();
   }
 
   /**
-   * Begin one device's report and answer at once. A second start while it runs gets the same job.
+   * Build one device's report body.
    *
-   * @param deviceId the device id
-   * @returns the job to ask for, or why there is none
+   * @param id the device id
+   * @param live what the live read returned (undefined when not connected or it failed)
+   * @param liveError why the live read failed
+   * @returns the body and the device id as the report shows it
    */
-  public start(deviceId: string): { job: string } | { error: string } {
-    for (const [id, job] of this.jobs) {
-      if (job.device === deviceId && !job.result) {
-        return { job: id };
-      }
-    }
-    if (!this.host.devices().some(d => d.id === deviceId)) {
-      return { error: `unknown device '${deviceId}'` };
-    }
-    const id = `${deviceId}#${++this.jobCount}`;
-    const job: { device: string; result?: DiagnosticsReport | { error: string }; doneAt?: number } = {
-      device: deviceId,
-    };
-    this.jobs.set(id, job);
-    void this.export(deviceId)
-      .catch((e: unknown) => ({ error: `report failed: ${errText(e)}` }))
-      .then(result => {
-        job.result = result;
-        job.doneAt = this.now();
-      });
-    return { job: id };
-  }
-
-  /** Drop the finished reports nobody fetched within {@link DIAGNOSTICS_KEEP_MS}. */
-  private dropUnfetched(): void {
-    const now = this.now();
-    for (const [id, job] of this.jobs) {
-      if (job.doneAt !== undefined && now - job.doneAt > DIAGNOSTICS_KEEP_MS) {
-        this.jobs.delete(id);
-      }
-    }
-  }
-
-  /**
-   * Answer for a started report: still pending, gone, or the result — handed over once.
-   *
-   * @param id the job id `start` answered
-   * @returns the answer
-   */
-  public result(id: string): DiagnosticsJobAnswer {
-    const job = this.jobs.get(id);
-    if (!job) {
-      return { gone: true };
-    }
-    if (!job.result) {
-      return { pending: true };
-    }
-    this.jobs.delete(id);
-    return job.result;
-  }
-
-  /**
-   * Read one device and build its report.
-   *
-   * @param deviceId the device id
-   * @returns the report, or the reason there is none
-   */
-  public async export(deviceId: string): Promise<DiagnosticsReport | { error: string }> {
+  public async build(id: string, live: HandleCapture | undefined, liveError: string | undefined): Promise<ReportBody> {
     const devices = this.host.devices();
-    const device = devices.find(d => d.id === deviceId);
+    const device = this.device(id);
+    const trail = this.trails.has(id) ? this.trails.get(id) : device.trail?.();
+    this.trails.delete(id);
+    const prefix = `${this.host.namespace}.${id}`;
+    const [environment, deviceObject, { objectTree, transports, offlineSince }] = await Promise.all([
+      this.environment(devices),
+      this.host.getForeignObjectAsync(prefix).catch(() => null),
+      this.deviceTree(prefix),
+    ]);
+    const others = devices.filter(d => d.id !== id).flatMap(d => [d.id, d.ip]);
+    return buildReportBody({
+      environment,
+      device: {
+        id: device.id,
+        ip: device.ip,
+        source: device.source,
+        model: device.model,
+        label: device.label,
+        identity: device.identity,
+        connected: device.connected,
+        transports,
+        volumeAsPercent: device.volumeAsPercent,
+        pushEvents: device.pushEvents,
+      },
+      profile: (deviceObject?.native as Record<string, unknown> | undefined) ?? undefined,
+      connection: live,
+      connectionNote: liveError !== undefined ? `live read failed: ${liveError}` : undefined,
+      trail,
+      offlineSince,
+      objectTree,
+      logs: this.host.logRing.about([device.id, device.ip], others),
+    });
+  }
+
+  /**
+   * One running device.
+   *
+   * @param id the device id
+   * @returns the device
+   */
+  private device(id: string): DiagnosticsDeviceState {
+    const device = this.host.devices().find(d => d.id === id);
     if (!device) {
-      return { error: `unknown device '${deviceId}'` };
+      throw new Error(`unknown device '${id}'`);
     }
-    const now = this.now();
-    if (
-      this.running.has(deviceId) ||
-      now - (this.finished.get(deviceId) ?? Number.NEGATIVE_INFINITY) < DIAGNOSTICS_COOLDOWN_MS
-    ) {
-      return { error: "a report for this device is being made right now — try again in a moment" };
-    }
-    this.running.add(deviceId);
-    try {
-      this.host.log.info(`${deviceId}: reading the device for a diagnostics report — this takes up to a minute`);
-      // The trail first: the live read below goes through the same clients and would push the history out of the
-      // rings it is meant to stand beside (plan „Diagnosebericht“).
-      const trail = device.trail?.();
-      let connection: HandleCapture | undefined;
-      let connectionNote: string | undefined;
-      try {
-        // Not connected: the report says so itself (its default note).
-        connection = await device.capture();
-      } catch (e) {
-        connectionNote = `live read failed: ${errText(e)}`;
-      }
-      const prefix = `${this.host.namespace}.${deviceId}`;
-      const [environment, deviceObject, { objectTree, transports, offlineSince }] = await Promise.all([
-        this.environment(devices),
-        this.host.getForeignObjectAsync(prefix).catch(() => null),
-        this.deviceTree(prefix),
-      ]);
-      const others = devices.filter(d => d.id !== deviceId).flatMap(d => [d.id, d.ip]);
-      const report = diagnosticsExport({
-        adapterVersion: this.host.version,
-        now: new Date(this.now()),
-        environment,
-        device: {
-          id: device.id,
-          ip: device.ip,
-          source: device.source,
-          model: device.model,
-          label: device.label,
-          identity: device.identity,
-          connected: device.connected,
-          transports,
-          volumeAsPercent: device.volumeAsPercent,
-          pushEvents: device.pushEvents,
-        },
-        profile: (deviceObject?.native as Record<string, unknown> | undefined) ?? undefined,
-        connection,
-        connectionNote,
-        trail,
-        offlineSince,
-        objectTree,
-        logs: this.host.logRing.about([device.id, device.ip], others),
-      });
-      this.host.log.info(`${deviceId}: diagnostics report ready (${report.fileName})`);
-      return report;
-    } catch (e) {
-      this.host.log.warn(`${deviceId}: diagnostics report failed: ${errText(e)}`);
-      return { error: `report failed: ${errText(e)}` };
-    } finally {
-      this.running.delete(deviceId);
-      this.finished.set(deviceId, this.now());
-    }
+    return device;
   }
 
   /**

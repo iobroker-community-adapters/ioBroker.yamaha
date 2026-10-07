@@ -2,14 +2,13 @@ import { TrafficRecorder } from "./traffic-recorder";
 import { describe, expect, it } from "vitest";
 import type { HandleCapture } from "./types";
 import {
-  DIAGNOSTICS_KEEP_MS,
-  DiagnosticsHandler,
   musiccastStatus,
+  YamahaReportSource,
   type DiagnosticsDeviceState,
   type DiagnosticsHost,
 } from "./diagnostics-handler";
+import { ReportJobs } from "./report-jobs";
 import { LogRing } from "./log-ring";
-import { diagnosticsFileName } from "./report";
 
 /**
  * An ioBroker with the objects and states a test gives it.
@@ -116,12 +115,41 @@ function device(over: Partial<DiagnosticsDeviceState> = {}): DiagnosticsDeviceSt
 
 const instance = (enabled: boolean): ioBroker.Object => ({ common: { enabled } }) as unknown as ioBroker.Object;
 
-describe("DiagnosticsHandler", () => {
+/**
+ * One report through the fleet master, as the card asks for it: start, then the result once it is done.
+ *
+ * @param host the running adapter
+ * @param id the device id
+ * @param now the clock
+ * @returns the report or why there is none
+ */
+async function exportReport(
+  host: DiagnosticsHost,
+  id: string,
+  now?: () => number,
+): Promise<{ fileName: string; content: string } | { error: string }> {
+  const jobs = new ReportJobs(new YamahaReportSource(host), now);
+  const started = jobs.start(id);
+  if ("error" in started) {
+    return started;
+  }
+  for (;;) {
+    const answer = jobs.result(started.job);
+    if (!("pending" in answer) && !("gone" in answer)) {
+      return answer;
+    }
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
+
+describe("YamahaReportSource", () => {
   it("lists every running device, connected or not", () => {
-    const handler = new DiagnosticsHandler(
-      makeHost({ devices: [device(), device({ id: "wx-030-f504", label: undefined, connected: false })] }),
+    const jobs = new ReportJobs(
+      new YamahaReportSource(
+        makeHost({ devices: [device(), device({ id: "wx-030-f504", label: undefined, connected: false })] }),
+      ),
     );
-    expect(handler.list()).toEqual([
+    expect(jobs.list()).toEqual([
       { value: "rx-v6a-2b3c", label: "Wohnzimmer (rx-v6a-2b3c)", connected: true },
       { value: "wx-030-f504", label: "wx-030-f504", connected: false },
     ]);
@@ -139,10 +167,7 @@ describe("DiagnosticsHandler", () => {
       },
       states: { "system.adapter.musiccast.0.alive": true, "yamaha.0.rx-v6a-2b3c.power": true },
     });
-    const answer = await new DiagnosticsHandler(host, () => Date.UTC(2026, 9, 5, 8, 0, 0)).handle({
-      action: "export",
-      device: "rx-v6a-2b3c",
-    });
+    const answer = await exportReport(host, "rx-v6a-2b3c", () => Date.UTC(2026, 9, 5, 8, 0, 0));
     const { fileName, content } = answer as { fileName: string; content: string };
     expect(fileName).toBe("yamaha_rx-v6a-2b3c_v3.3.0_2026-10-05_080000.json");
     const report = JSON.parse(content) as Record<string, any>;
@@ -168,7 +193,7 @@ describe("DiagnosticsHandler", () => {
       devices: [device({ id: "kueche", ip: "192.168.178.41", model: undefined, label: "Küche", identity: undefined })],
     });
     host.logRing.add("info", "kueche: no reachable transport");
-    const answer = (await new DiagnosticsHandler(host, () => Date.UTC(2026, 9, 5, 8, 0, 0)).export("kueche")) as {
+    const answer = (await exportReport(host, "kueche", () => Date.UTC(2026, 9, 5, 8, 0, 0))) as {
       fileName: string;
       content: string;
     };
@@ -192,7 +217,7 @@ describe("DiagnosticsHandler", () => {
       states[`yamaha.0.rx-v6a-2b3c.dp${i}`] = i;
     }
     const host = makeHost({ devices: [device()], objects, states, bulk: true });
-    const answer = (await new DiagnosticsHandler(host).export("rx-v6a-2b3c")) as { content: string };
+    const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
     const report = JSON.parse(answer.content) as {
       objectTree: Array<{ id: string; val: unknown }>;
       device: { transports: Record<string, boolean> };
@@ -212,7 +237,7 @@ describe("DiagnosticsHandler", () => {
 
   it("says when the device is not connected instead of failing", async () => {
     const host = makeHost({ devices: [device({ connected: false, capture: () => Promise.resolve(undefined) })] });
-    const answer = (await new DiagnosticsHandler(host).export("rx-v6a-2b3c")) as { content: string };
+    const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
     expect(JSON.parse(answer.content).connection).toEqual({
       note: "not connected — no live read",
       ownersAtLastConnection: null,
@@ -231,7 +256,7 @@ describe("DiagnosticsHandler", () => {
         lc: { [id]: lc },
         bulk,
       });
-      const answer = (await new DiagnosticsHandler(offline).export("rx-v6a-2b3c")) as { content: string };
+      const answer = (await exportReport(offline, "rx-v6a-2b3c")) as { content: string };
       expect(JSON.parse(answer.content).trail.disconnectedSince, `bulk ${bulk}`).toBe("2026-10-05T21:30:32.000Z");
     }
     // A datapoint that says connected gives no "offline since".
@@ -240,7 +265,7 @@ describe("DiagnosticsHandler", () => {
       states: { [id]: true },
       lc: { [id]: lc },
     });
-    const answer = (await new DiagnosticsHandler(stale).export("rx-v6a-2b3c")) as { content: string };
+    const answer = (await exportReport(stale, "rx-v6a-2b3c")) as { content: string };
     expect(JSON.parse(answer.content).trail.disconnectedSince).toBeNull();
   });
 
@@ -266,64 +291,35 @@ describe("DiagnosticsHandler", () => {
         }),
       ],
     });
-    const answer = (await new DiagnosticsHandler(host).export("rx-v6a-2b3c")) as { content: string };
+    const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
     const xml = (JSON.parse(answer.content) as { trail: { traffic: { xml: Array<{ request: string }> } } }).trail
       .traffic.xml;
     expect(xml).toHaveLength(before);
     expect(xml.every(entry => entry.request.startsWith("<Basic_Status"))).toBe(true);
   });
 
-  it("runs one report per device at a time", async () => {
-    let release: () => void = () => {};
-    const slow = device({ capture: () => new Promise(resolve => (release = () => resolve(undefined))) });
-    const handler = new DiagnosticsHandler(makeHost({ devices: [slow] }));
-    const first = handler.export("rx-v6a-2b3c");
-    expect(await handler.export("rx-v6a-2b3c")).toEqual({ error: expect.stringContaining("being made") });
-    release();
-    expect(await first).toHaveProperty("fileName");
+  it("reads no unconnected device live, and says so in the report", async () => {
+    let reads = 0;
+    const host = makeHost({
+      devices: [
+        device({
+          connected: false,
+          capture: () => {
+            reads++;
+            return Promise.resolve(undefined);
+          },
+        }),
+      ],
+    });
+    const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
+    expect(reads).toBe(0);
+    expect(JSON.parse(answer.content).connected).toBe(false);
   });
 
-  // Server test 2026-10-06: the admin's browser connection gives up on every answer after 30 s, a report takes up
-  // to a minute — `start` answers at once, `result` hands the report over when it is done.
-  it("starts a report, answers at once, and hands it over once it is done — once", async () => {
-    let release: () => void = () => {};
-    const slow = device({ capture: () => new Promise(resolve => (release = () => resolve(undefined))) });
-    const handler = new DiagnosticsHandler(makeHost({ devices: [slow] }));
-    const started = (await handler.handle({ action: "start", device: "rx-v6a-2b3c" })) as { job: string };
-    expect(started.job).toEqual(expect.any(String));
-    expect(await handler.handle({ action: "start", device: "rx-v6a-2b3c" })).toEqual(started);
-    expect(await handler.handle({ action: "result", job: started.job })).toEqual({ pending: true });
-    release();
-    await new Promise(resolve => setImmediate(resolve));
-    expect(await handler.handle({ action: "result", job: started.job })).toHaveProperty("fileName");
-    expect(await handler.handle({ action: "result", job: started.job })).toEqual({ gone: true });
-  });
-
-  it("does not know a job it never started (a restarted instance)", async () => {
-    const handler = new DiagnosticsHandler(makeHost({ devices: [device()] }));
-    expect(await handler.handle({ action: "result", job: "rx-v6a-2b3c#1" })).toEqual({ gone: true });
-    expect(await handler.handle({ action: "start", device: "nope" })).toEqual({ error: "unknown device 'nope'" });
-  });
-
-  it("drops a report nobody fetched once its keep time is over, at the next message", async () => {
-    let clock = 1_000;
-    const handler = new DiagnosticsHandler(makeHost({ devices: [device()] }), () => clock);
-    const fetched = (await handler.handle({ action: "start", device: "rx-v6a-2b3c" })) as { job: string };
-    await new Promise(resolve => setImmediate(resolve));
-    clock += DIAGNOSTICS_KEEP_MS;
-    expect(await handler.handle({ action: "result", job: fetched.job })).toHaveProperty("fileName");
-    const left = (await handler.handle({ action: "start", device: "rx-v6a-2b3c" })) as { job: string };
-    await new Promise(resolve => setImmediate(resolve));
-    clock += DIAGNOSTICS_KEEP_MS + 1;
-    await handler.handle({ action: "list" });
-    expect(handler.result(left.job)).toEqual({ gone: true });
-  });
-
-  it("answers an unknown device or action with an error", async () => {
-    const handler = new DiagnosticsHandler(makeHost());
-    expect(await handler.handle({ action: "export", device: "nope" })).toEqual({ error: "unknown device 'nope'" });
-    expect(await handler.handle({ action: "x" })).toEqual({ error: "unknown diagnostics action 'x'" });
-    expect(await handler.handle(null)).toEqual({ error: "unknown diagnostics action 'undefined'" });
+  it("says why the live read failed, and still hands back the report", async () => {
+    const host = makeHost({ devices: [device({ capture: () => Promise.reject(new Error("socket hang up")) })] });
+    const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
+    expect(JSON.parse(answer.content).connection.note).toBe("live read failed: socket hang up");
   });
 });
 
@@ -347,15 +343,7 @@ describe("musiccastStatus", () => {
 
   it("reads an instance that exists without the adapter object as installed", async () => {
     const host = makeHost({ devices: [device()], objects: { "system.adapter.musiccast.0": instance(false) } });
-    const answer = (await new DiagnosticsHandler(host).export("rx-v6a-2b3c")) as { content: string };
+    const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
     expect(JSON.parse(answer.content).environment.musiccast.status).toBe("installed, switched off");
-  });
-});
-
-describe("diagnosticsFileName", () => {
-  it("names model, device, version and time", () => {
-    expect(diagnosticsFileName("wx-030-f504", "3.3.0", new Date(Date.UTC(2026, 0, 2, 3, 4, 5)))).toBe(
-      "yamaha_wx-030-f504_v3.3.0_2026-01-02_030405.json",
-    );
   });
 });

@@ -1,32 +1,16 @@
 import { MUSICCAST_INPUT_NAMES } from "../catalog/musiccast-vocabulary";
-import { chosenAddress } from "../network-address";
 import { decodeXmlText } from "../xml/entities";
+import type { Placeholders } from "./placeholders";
 
 /**
- * Stable pseudonyms for the diagnostics report (after govee-smart's anonymiser).
+ * What in a yamaha report is personal and has no shape of its own — the fleet master `Placeholders` replaces it.
  *
- * The report is meant for a public GitHub issue, so it must not carry the reporter's addresses,
- * serial numbers, network names or the names they gave their rooms. Blanking them (`***`) would make
- * the report useless at the same time — half of a diagnosis is "do these two lines talk about the SAME
- * device/zone" — so each distinct value gets a stable marker instead: the same address is `ip-1`
- * everywhere in the file, a second one `ip-2`. A private address stays recognisably private, and a
- * serial keeps its last four characters, which the object ids carry anyway (`rx-v6a-2b3c`).
- *
- * Two passes: {@link Pseudonymiser.learn} collects the values that have no detectable shape (names,
- * serials, MACs written without separators) from the places the protocols put them; {@link
- * Pseudonymiser.walk} then replaces every occurrence anywhere in the report, plus everything that has a
- * shape of its own (IPv4, separated MACs, mail addresses, UUIDs). Markers are stable inside ONE file only.
+ * The master finds addresses, MACs and mail addresses by their form; everything else (names the user gave, serial
+ * numbers, MACs a protocol writes without separators, UUIDs, a device id made from a typed name) it replaces only
+ * once the adapter registers it with `name()` (page "Diagnosebericht — Flottenstandard", DB-04/DB-05).
+ * {@link PersonalValues.learn} collects those values from the places the three protocols put them; secrets are
+ * blanked before ({@link blankSecrets}) — the master's order: blank, replace, cut.
  */
-
-/** IPv4 in dotted form, each part 0–255. */
-const IPV4 =
-  /\b(25[0-5]|2[0-4]\d|1?\d?\d)\.(25[0-5]|2[0-4]\d|1?\d?\d)\.(25[0-5]|2[0-4]\d|1?\d?\d)\.(25[0-5]|2[0-4]\d|1?\d?\d)\b/g;
-
-/** A MAC written with separators. */
-const MAC_SEPARATED = /\b[0-9a-f]{2}(?:[:-][0-9a-f]{2}){5}\b/gi;
-
-/** Anything shaped like a mail address — an account name can surface in a streaming service's answer. */
-const EMAIL = /\b[^\s@<>"']+@[^\s@<>"']+\.[a-z]{2,}\b/gi;
 
 /** A UUID — MusicCast's `analytics_info.uuid` names one installation of the app, a UPnP UDN one device. */
 const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
@@ -48,9 +32,6 @@ const MAC_KEYS = new Set(["device_id"]);
 
 /** JSON keys whose value is a name the user gave: the network name, the WLAN, the MusicCast Link group. */
 const NAME_KEYS = new Set(["ssid", "network_name", "group_name"]);
-
-/** JSON keys whose value is a secret — never shown, not even as a marker. */
-const SECRET_KEYS = new Set(["key", "airplay_pin", "password", "token"]);
 
 /**
  * YNCA functions whose value is a name the user gave — the zone names and the paired Bluetooth device —
@@ -120,98 +101,93 @@ const FACTORY_INPUT_NAMES = new Set(
   ].map(inputKey),
 );
 
-/** What a taught value is — and what its marker says. */
-export type PersonalKind = "name" | "serial" | "mac" | "host" | "device";
-
-/** One value the pseudonymiser replaces wherever it occurs. */
-interface Known {
-  kind: PersonalKind;
-  /** The value the marker stands for — an XML text taught in its raw and its decoded form shares one. */
-  canonical: string;
-}
+/**
+ * The words the protocols use — the input ids and factory names, split into words (`net_radio` → `net`, `radio`), and
+ * the YNCA subunit words. The master replaces a registered name as a whole word with `_` and `-` as word boundaries,
+ * so a name made only of such words ("Radio") would also replace `radio` in `net_radio` and leave the report without
+ * its protocol words; such a name says nothing personal and stays readable (round 97, measured 2026-10-07).
+ */
+const PROTOCOL_WORDS = new Set(
+  [
+    ...Object.keys(MUSICCAST_INPUT_NAMES),
+    ...Object.values(MUSICCAST_INPUT_NAMES),
+    "main zone sys server system tuner bluetooth airplay spotify pandora napster netradio usb pc ipod",
+  ]
+    .flatMap(text => text.toLowerCase().split(/[\s_\-()/]+/))
+    .filter(word => word.length > 0),
+);
 
 /**
- * Whether a kind is matched regardless of case — serials and MACs are written in both.
+ * Whether a name consists of protocol words only.
  *
- * @param kind the kind
- * @returns true for serials and MACs
+ * @param name the name
+ * @returns true when every word of it is a protocol word
  */
-function caseless(kind: PersonalKind): boolean {
-  return kind === "serial" || kind === "mac";
+function onlyProtocolWords(name: string): boolean {
+  return name
+    .toLowerCase()
+    .split(/[\s_-]+/)
+    .every(word => word === "" || PROTOCOL_WORDS.has(word));
 }
+
+/** What a registered value is — the placeholder's word. */
+export type PersonalKind = "name" | "serial" | "mac" | "host" | "device" | "uuid";
+
+/** JSON keys whose value is a secret — never shown, not even as a placeholder. */
+const SECRET_KEYS = new Set(["key", "airplay_pin", "password", "token"]);
 
 /**
- * Addresses that say something about the setup but nothing about the person.
+ * Blank the secrets of a report — before the placeholders replace anything.
  *
- * @param address an IPv4 address
- * @returns true for the unspecified address, masks and loopback
+ * @param value the report (or any part of it)
+ * @param key the key the value sits under
+ * @returns a copy with every secret as `***` (an empty one stays empty)
  */
-function isNeutralAddress(address: string): boolean {
-  return chosenAddress(address) === undefined || address.startsWith("255.") || address.startsWith("127.");
+export function blankSecrets(value: unknown, key = ""): unknown {
+  if (typeof value === "string") {
+    return SECRET_KEYS.has(key.toLowerCase()) && value !== "" ? "***" : value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => blankSecrets(item, key));
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, blankSecrets(v, k)]));
+  }
+  return value;
 }
 
-/**
- * Whether an IPv4 address is private (RFC 1918, link-local).
- *
- * @param address an IPv4 address
- * @returns true for a private address
- */
-function isPrivate(address: string): boolean {
-  const [a, b] = address.split(".").map(Number);
-  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
-}
-
-/** Replaces personal values in a report with stable markers. */
-export class Pseudonymiser {
-  private readonly markers = new Map<string, string>();
-  private readonly counters = new Map<string, number>();
-  /** Known values without a shape, replaced wherever they occur. */
-  private readonly known = new Map<string, Known>();
-  /** The caseless ones by their upper-case spelling — what a case-insensitive match is looked up by. */
-  private readonly knownCaseless = new Map<string, Known>();
+/** Finds the personal values of a yamaha report and registers them with the report's placeholders. */
+export class PersonalValues {
   /**
-   * The known values as two alternations, longest first — built once per set of values, not per string and
-   * value: a report of a few thousand strings and a few dozen values took ~400 ms (seconds on a Pi) when every
-   * string compiled every value's pattern anew (review 2026-10-05, B8). Undefined until needed.
+   * @param places the report's placeholders
    */
-  private patterns: { exact?: RegExp; caseless?: RegExp } | undefined;
+  public constructor(private readonly places: Placeholders) {}
 
   /**
-   * Teach a value that has no shape of its own.
+   * Register a value that has no shape of its own.
    *
    * @param kind what it is
    * @param value the value (ignored when empty, generic or too short to replace safely)
-   * @param alias another spelling of the same value (an XML text before its entities are decoded) — the
-   *   same marker for both
+   * @param alias another spelling of the same value (an XML text before its entities are decoded)
    */
   public teach(kind: PersonalKind, value: unknown, alias?: string): void {
     if (typeof value !== "string") {
       return;
     }
     const trimmed = value.trim();
-    if (trimmed.length < 3 || (kind === "name" && GENERIC_NAME.test(trimmed)) || /^0+$/.test(trimmed)) {
+    if (
+      trimmed.length < 3 ||
+      (kind === "name" &&
+        (GENERIC_NAME.test(trimmed) || MODEL_DESIGNATION.test(trimmed) || onlyProtocolWords(trimmed))) ||
+      /^0+$/.test(trimmed)
+    ) {
       return;
     }
-    const canonical = kind === "mac" ? trimmed.replace(/[:-]/g, "").toUpperCase() : trimmed;
-    this.remember(canonical, { kind, canonical });
+    this.places.name(trimmed, kind);
     const other = alias?.trim();
     if (other && other !== trimmed && other.length >= 3) {
-      this.remember(other, { kind, canonical });
+      this.places.name(other, kind);
     }
-  }
-
-  /**
-   * Keep one spelling of a known value.
-   *
-   * @param spelling how it is written
-   * @param known what it stands for
-   */
-  private remember(spelling: string, known: Known): void {
-    this.known.set(spelling, known);
-    if (caseless(known.kind)) {
-      this.knownCaseless.set(spelling.toUpperCase(), known);
-    }
-    this.patterns = undefined;
   }
 
   /**
@@ -259,6 +235,12 @@ export class Pseudonymiser {
   }
 
   private learnFromText(value: string, key: string, path: readonly string[]): void {
+    // An all-zero UUID is "not set" — it says something about the setup and nothing about the person.
+    for (const uuid of value.match(UUID) ?? []) {
+      if (!/^[0-]+$/.test(uuid)) {
+        this.teach("uuid", uuid);
+      }
+    }
     const lower = key.toLowerCase();
     const parent = path[path.length - 1]?.toLowerCase() ?? "";
     if (SERIAL_KEYS.has(lower)) {
@@ -361,116 +343,6 @@ export class Pseudonymiser {
     const key = inputKey(name);
     return key === "" || key === inputKey(code) || FACTORY_INPUT_NAMES.has(key);
   }
-
-  /**
-   * Replace every personal value in the report.
-   *
-   * @param value the report (or any part of it)
-   * @param key the key the value sits under
-   * @returns the pseudonymised copy
-   */
-  public walk(value: unknown, key = ""): unknown {
-    if (typeof value === "string") {
-      if (SECRET_KEYS.has(key.toLowerCase())) {
-        return value === "" ? "" : "***";
-      }
-      return this.text(value);
-    }
-    if (Array.isArray(value)) {
-      return value.map(item => this.walk(item, key));
-    }
-    if (typeof value === "object" && value !== null) {
-      return Object.fromEntries(Object.entries(value).map(([k, v]) => [this.text(k), this.walk(v, k)]));
-    }
-    return value;
-  }
-
-  /**
-   * Pseudonymise one text: the known values first (longest first, so a name inside a longer one does
-   * not split it), then the shapes.
-   *
-   * @param text the text
-   * @returns the text with markers
-   */
-  public text(text: string): string {
-    const patterns = (this.patterns ??= this.compile());
-    let out = text;
-    if (patterns.exact) {
-      out = out.replace(patterns.exact, match => this.markerOf(match, this.known.get(match)));
-    }
-    if (patterns.caseless) {
-      out = out.replace(patterns.caseless, match => this.markerOf(match, this.knownCaseless.get(match.toUpperCase())));
-    }
-    out = out.replace(IPV4, address => (isNeutralAddress(address) ? address : this.marker("ip", address)));
-    out = out.replace(MAC_SEPARATED, mac => this.marker("mac", mac.replace(/[:-]/g, "").toUpperCase()));
-    out = out.replace(EMAIL, mail => this.marker("mail", mail.toLowerCase()));
-    // An all-zero UUID is "not set" — like 0.0.0.0, it says something about the setup and nothing about the person.
-    out = out.replace(UUID, uuid => (/^[0-]+$/.test(uuid) ? uuid : this.marker("uuid", uuid.toLowerCase())));
-    return out;
-  }
-
-  /**
-   * The two alternations of the known values, longest first.
-   *
-   * @returns the patterns (absent where no value of the kind is known)
-   */
-  private compile(): { exact?: RegExp; caseless?: RegExp } {
-    const alternation = (spellings: string[], flags: string): RegExp | undefined =>
-      spellings.length > 0
-        ? new RegExp(
-            spellings
-              .sort((a, b) => b.length - a.length)
-              .map(escapeRegExp)
-              .join("|"),
-            flags,
-          )
-        : undefined;
-    const entries = [...this.known];
-    return {
-      exact: alternation(
-        entries.filter(([, known]) => !caseless(known.kind)).map(([spelling]) => spelling),
-        "g",
-      ),
-      caseless: alternation(
-        entries.filter(([, known]) => caseless(known.kind)).map(([spelling]) => spelling),
-        "gi",
-      ),
-    };
-  }
-
-  /**
-   * The marker of a known value.
-   *
-   * @param match the text the pattern matched
-   * @param known what it stands for (always found — the pattern is built from the same table)
-   * @returns its marker
-   */
-  private markerOf(match: string, known: Known | undefined): string {
-    return known ? this.marker(known.kind, known.canonical) : match;
-  }
-
-  /**
-   * The stable marker of one value.
-   *
-   * @param kind the kind of value
-   * @param value the value
-   * @returns its marker, the same for the same value throughout the report
-   */
-  private marker(kind: string, value: string): string {
-    const id = `${kind}\u0000${kind === "serial" ? value.toUpperCase() : value}`;
-    const existing = this.markers.get(id);
-    if (existing) {
-      return existing;
-    }
-    const prefix = kind === "ip" ? (isPrivate(value) ? "ip-private" : "ip-public") : kind;
-    const n = (this.counters.get(prefix) ?? 0) + 1;
-    this.counters.set(prefix, n);
-    // A serial keeps its last four characters: the object ids carry them anyway, and they tell two
-    // receivers of the same model apart.
-    const marker = kind === "serial" ? `serial-${n}-…${value.slice(-4).toUpperCase()}` : `${prefix}-${n}`;
-    this.markers.set(id, marker);
-    return marker;
-  }
 }
 
 /**
@@ -481,14 +353,4 @@ export class Pseudonymiser {
  */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Escape a literal for a regular expression.
- *
- * @param value the literal
- * @returns the escaped literal
- */
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

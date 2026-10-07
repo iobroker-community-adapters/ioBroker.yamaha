@@ -1,6 +1,32 @@
 import { describe, expect, it } from "vitest";
 import type { HandleCapture } from "./types";
-import { buildDiagnosticsReport, diagnosticsExport, personalIdPart, type ReportInput } from "./report";
+import { buildReportBody, personalIdPart, type ReportInput } from "./report";
+import { leaked } from "./placeholders";
+import { reportFileName } from "./report-file";
+
+/** When the test's reports are made. */
+const MADE = new Date(Date.UTC(2026, 9, 5));
+
+/**
+ * The report body as the file holds it (the master's frame aside).
+ *
+ * @param i the input
+ * @returns the body
+ */
+function buildDiagnosticsReport(i: ReportInput): Record<string, unknown> {
+  return buildReportBody(i).content;
+}
+
+/**
+ * The file the browser saves: the master's file name from the id as the report shows it, and the body.
+ *
+ * @param i the input
+ * @returns file name and content
+ */
+function diagnosticsExport(i: ReportInput): { fileName: string; content: string } {
+  const body = buildReportBody(i);
+  return { fileName: reportFileName("yamaha", body.fileId, "3.3.0", MADE), content: JSON.stringify(body.content) };
+}
 import { TrafficRecorder } from "./traffic-recorder";
 
 /**
@@ -10,8 +36,6 @@ import { TrafficRecorder } from "./traffic-recorder";
  */
 function input(over: Partial<ReportInput> = {}): ReportInput {
   return {
-    adapterVersion: "3.3.0",
-    now: new Date(Date.UTC(2026, 9, 5)),
     environment: {
       node: "v22",
       platform: "linux x64",
@@ -68,6 +92,15 @@ describe("diagnostics report of a device that is not connected (B1)", () => {
     for (const secret of ["Wohnzimmer", "Kinderzimmer", "Terrasse", "Balkon", "0C1D2E3F", "0A1B2B3C"]) {
       expect(text, secret).not.toContain(secret);
     }
+  });
+
+  // Round 97 (DB-04): the canary every report test runs — none of the real values stands in the finished report.
+  it("leaks none of the device's real values", () => {
+    const text = reportText({ profile: { capabilityProfile } });
+    expect(
+      leaked(text, ["Wohnzimmer", "Kinderzimmer", "Terrasse", "Balkon", "0C1D2E3F", "0A1B2B3C", "00A0DED4F504"]),
+    ).toEqual([]);
+    expect(leaked(text, ["192.168.178.40"])).toEqual([]);
   });
 
   it("shows the stored profile as the object it holds, not as a JSON text", () => {
@@ -181,7 +214,7 @@ describe("diagnostics report: device id and file name (B3)", () => {
     }
   });
 
-  it("replaces the whole serial of a second device of the same model — the file name keeps its last four", () => {
+  it("replaces the whole serial of a second device of the same model, in the content and the file name", () => {
     const report = diagnosticsExport(
       input({
         device: {
@@ -196,7 +229,7 @@ describe("diagnostics report: device id and file name (B3)", () => {
     );
     expect(report.content.toLowerCase()).not.toContain("0b11aa22");
     expect(report.fileName.toLowerCase()).not.toContain("0b11aa22");
-    expect(report.fileName).toBe("yamaha_wx-010-serial-1-AA22_v3.3.0_2026-10-05_000000.json");
+    expect(report.fileName).toBe("yamaha_wx-010-serial-1_v3.3.0_2026-10-05_000000.json");
   });
 
   it("keeps an id the adapter built from the model, and from the model and the serial's last four", () => {
@@ -284,14 +317,13 @@ describe("diagnostics report of a connected device (B1, B3)", () => {
     ]) {
       expect(text, secret).not.toContain(secret);
     }
-    // The decoded and the raw spelling of one name are one marker.
+    // The decoded and the raw spelling of one name are both replaced (the master gives each its own placeholder).
     const report = JSON.parse(text) as {
       captures: { xml: { answers: Record<string, string> } };
       objectTree: Array<{ val: string }>;
     };
-    const marker = report.objectTree[0].val;
-    expect(marker).toMatch(/^name-\d+$/);
-    expect(report.captures.xml.answers["Zone_2/Rename"]).toContain(`<Rename_Latin_1>${marker}</Rename_Latin_1>`);
+    expect(report.objectTree[0].val).toMatch(/^name-\d+$/);
+    expect(report.captures.xml.answers["Zone_2/Rename"]).toMatch(/<Rename_Latin_1>name-\d+<\/Rename_Latin_1>/);
     // A status word inside Basic_Status's own Zone_B block is no name.
     expect(report.captures.xml.answers["Main_Zone/Basic_Status"]).toContain("<Lvl>Off</Lvl>");
   });

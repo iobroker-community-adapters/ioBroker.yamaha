@@ -1,28 +1,32 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
-import { Pseudonymiser } from "./pseudonymiser";
+import { describe, expect, it } from "vitest";
+import { blankSecrets, PersonalValues } from "./personal-values";
+import { leaked, Placeholders } from "./placeholders";
 
-function scrub(report: unknown, teach?: (p: Pseudonymiser) => void): string {
-  const p = new Pseudonymiser();
-  teach?.(p);
-  p.learn(report);
-  return JSON.stringify(p.walk(report));
+/**
+ * A report through the master's order: blank the secrets, register what is personal, replace.
+ *
+ * @param report the report
+ * @param teach values registered before the collector runs
+ * @returns the report text with placeholders
+ */
+function scrub(report: unknown, teach?: (p: PersonalValues) => void): string {
+  const blanked = blankSecrets(report);
+  const places = new Placeholders();
+  const personal = new PersonalValues(places);
+  teach?.(personal);
+  personal.learn(blanked);
+  return JSON.stringify(places.deep(blanked));
 }
 
-describe("Pseudonymiser", () => {
-  it("replaces addresses with stable markers and keeps masks and the unspecified address", () => {
-    const out = scrub({
-      a: "192.168.178.26",
-      b: "at 192.168.178.26 and 8.8.8.8",
-      mask: "255.255.255.0",
-      none: "0.0.0.0",
-    });
+describe("PersonalValues", () => {
+  // The fleet standard (Placeholders, round 97): every address gets a stable placeholder by its form.
+  it("replaces addresses with stable placeholders", () => {
+    const out = scrub({ a: "192.168.178.26", b: "at 192.168.178.26 and 8.8.8.8" });
     expect(out).not.toContain("192.168.178.26");
-    expect(out).toContain('"a":"ip-private-1"');
-    expect(out).toContain("at ip-private-1 and ip-public-1");
-    expect(out).toContain("255.255.255.0");
-    expect(out).toContain("0.0.0.0");
+    expect(out).toContain('"a":"address-1"');
+    expect(out).toContain("at address-1 and address-2");
   });
 
   it("removes the MusicCast network names, serials and MACs (a real getNetworkStatus/getDeviceInfo)", () => {
@@ -50,8 +54,7 @@ describe("Pseudonymiser", () => {
     ]) {
       expect(out, secret).not.toContain(secret);
     }
-    // A serial keeps its last four characters — the object ids carry them anyway.
-    expect(out).toMatch(/serial-\d-…7553/);
+    expect(out).toMatch(/serial-\d/);
     expect(out).toContain('"key":"***"');
   });
 
@@ -142,28 +145,33 @@ describe("Pseudonymiser", () => {
     expect(out.match(/host-1/g)).toHaveLength(2);
   });
 
-  it("leaves numbers, booleans and short values alone", () => {
-    const p = new Pseudonymiser();
-    p.teach("name", "TV");
-    expect(p.walk({ n: 41.5, b: true, s: "TV on" })).toEqual({ n: 41.5, b: true, s: "TV on" });
+  // Round 97: the master replaces a name as a whole word with `_` and `-` as boundaries — a name made of protocol words
+  // alone would replace them in every protocol key and value.
+  it("keeps a name made of protocol words readable, so net_radio and its input stay readable", () => {
+    const out = scrub({ net_radio: { input: "net_radio" }, "MAIN:INP": "NET RADIO", z: "Wohnzimmer" }, p => {
+      p.teach("name", "Radio");
+      p.teach("name", "Wohnzimmer");
+    });
+    expect(out).toBe('{"net_radio":{"input":"net_radio"},"MAIN:INP":"NET RADIO","z":"name-1"}');
   });
 
-  // Review 2026-10-05, B8: every string compiled every known value's pattern anew (~400 ms per report here,
-  // seconds on a Pi). The patterns are built once per set of known values.
-  it("compiles the known values once, not per string, and again only after a new value", () => {
-    const p = new Pseudonymiser();
-    const compile = vi.spyOn(p as unknown as { compile(): unknown }, "compile");
-    for (let i = 0; i < 30; i++) {
-      p.teach("name", `Raumname ${i}`);
-    }
-    p.teach("serial", "0A1B2B3C");
+  it("leaves numbers, booleans and short values alone", () => {
+    const out = scrub({ n: 41.5, b: true, s: "TV on" }, p => p.teach("name", "TV"));
+    expect(out).toBe('{"n":41.5,"b":true,"s":"TV on"}');
+  });
+
+  it("replaces many names in many lines, each name with its own placeholder", () => {
     const strings = Array.from({ length: 500 }, (_, i) => `line ${i}: Raumname ${i % 30} at 0a1b2b3c`);
-    const out = p.walk(strings) as string[];
-    expect(compile).toHaveBeenCalledTimes(1);
-    expect(out[7]).toMatch(/^line 7: name-\d+ at serial-1-…2B3C$/);
-    p.teach("name", "Wintergarten");
-    p.text("Wintergarten");
-    expect(compile).toHaveBeenCalledTimes(2);
+    const out = JSON.parse(
+      scrub(strings, p => {
+        for (let i = 0; i < 30; i++) {
+          p.teach("name", `Raumname ${i}`);
+        }
+        p.teach("serial", "0A1B2B3C");
+      }),
+    ) as string[];
+    expect(out[7]).toMatch(/^line 7: name-\d+ at serial-1$/);
+    expect(leaked(JSON.stringify(out), ["Raumname", "0a1b2b3c"])).toEqual([]);
   });
 
   it("replaces the longest known value first, in one pass", () => {
@@ -191,17 +199,18 @@ describe("Pseudonymiser", () => {
       "system/getNetworkStatus": { mac_address: { wired_lan: "00a0ded4f504" } },
       line: "MAC 00:A0:DE:D4:F5:04",
     });
-    expect(out).not.toMatch(/00a0ded4f504/i);
-    expect(out.match(/mac-1/g)).toHaveLength(3);
+    expect(leaked(out, ["00A0DED4F504", "00:A0:DE:D4:F5:04"])).toEqual([]);
+    expect(out.match(/mac-\d/g)).toHaveLength(3);
     expect(out).not.toContain("serial-");
   });
 
-  it("gives the raw and the decoded spelling of an XML name one marker", () => {
+  it("replaces the raw and the decoded spelling of an XML name", () => {
     const out = scrub({
       body: "<Name><Zone>Bad &amp; WC</Zone></Name>",
       val: "Bad & WC",
     });
-    expect(out).toBe('{"body":"<Name><Zone>name-1</Zone></Name>","val":"name-1"}');
+    expect(leaked(out, ["Bad & WC", "Bad &amp; WC"])).toEqual([]);
+    expect(out).toMatch(/^\{"body":"<Name><Zone>name-\d<\/Zone><\/Name>","val":"name-\d"\}$/);
   });
 
   // The name patterns of the log lines follow two lines of main.ts — a changed wording there must fail here, or
