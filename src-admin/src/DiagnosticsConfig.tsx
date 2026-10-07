@@ -22,6 +22,8 @@ export default class DiagnosticsConfig extends ConfigGeneric<ConfigGenericProps,
       <DiagnosticsPanel
         socket={ctx.socket}
         namespace={`${ctx.adapterName}.${ctx.instance}`}
+        repository="https://github.com/iobroker-community-adapters/ioBroker.yamaha"
+        tabIds={["_main", "_expert"]}
       />
     );
   }

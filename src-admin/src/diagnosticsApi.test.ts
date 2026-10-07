@@ -21,11 +21,11 @@ function silentInstance(alive?: boolean): {
   const watchers = new Set<StateHandler>();
   return {
     watchers,
-    setAlive: val => watchers.forEach(handler => handler("system.adapter.yamaha.0.alive", { val })),
+    setAlive: val => watchers.forEach(handler => handler("system.adapter.demo.0.alive", { val })),
     socket: {
       sendTo: () => new Promise(() => {}),
       subscribeState: (id, handler) => {
-        expect(id).toBe("system.adapter.yamaha.0.alive");
+        expect(id).toBe("system.adapter.demo.0.alive");
         watchers.add(handler);
         // Like the admin connection: the current value first, after a round trip.
         return alive === undefined ? undefined : Promise.resolve().then(() => handler(id, { val: alive }));
@@ -64,23 +64,23 @@ function sequence(answers: unknown[]): DiagnosticsSocket {
 
 describe("makeDiagnosticsApi", () => {
   it("asks the instance for its devices", async () => {
-    const { socket, calls } = socketReturning({ devices: [{ value: "rx-v6a-2b3c", label: "RX", connected: true }] });
-    const devices = await makeDiagnosticsApi(socket, "yamaha.1").listDevices();
-    expect(calls[0]).toEqual(["yamaha.1", "diagnostics", { action: "list" }]);
+    const { socket, calls } = socketReturning({ devices: [{ value: "lamp-2b3c", label: "RX", connected: true }] });
+    const devices = await makeDiagnosticsApi(socket, "demo.1").listDevices();
+    expect(calls[0]).toEqual(["demo.1", "diagnostics", { action: "list" }]);
     expect(devices).toHaveLength(1);
   });
 
   it("tells a broken list call apart from an empty list", async () => {
-    await expect(
-      makeDiagnosticsApi(socketReturning(undefined).socket, "yamaha.0").listDevices(),
-    ).rejects.toBeInstanceOf(DeviceListError);
+    await expect(makeDiagnosticsApi(socketReturning(undefined).socket, "demo.0").listDevices()).rejects.toBeInstanceOf(
+      DeviceListError,
+    );
     const failing: DiagnosticsSocket = { sendTo: () => Promise.reject(new Error("no connection")) };
-    await expect(makeDiagnosticsApi(failing, "yamaha.0").listDevices()).rejects.toThrow("no connection");
-    expect(await makeDiagnosticsApi(socketReturning({ devices: [] }).socket, "yamaha.0").listDevices()).toEqual([]);
+    await expect(makeDiagnosticsApi(failing, "demo.0").listDevices()).rejects.toThrow("no connection");
+    expect(await makeDiagnosticsApi(socketReturning({ devices: [] }).socket, "demo.0").listDevices()).toEqual([]);
   });
 
   it("starts the selected device's report, asks for it and hands the answer back", async () => {
-    const answers: unknown[] = [{ job: "rx-v6a-2b3c#1" }, { pending: true }, { fileName: "f.json", content: "{}" }];
+    const answers: unknown[] = [{ job: "lamp-2b3c#1" }, { pending: true }, { fileName: "f.json", content: "{}" }];
     const calls: unknown[][] = [];
     const socket: DiagnosticsSocket = {
       sendTo: (instance, command, data) => {
@@ -88,43 +88,43 @@ describe("makeDiagnosticsApi", () => {
         return Promise.resolve(answers.shift());
       },
     };
-    const res = await makeDiagnosticsApi(socket, "yamaha.0", FAST).exportReport("rx-v6a-2b3c");
+    const res = await makeDiagnosticsApi(socket, "demo.0", FAST).exportReport("lamp-2b3c");
     expect(calls).toEqual([
-      ["yamaha.0", "diagnostics", { action: "start", device: "rx-v6a-2b3c" }],
-      ["yamaha.0", "diagnostics", { action: "result", job: "rx-v6a-2b3c#1" }],
-      ["yamaha.0", "diagnostics", { action: "result", job: "rx-v6a-2b3c#1" }],
+      ["demo.0", "diagnostics", { action: "start", device: "lamp-2b3c" }],
+      ["demo.0", "diagnostics", { action: "result", job: "lamp-2b3c#1" }],
+      ["demo.0", "diagnostics", { action: "result", job: "lamp-2b3c#1" }],
     ]);
     expect(isReport(res) && res.fileName).toBe("f.json");
   });
 
   it("turns a shapeless answer into an error, never into an empty download", async () => {
-    const res = await makeDiagnosticsApi(socketReturning("nonsense").socket, "yamaha.0", FAST).exportReport("x");
+    const res = await makeDiagnosticsApi(socketReturning("nonsense").socket, "demo.0", FAST).exportReport("x");
     expect(isReport(res)).toBe(false);
-    const late = await makeDiagnosticsApi(sequence([{ job: "j" }, "nonsense"]), "yamaha.0", FAST).exportReport("x");
+    const late = await makeDiagnosticsApi(sequence([{ job: "j" }, "nonsense"]), "demo.0", FAST).exportReport("x");
     expect(isReport(late)).toBe(false);
   });
 
   it("hands on the error the adapter answers when it starts no report", async () => {
     const res = await makeDiagnosticsApi(
       socketReturning({ error: "unknown device 'x'" }).socket,
-      "yamaha.0",
+      "demo.0",
       FAST,
     ).exportReport("x");
     expect(res).toEqual({ error: "unknown device 'x'" });
   });
 
   it("says the instance stopped when it no longer knows the report (a restart empties its memory)", async () => {
-    const report = makeDiagnosticsApi(sequence([{ job: "j" }, { gone: true }]), "yamaha.0", FAST).exportReport("x");
+    const report = makeDiagnosticsApi(sequence([{ job: "j" }, { gone: true }]), "demo.0", FAST).exportReport("x");
     await expect(report).rejects.toEqual(new InstanceUnavailableError("stopped"));
   });
 
   it("hands on the error the adapter answers instead of a list", async () => {
-    const api = makeDiagnosticsApi(socketReturning({ error: "diagnostics failed: boom" }).socket, "yamaha.0");
+    const api = makeDiagnosticsApi(socketReturning({ error: "diagnostics failed: boom" }).socket, "demo.0");
     await expect(api.listDevices()).rejects.toThrow(new DeviceListError("diagnostics failed: boom"));
   });
 });
 
-// Review 2026-10-05, B2: `sendTo` of the admin connection never times out — a stopped instance kept the card
+// `sendTo` of the admin connection never times out — a stopped instance kept the card
 // loading for good, a restart during a report kept its button locked.
 describe("askInstance (through the API)", () => {
   afterEach(() => {
@@ -133,14 +133,14 @@ describe("askInstance (through the API)", () => {
 
   it("says at once that the instance is not running, instead of waiting for its answer", async () => {
     const { socket, watchers } = silentInstance(false);
-    const list = makeDiagnosticsApi(socket, "yamaha.0").listDevices();
+    const list = makeDiagnosticsApi(socket, "demo.0").listDevices();
     await expect(list).rejects.toEqual(new InstanceUnavailableError("notRunning"));
     expect(watchers.size).toBe(0);
   });
 
   it("ends a report's wait when the instance stops (or restarts) in the middle of it", async () => {
     const { socket, setAlive, watchers } = silentInstance(true);
-    const report = makeDiagnosticsApi(socket, "yamaha.0").exportReport("rx-v6a-2b3c");
+    const report = makeDiagnosticsApi(socket, "demo.0").exportReport("lamp-2b3c");
     await Promise.resolve();
     await Promise.resolve();
     setAlive(false);
@@ -151,7 +151,7 @@ describe("askInstance (through the API)", () => {
   it("gives up after the timeout when the instance runs but does not answer", async () => {
     vi.useFakeTimers();
     const { socket, watchers } = silentInstance(true);
-    const report = makeDiagnosticsApi(socket, "yamaha.0", { listMs: 15_000, exportMs: 180_000 }).exportReport("x");
+    const report = makeDiagnosticsApi(socket, "demo.0", { listMs: 15_000, exportMs: 180_000 }).exportReport("x");
     const verdict = expect(report).rejects.toEqual(new InstanceUnavailableError("noAnswer", 15));
     await vi.advanceTimersByTimeAsync(15_000);
     await verdict;
@@ -164,7 +164,7 @@ describe("askInstance (through the API)", () => {
       sendTo: (_i, _c, data) =>
         Promise.resolve((data as { action: string }).action === "start" ? { job: "j" } : { pending: true }),
     };
-    const report = makeDiagnosticsApi(socket, "yamaha.0", { listMs: 15_000, exportMs: 180_000 }).exportReport("x");
+    const report = makeDiagnosticsApi(socket, "demo.0", { listMs: 15_000, exportMs: 180_000 }).exportReport("x");
     const verdict = expect(report).rejects.toEqual(new InstanceUnavailableError("noAnswer", 180));
     await vi.advanceTimersByTimeAsync(180_000);
     await verdict;
@@ -173,7 +173,7 @@ describe("askInstance (through the API)", () => {
   it("gives up after the timeout on a socket without a state subscription", async () => {
     vi.useFakeTimers();
     const socket: DiagnosticsSocket = { sendTo: () => new Promise(() => {}) };
-    const list = makeDiagnosticsApi(socket, "yamaha.0", { listMs: 15_000, exportMs: 180_000 }).listDevices();
+    const list = makeDiagnosticsApi(socket, "demo.0", { listMs: 15_000, exportMs: 180_000 }).listDevices();
     const verdict = expect(list).rejects.toMatchObject({ reason: "noAnswer", seconds: 15 });
     await vi.advanceTimersByTimeAsync(15_000);
     await verdict;
@@ -190,14 +190,13 @@ describe("askInstance (through the API)", () => {
         watchers.delete(handler!);
       },
     };
-    expect(await makeDiagnosticsApi(socket, "yamaha.0").listDevices()).toEqual([]);
+    expect(await makeDiagnosticsApi(socket, "demo.0").listDevices()).toEqual([]);
     expect(watchers.size).toBe(0);
   });
 });
 
-// Server test 2026-10-06: every report through the Expert tab failed after 33 s. The admin's browser connection
-// (admin 8.0.23 `lib/js/socket.io.js`) keeps a callback `Date.now() + 3e4` and calls it with "timeout" on its next
-// 5-second sweep; a report over YNCA takes 35–60 s. This socket keeps that rule.
+// The admin's browser connection (admin 8.0.23 `lib/js/socket.io.js`) keeps a callback `Date.now() + 3e4` and calls it
+// with "timeout" on its next 5-second sweep — a report in one answer failed after 33 s. This socket keeps that rule.
 describe("the admin's 30-second rule", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -210,7 +209,7 @@ describe("the admin's 30-second rule", () => {
    */
   function adminConnection(reportMs: number): DiagnosticsSocket {
     let readyAt = Number.POSITIVE_INFINITY;
-    const report = { fileName: "yamaha_rx-v6a.json", content: "{}" };
+    const report = { fileName: "demo_lamp.json", content: "{}" };
     const instance = (data: { action: string }): Promise<unknown> => {
       if (data.action === "export") {
         return new Promise(resolve => setTimeout(() => resolve(report), reportMs));
@@ -232,23 +231,59 @@ describe("the admin's 30-second rule", () => {
 
   it("gets a report that takes 45 s", async () => {
     vi.useFakeTimers();
-    const report = makeDiagnosticsApi(adminConnection(45_000), "yamaha.0").exportReport("rx-v6a-2b3c");
+    const report = makeDiagnosticsApi(adminConnection(45_000), "demo.0").exportReport("lamp-2b3c");
     await vi.advanceTimersByTimeAsync(50_000);
-    expect(isReport(await report) && ((await report) as { fileName: string }).fileName).toBe("yamaha_rx-v6a.json");
+    expect(isReport(await report) && ((await report) as { fileName: string }).fileName).toBe("demo_lamp.json");
   });
 
   it("asks again when the connection loses one question while the report runs", async () => {
     const report = { fileName: "f.json", content: "{}" };
-    const res = await makeDiagnosticsApi(sequence([{ job: "j" }, "timeout", report]), "yamaha.0", FAST).exportReport(
-      "x",
-    );
+    const res = await makeDiagnosticsApi(sequence([{ job: "j" }, "timeout", report]), "demo.0", FAST).exportReport("x");
     expect(res).toEqual(report);
   });
 
   it("says that the connection gave up, never that the report failed", async () => {
     vi.useFakeTimers();
     const socket: DiagnosticsSocket = { sendTo: () => Promise.resolve("timeout") };
-    const list = makeDiagnosticsApi(socket, "yamaha.0").listDevices();
+    const list = makeDiagnosticsApi(socket, "demo.0").listDevices();
     await expect(list).rejects.toMatchObject({ reason: "noAnswer" });
+  });
+});
+
+describe("isReport", () => {
+  it("takes only an answer with a file name and a content as a report", () => {
+    expect(isReport({ fileName: "demo_lamp.json", content: "{}" })).toBe(true);
+    expect(isReport({ fileName: "demo_lamp.json" } as never)).toBe(false);
+    expect(isReport({ error: "x" })).toBe(false);
+  });
+});
+
+describe("the rest of the round trip", () => {
+  it("still gets the answer when the alive watch cannot be set up", async () => {
+    const socket: DiagnosticsSocket = {
+      sendTo: () => Promise.resolve({ devices: [] }),
+      subscribeState: () => Promise.reject(new Error("no subscription")),
+    };
+    expect(await makeDiagnosticsApi(socket, "demo.0").listDevices()).toEqual([]);
+  });
+
+  it("names no report when the answer is neither a report nor an error", async () => {
+    const socket: DiagnosticsSocket = {
+      sendTo: (_i, _c, data) =>
+        Promise.resolve((data as { action: string }).action === "start" ? { job: "j1" } : { something: 1 }),
+    };
+    const api = makeDiagnosticsApi(socket, "demo.0", { listMs: 1_000, exportMs: 5_000, pollMs: 1 });
+    expect(await api.exportReport("lamp")).toEqual({ error: "" });
+  });
+
+  it("stops asking when a question about the report fails for another reason", async () => {
+    const socket: DiagnosticsSocket = {
+      sendTo: (_i, _c, data) =>
+        (data as { action: string }).action === "start"
+          ? Promise.resolve({ job: "j1" })
+          : Promise.reject(new Error("socket closed")),
+    };
+    const api = makeDiagnosticsApi(socket, "demo.0", { listMs: 1_000, exportMs: 5_000, pollMs: 1 });
+    await expect(api.exportReport("lamp")).rejects.toThrow("socket closed");
   });
 });

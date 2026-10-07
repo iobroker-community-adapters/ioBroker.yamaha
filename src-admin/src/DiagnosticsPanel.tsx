@@ -1,3 +1,10 @@
+// Fleet master (.consistency-master/src-admin/src/DiagnosticsPanel.tsx) — never edit the copy in an adapter.
+//
+// The diagnostics card of every adapter with a report (krobi 2026-10-06, page "Diagnosebericht — Flottenstandard"):
+// all devices, connected or not (DB-03); a short sentence, the list of what the report contains, one sentence on what
+// comes next (DB-09, DB-13); "Saved as <file>" with a link that opens the issue form (DB-07); the outlined privacy box
+// with two points (DB-13). The adapter mounts it in a thin ConfigGeneric class and hands in its issue form and tab ids.
+
 import React from "react";
 
 import {
@@ -17,33 +24,44 @@ import {
 import { I18n } from "@iobroker/gui-components";
 
 import { errText } from "../../src/lib/err-text";
+import type { ReportDevice } from "../../src/lib/diagnostics/report-jobs";
 import {
   InstanceUnavailableError,
   isReport,
   makeDiagnosticsApi,
-  type DiagnosticsDevice,
   type DiagnosticsSocket,
   type DiagnosticsTimeouts,
 } from "./diagnosticsApi";
+import { registerDiagnosticsTexts } from "./diagnosticsTexts";
 import { forgetLastTab } from "./tabMemory";
 
-/** Where a report goes: the issue form that asks for it (`.github/ISSUE_TEMPLATE/device-support.yml`). */
-export const ISSUES_URL =
-  "https://github.com/iobroker-community-adapters/ioBroker.yamaha/issues/new?template=device-support.yml";
+/**
+ * The link to the adapter's issue form that asks for the report (`.github/ISSUE_TEMPLATE/device-support.yml`).
+ *
+ * @param repository the adapter's GitHub repository, e.g. `https://github.com/owner/ioBroker.demo`
+ * @returns the URL that opens the form directly
+ */
+export function issueFormUrl(repository: string): string {
+  return `${repository.replace(/\/+$/, "")}/issues/new?template=device-support.yml`;
+}
 
 /** Props of the diagnostics card. */
 export interface DiagnosticsPanelProps {
   /** The admin socket for the sendTo round trips. */
   socket: unknown;
-  /** The instance, e.g. `yamaha.0`. */
+  /** The instance, e.g. `demo.0`. */
   namespace: string;
+  /** The adapter's GitHub repository, e.g. `https://github.com/owner/ioBroker.demo`. */
+  repository: string;
+  /** The tab ids of the adapter's `admin/jsonConfig.json` — the settings open on the first one again. */
+  tabIds: readonly string[];
   /** How long the card waits — the defaults outside tests. */
   timeouts?: DiagnosticsTimeouts;
 }
 
 /** What the card knows about its device list. */
 type ListState =
-  { status: "loading" } | { status: "ready"; devices: DiagnosticsDevice[] } | { status: "failed"; message: string };
+  { status: "loading" } | { status: "ready"; devices: ReportDevice[] } | { status: "failed"; message: string };
 
 /**
  * What the card says when a call got no answer: the instance is not running, it stopped while the card
@@ -55,12 +73,12 @@ type ListState =
 export function failureText(e: unknown, fallback: string): string {
   if (e instanceof InstanceUnavailableError) {
     if (e.reason === "notRunning") {
-      return I18n.t("yd_notRunning");
+      return I18n.t("diag_notRunning");
     }
     if (e.reason === "stopped") {
-      return I18n.t("yd_stopped");
+      return I18n.t("diag_stopped");
     }
-    return I18n.t("yd_noAnswer", String(e.seconds));
+    return I18n.t("diag_noAnswer", String(e.seconds));
   }
   return e instanceof Error && e.message ? errText(e) : fallback;
 }
@@ -85,16 +103,23 @@ export function offerDownload(fileName: string, content: string): void {
 }
 
 /**
- * The diagnostics card: pick a device, press one button, get a file. The adapter reads the receiver over
- * every protocol it speaks (read only), adds what it knows and its recent log lines, and the browser saves
- * the result. The list is not filtered: a report is wanted exactly when a device misbehaves.
+ * The diagnostics card: pick a device, press one button, get a file.
  *
  * @param root0 props
  * @param root0.socket the admin socket
  * @param root0.namespace the instance
+ * @param root0.repository the adapter's GitHub repository
+ * @param root0.tabIds the tab ids of the adapter's settings
  * @param root0.timeouts how long the card waits (tests only)
  */
-export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPanelProps): React.JSX.Element {
+export function DiagnosticsPanel({
+  socket,
+  namespace,
+  repository,
+  tabIds,
+  timeouts,
+}: DiagnosticsPanelProps): React.JSX.Element {
+  registerDiagnosticsTexts((words, lang) => I18n.extendTranslations(words, lang as ioBroker.Languages));
   const api = React.useMemo(
     () => makeDiagnosticsApi(socket as DiagnosticsSocket, namespace, timeouts),
     [socket, namespace, timeouts],
@@ -118,9 +143,9 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
   }, [busy]);
 
   React.useEffect(() => {
-    forgetLastTab(namespace);
-    return () => forgetLastTab(namespace);
-  }, [namespace]);
+    forgetLastTab(namespace, tabIds);
+    return () => forgetLastTab(namespace, tabIds);
+  }, [namespace, tabIds]);
 
   React.useEffect(() => {
     let alive = true;
@@ -137,7 +162,7 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
       })
       .catch((e: unknown) => {
         if (alive) {
-          setList({ status: "failed", message: failureText(e, I18n.t("yd_listFailed")) });
+          setList({ status: "failed", message: failureText(e, I18n.t("diag_listFailed")) });
         }
       });
     return () => {
@@ -156,11 +181,11 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
           offerDownload(res.fileName, res.content);
           setDone(res.fileName);
         } else {
-          setError(res.error || I18n.t("yd_exportFailed"));
+          setError(res.error || I18n.t("diag_exportFailed"));
         }
       })
       // A stopped or restarted instance, or no answer in time, ends the wait too — the button is free again.
-      .catch((e: unknown) => setError(failureText(e, I18n.t("yd_exportFailed"))))
+      .catch((e: unknown) => setError(failureText(e, I18n.t("diag_exportFailed"))))
       .finally(() => setBusy(false));
   }, [api, selected]);
 
@@ -173,7 +198,7 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
           sx={{ alignItems: "center" }}
         >
           <CircularProgress size={24} />
-          <Typography variant="body2">{I18n.t("yd_loadingDevices")}</Typography>
+          <Typography variant="body2">{I18n.t("diag_loadingDevices")}</Typography>
         </Stack>
       </Box>
     );
@@ -197,18 +222,18 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
     <Box sx={{ p: 2, maxWidth: 720 }}>
       <Stack spacing={2}>
         <Box data-testid="diag-intro">
-          <Typography variant="body2">{I18n.t("yd_intro")}</Typography>
+          <Typography variant="body2">{I18n.t("diag_intro")}</Typography>
           <Typography
             variant="body2"
             sx={{ mt: 1 }}
           >
-            {I18n.t("yd_contains")}
+            {I18n.t("diag_contains")}
           </Typography>
           <Box
             component="ul"
             sx={{ m: 0, pl: 3 }}
           >
-            {(["yd_containsWhat", "yd_containsDatapoints", "yd_containsLog"] as const).map(key => (
+            {(["diag_containsWhat", "diag_containsDatapoints", "diag_containsLog"] as const).map(key => (
               <Typography
                 key={key}
                 component="li"
@@ -222,7 +247,7 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
             variant="body2"
             sx={{ mt: 1 }}
           >
-            {I18n.t("yd_after")}
+            {I18n.t("diag_after")}
           </Typography>
         </Box>
 
@@ -231,16 +256,16 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
             severity="info"
             data-testid="diag-no-devices"
           >
-            {I18n.t("yd_noDevices")}
+            {I18n.t("diag_noDevices")}
           </Alert>
         ) : (
           <>
             <FormControl fullWidth>
-              <InputLabel id="yd-device">{I18n.t("yd_device")}</InputLabel>
+              <InputLabel id="diag-device">{I18n.t("diag_device")}</InputLabel>
               <Select
                 data-testid="diag-device-select"
-                labelId="yd-device"
-                label={I18n.t("yd_device")}
+                labelId="diag-device"
+                label={I18n.t("diag_device")}
                 value={selected}
                 onChange={e => setSelected(String(e.target.value))}
               >
@@ -249,13 +274,13 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
                     key={d.value}
                     value={d.value}
                   >
-                    {d.connected ? d.label : `${d.label} — ${I18n.t("yd_notConnected")}`}
+                    {d.connected ? d.label : `${d.label} — ${I18n.t("diag_notConnected")}`}
                   </MenuItem>
                 ))}
               </Select>
             </FormControl>
 
-            {chosen && !chosen.connected ? <Alert severity="warning">{I18n.t("yd_offlineHint")}</Alert> : null}
+            {chosen && !chosen.connected ? <Alert severity="warning">{I18n.t("diag_offlineHint")}</Alert> : null}
 
             <Box>
               <Button
@@ -265,7 +290,7 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
                 onClick={onExport}
                 startIcon={busy ? <CircularProgress size={16} /> : undefined}
               >
-                {busy ? I18n.t("yd_reading") : I18n.t("yd_export")}
+                {busy ? I18n.t("diag_reading") : I18n.t("diag_export")}
               </Button>
             </Box>
           </>
@@ -276,14 +301,14 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
             severity="info"
             data-testid="diag-generating"
           >
-            <Typography variant="body2">{I18n.t("yd_generating")}</Typography>
+            <Typography variant="body2">{I18n.t("diag_generating")}</Typography>
             <LinearProgress sx={{ my: 1 }} />
             <Typography
               variant="caption"
               color="text.secondary"
               data-testid="diag-elapsed"
             >
-              {I18n.t("yd_elapsed", String(elapsed))}
+              {I18n.t("diag_elapsed", String(elapsed))}
             </Typography>
           </Alert>
         ) : null}
@@ -293,13 +318,13 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
             severity="success"
             data-testid="diag-done"
           >
-            {I18n.t("yd_done", done)}{" "}
+            {I18n.t("diag_done", done)}{" "}
             <Link
-              href={ISSUES_URL}
+              href={issueFormUrl(repository)}
               target="_blank"
               rel="noreferrer"
             >
-              {I18n.t("yd_openIssue")}
+              {I18n.t("diag_openIssue")}
             </Link>
           </Alert>
         ) : null}
@@ -321,13 +346,13 @@ export function DiagnosticsPanel({ socket, namespace, timeouts }: DiagnosticsPan
             variant="body2"
             sx={{ fontWeight: 500 }}
           >
-            {I18n.t("yd_privacyTitle")}
+            {I18n.t("diag_privacyTitle")}
           </Typography>
           <Box
             component="ul"
             sx={{ m: 0, pl: 3 }}
           >
-            {(["yd_privacyMarkers", "yd_privacyMemory"] as const).map(key => (
+            {(["diag_privacyMarkers", "diag_privacyMemory"] as const).map(key => (
               <Typography
                 key={key}
                 component="li"

@@ -1,30 +1,15 @@
-// The admin side of the `diagnostics` message (backend: src/lib/diagnostics/diagnostics-handler.ts).
-// Kept free of React and socket-client imports so it stays a pure, testable factory: the only
-// dependencies are the socket's `sendTo` and its state subscription. The answer shapes are re-declared
-// here as types — they MUST stay in step with the handler.
+// Fleet master (.consistency-master/src-admin/src/diagnosticsApi.ts) — never edit the copy in an adapter.
+//
+// The admin side of the `diagnostics` message (adapter side: src/lib/diagnostics/report-jobs.ts, diagnostics report
+// standard C3, krobi 2026-10-06). Free of React and socket-client imports so it stays a pure, testable factory: the only dependencies are the
+// socket's `sendTo` and its state subscription. The answer shapes come from the adapter side as types only — nothing of
+// it reaches the browser bundle.
 
 import { errText } from "../../src/lib/err-text";
+import type { Report, ReportDevice } from "../../src/lib/diagnostics/report-jobs";
 
-/** One device as the handler lists it. */
-export interface DiagnosticsDevice {
-  /** The device id. */
-  value: string;
-  /** What the card shows. */
-  label: string;
-  /** Whether it is connected — an unconnected one gets a report without the live read. */
-  connected: boolean;
-}
-
-/** A finished report: the file name and the JSON text. */
-export interface DiagnosticsReport {
-  /** The name the browser saves the file under. */
-  fileName: string;
-  /** The report as JSON text. */
-  content: string;
-}
-
-/** What the export action answers. */
-export type DiagnosticsExportResult = DiagnosticsReport | { error: string };
+/** What the start-and-fetch round answers. */
+export type DiagnosticsExportResult = Report | { error: string };
 
 /** A state as the admin connection hands it to a subscriber. */
 export type StateHandler = (id: string, state: { val?: unknown } | null | undefined) => void;
@@ -66,17 +51,13 @@ export class InstanceUnavailableError extends Error {
 /** How long the card waits for the device list — the adapter answers it from memory at once. */
 export const LIST_TIMEOUT_MS = 15_000;
 
-/**
- * How long the card waits for a report: reading a receiver over its protocols takes up to a minute (the YNCA
- * read alone 35–60 s), a busy one longer — the wait ends long before only when the instance stops.
- */
+/** How long the card waits for a report — the wait ends long before only when the instance stops. */
 export const EXPORT_TIMEOUT_MS = 180_000;
 
 /**
  * How often the card asks whether the report is done. No single answer may take long: the admin's browser
  * connection calls every pending answer with "timeout" after 30 s (admin 8.0.23 `lib/js/socket.io.js`, a callback
- * lives `Date.now() + 3e4`) — a report in one answer failed after 33 s on every receiver with YNCA (server test
- * 2026-10-06).
+ * lives `Date.now() + 3e4`).
  */
 export const POLL_INTERVAL_MS = 2_000;
 
@@ -96,7 +77,7 @@ export interface DiagnosticsTimeouts {
 /** The two operations the card drives. */
 export interface DiagnosticsApi {
   /** Every device the instance runs, connected or not. */
-  listDevices(): Promise<DiagnosticsDevice[]>;
+  listDevices(): Promise<ReportDevice[]>;
   /** Read one device and get its report back. */
   exportReport(device: string): Promise<DiagnosticsExportResult>;
 }
@@ -106,19 +87,19 @@ export interface DiagnosticsApi {
  *
  * @param r the answer
  */
-export function isReport(r: DiagnosticsExportResult): r is DiagnosticsReport {
-  return typeof (r as DiagnosticsReport).fileName === "string" && typeof (r as DiagnosticsReport).content === "string";
+export function isReport(r: DiagnosticsExportResult): r is Report {
+  return typeof (r as Report).fileName === "string" && typeof (r as Report).content === "string";
 }
 
 /**
  * Send one `diagnostics` message to the instance and wait for its answer — but not forever. The admin
  * connection's `sendTo` has no timeout of its own, so a stopped instance left the card at "Loading devices…"
- * for good, and an instance restarted during a report left its button locked (review 2026-10-05, B2). The
+ * for good, and an instance restarted during a report left its button locked. The
  * instance's `alive` state tells at once when it is not running and when it stops while the card waits; the
  * timeout catches what neither shows (an instance that runs but does not answer).
  *
  * @param socket the admin socket
- * @param namespace the instance, e.g. `yamaha.0`
+ * @param namespace the instance, e.g. `demo.0`
  * @param data the message
  * @param timeoutMs how long to wait for the answer
  * @returns the answer; rejects with {@link InstanceUnavailableError} or the socket's own error
@@ -131,7 +112,7 @@ export async function askInstance(
 ): Promise<unknown> {
   const aliveId = `system.adapter.${namespace}.alive`;
   let seenAlive = false;
-  let giveUp: (reason: InstanceUnavailableError) => void = () => {};
+  let giveUp: (reason: InstanceUnavailableError) => void;
   const unavailable = new Promise<never>((_resolve, reject) => {
     giveUp = reject;
   });
@@ -169,7 +150,7 @@ export async function askInstance(
  * Build the API for one admin socket and instance.
  *
  * @param socket the admin socket
- * @param namespace the instance, e.g. `yamaha.0`
+ * @param namespace the instance, e.g. `demo.0`
  * @param timeouts how long to wait for each answer
  */
 export function makeDiagnosticsApi(
@@ -178,7 +159,7 @@ export function makeDiagnosticsApi(
   timeouts: DiagnosticsTimeouts = { listMs: LIST_TIMEOUT_MS, exportMs: EXPORT_TIMEOUT_MS },
 ): DiagnosticsApi {
   return {
-    async listDevices(): Promise<DiagnosticsDevice[]> {
+    async listDevices(): Promise<ReportDevice[]> {
       let answer: unknown;
       try {
         answer = await askInstance(socket, namespace, { action: "list" }, timeouts.listMs);
@@ -190,7 +171,7 @@ export function makeDiagnosticsApi(
         const error = (answer as { error?: unknown } | null)?.error;
         throw new DeviceListError(typeof error === "string" ? error : "");
       }
-      return devices as DiagnosticsDevice[];
+      return devices as ReportDevice[];
     },
     async exportReport(device: string): Promise<DiagnosticsExportResult> {
       // Start, then ask until it is done: every answer comes at once (see POLL_INTERVAL_MS).
