@@ -5016,6 +5016,50 @@ describe("Yamaha writes only what changed (audit 2026-09-15 — setStateChangedA
     expect(changedAsync.mock.calls.filter(c => c[0] === "Living_room.sound.direct").length).toBeGreaterThan(0);
   });
 
+  // Werkbank lab 2026-10-07 13:13: a stop that arrives before the start's bulk read wrote the three offline markers
+  // through the database compare — one read each. A read-only state the mirror cannot judge is written, never read.
+  describe("an unload before the start's bulk read went in", () => {
+    const MARKERS = ["info.connection", "info.devicesOnline", "info.devicesAllOnline"];
+    const prepared = (bulk: () => Promise<Record<string, unknown>>): Ctx => {
+      const ctx = setup();
+      (ctx.i as unknown as { ioPack: unknown }).ioPack = {
+        instanceObjects: MARKERS.map(id => ({ _id: id, type: "state", common: { write: false } })),
+      };
+      (
+        ctx.i as unknown as { getStatesAsync: { mockImplementation(f: unknown): void } }
+      ).getStatesAsync.mockImplementation(bulk);
+      return ctx;
+    };
+    const asked = (ctx: Ctx): unknown[] =>
+      (ctx.i as unknown as { setStateChangedAsync: { mock: { calls: unknown[][] } } }).setStateChangedAsync.mock.calls
+        .map(c => c[0])
+        .filter(id => MARKERS.includes(id as string));
+
+    it("writes the offline markers without reading them, while the bulk read still runs", async () => {
+      let release: (states: Record<string, unknown>) => void = () => undefined;
+      const ctx = prepared(() => new Promise(resolve => (release = resolve)));
+      const ready = ctx.i.onReady();
+      await flush();
+      await new Promise<void>(resolve => ctx.i.onUnload(resolve));
+      release({});
+      await ready;
+      await flush();
+      expect(asked(ctx)).toEqual([]);
+      for (const id of MARKERS) {
+        expect(writesOf(ctx, id)).toBeGreaterThanOrEqual(1);
+      }
+    });
+
+    it("writes the offline markers without reading them when the bulk read failed", async () => {
+      const ctx = prepared(() => Promise.reject(new Error("states database gone")));
+      await ctx.i.onReady();
+      await flush();
+      await new Promise<void>(resolve => ctx.i.onUnload(resolve));
+      await flush();
+      expect(asked(ctx)).toEqual([]);
+    });
+  });
+
   it("a read-only state never asks the database, and is written once", async () => {
     const ctx = setup();
     await ctx.i.onReady();

@@ -1571,8 +1571,11 @@ export class Yamaha extends utils.Adapter {
       return Promise.resolve();
     }
     this.stateMirror.holds(id, value, true);
+    // A read-only state the mirror cannot judge (the bulk read has not gone in — a stop during the first moments of a
+    // start — or it failed) is written, never read back one by one: the fleet rule of round 62/77, measured by the
+    // Werkbank lab 2026-10-07 13:13 (three offline markers read singly by an unload before the bulk read).
     const write =
-      verdict === "changed"
+      verdict === "changed" || readOnly
         ? this.setState(id, { val: value, ack: true })
         : this.setStateChangedAsync(id, { val: value, ack: true });
     return write.then(
