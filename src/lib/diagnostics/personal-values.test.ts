@@ -166,8 +166,42 @@ describe("PersonalValues", () => {
   });
 
   it("leaves numbers, booleans and short values alone", () => {
-    const out = scrub({ n: 41.5, b: true, s: "TV on" }, p => p.teach("name", "TV"));
-    expect(out).toBe('{"n":41.5,"b":true,"s":"TV on"}');
+    const out = scrub({ n: 41.5, b: true, s: "Jo on" }, p => p.teach("name", "Jo"));
+    expect(out).toBe('{"n":41.5,"b":true,"s":"Jo on"}');
+  });
+
+  it("keeps the zone names a receiver ships with readable", () => {
+    const out = scrub({ a: "Living", b: "Zone A", c: "Room 2" }, p => {
+      for (const name of ["Living", "Zone A", "Room 2"]) {
+        p.teach("name", name);
+      }
+    });
+    expect(out).toBe('{"a":"Living","b":"Zone A","c":"Room 2"}');
+  });
+
+  it("keeps a serial of zeros — the cleaned fixtures carry it, and it says nothing about the person", () => {
+    const out = scrub({ system_id: "00000000", line: "id 00000000, count 1000000000" });
+    expect(out).toBe('{"system_id":"00000000","line":"id 00000000, count 1000000000"}');
+  });
+
+  it("replaces a WLAN name wherever it stands, also inside a longer token", () => {
+    const out = scrub({ wireless_lan: { ssid: "FRITZ-7590" }, line: "joined FRITZ-7590_5G" });
+    expect(out).toBe('{"wireless_lan":{"ssid":"network-1"},"line":"joined network-1_5G"}');
+  });
+
+  it("replaces a MAC without separators that has no letter in it", () => {
+    const out = scrub({ "system/getNetworkStatus": { mac_address: { wired_lan: "001122334455" } } });
+    expect(out).toBe('{"system/getNetworkStatus":{"mac_address":{"wired_lan":"mac-1"}}}');
+  });
+
+  it("replaces the zone names MusicCast's getNameText reports", () => {
+    const out = scrub({ "system/getNameText": { zone_list: [{ id: "main", text: "Wohnzimmer" }] } });
+    expect(out).toBe('{"system/getNameText":{"zone_list":[{"id":"main","text":"name-1"}]}}');
+  });
+
+  it("blanks a secret inside a list", () => {
+    const out = scrub({ accounts: [{ password: "geheim" }, { token: "abc" }] });
+    expect(out).toBe('{"accounts":[{"password":"***"},{"token":"***"}]}');
   });
 
   it("replaces many names in many lines, each name with its own placeholder", () => {

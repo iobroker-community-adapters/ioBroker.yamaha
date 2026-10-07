@@ -121,14 +121,15 @@ const instance = (enabled: boolean): ioBroker.Object => ({ common: { enabled } }
  * @param host the running adapter
  * @param id the device id
  * @param now the clock
+ * @param jobs the report jobs of a running adapter (a new one when not given)
  * @returns the report or why there is none
  */
 async function exportReport(
   host: DiagnosticsHost,
   id: string,
   now?: () => number,
+  jobs = new ReportJobs(new YamahaReportSource(host), now),
 ): Promise<{ fileName: string; content: string } | { error: string }> {
-  const jobs = new ReportJobs(new YamahaReportSource(host), now);
   const started = jobs.start(id);
   if ("error" in started) {
     return started;
@@ -296,6 +297,24 @@ describe("YamahaReportSource", () => {
       .traffic.xml;
     expect(xml).toHaveLength(before);
     expect(xml.every(entry => entry.request.startsWith("<Basic_Status"))).toBe(true);
+  });
+
+  it("takes each report's own trail — an earlier report's trail never stands in a later one", async () => {
+    const recorder = new TrafficRecorder();
+    recorder.xml("<First/>", { answer: "<YAMAHA_AV/>" }, 5);
+    const receiver = device({ trail: () => recorder.snapshot() });
+    const host = makeHost({ devices: [receiver] });
+    let clock = 0;
+    const jobs = new ReportJobs(new YamahaReportSource(host), () => clock);
+    await exportReport(host, "rx-v6a-2b3c", undefined, jobs);
+    // The receiver drops: the next report reads nothing live and takes the trail as it stands now.
+    receiver.connected = false;
+    recorder.xml("<Second/>", { answer: "<YAMAHA_AV/>" }, 5);
+    clock += 60_000;
+    const answer = (await exportReport(host, "rx-v6a-2b3c", undefined, jobs)) as { content: string };
+    const xml = (JSON.parse(answer.content) as { trail: { traffic: { xml: Array<{ request: string }> } } }).trail
+      .traffic.xml;
+    expect(xml.map(entry => entry.request)).toEqual(["<First/>", "<Second/>"]);
   });
 
   it("reads no unconnected device live, and says so in the report", async () => {
