@@ -30,8 +30,11 @@ const SERIAL_KEYS = new Set(["system_id", "serial_number", "serial", "systemid"]
 /** JSON keys whose value is a MAC without separators — MusicCast's `device_id` is the device's MAC. */
 const MAC_KEYS = new Set(["device_id"]);
 
-/** JSON keys whose value is a name the user gave: the network name, the WLAN, the MusicCast Link group. */
-const NAME_KEYS = new Set(["ssid", "network_name", "group_name"]);
+/** JSON keys whose value is a name the user gave: the device's network name, the MusicCast Link group. */
+const NAME_KEYS = new Set(["network_name", "group_name"]);
+
+/** JSON keys whose value is a WLAN name — its own kind: the master replaces it wherever it stands, inside a token too. */
+const NETWORK_KEYS = new Set(["ssid"]);
 
 /**
  * YNCA functions whose value is a name the user gave — the zone names and the paired Bluetooth device —
@@ -131,7 +134,7 @@ function onlyProtocolWords(name: string): boolean {
 }
 
 /** What a registered value is — the placeholder's word. */
-export type PersonalKind = "name" | "serial" | "mac" | "host" | "device" | "uuid";
+export type PersonalKind = "name" | "serial" | "mac" | "host" | "device" | "uuid" | "network";
 
 /** JSON keys whose value is a secret — never shown, not even as a placeholder. */
 const SECRET_KEYS = new Set(["key", "airplay_pin", "password", "token"]);
@@ -246,6 +249,8 @@ export class PersonalValues {
       this.teach("serial", value);
     } else if (NAME_KEYS.has(lower)) {
       this.teach("name", value);
+    } else if (NETWORK_KEYS.has(lower)) {
+      this.teach("network", value);
     } else if (MAC_KEYS.has(lower) || lower.includes("mac") || parent.includes("mac_address")) {
       this.teach("mac", value);
     } else if (lower === "text" && path.some(p => p === "zone_list")) {
