@@ -177,8 +177,7 @@ export class PersonalValues {
     const trimmed = value.trim();
     if (
       trimmed.length < 3 ||
-      (kind === "name" &&
-        (GENERIC_NAME.test(trimmed) || MODEL_DESIGNATION.test(trimmed) || onlyProtocolWords(trimmed))) ||
+      (kind === "name" && (GENERIC_NAME.test(trimmed) || onlyProtocolWords(trimmed))) ||
       /^0+$/.test(trimmed)
     ) {
       return;

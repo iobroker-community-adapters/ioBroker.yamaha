@@ -155,6 +155,15 @@ describe("PersonalValues", () => {
     expect(out).toBe('{"net_radio":{"input":"net_radio"},"MAIN:INP":"NET RADIO","z":"name-1"}');
   });
 
+  // A network name shaped like a model designation (WLAN-ABC123) is a name like any other — the model filter belongs to
+  // the log lines only.
+  it("replaces a network name shaped like a model designation", () => {
+    const out = scrub({
+      "system/getNetworkStatus": { network_name: "WLAN-ABC123", wireless_lan: { ssid: "FRITZ-7590" } },
+    });
+    expect(leaked(out, ["WLAN-ABC123", "FRITZ-7590"])).toEqual([]);
+  });
+
   it("leaves numbers, booleans and short values alone", () => {
     const out = scrub({ n: 41.5, b: true, s: "TV on" }, p => p.teach("name", "TV"));
     expect(out).toBe('{"n":41.5,"b":true,"s":"TV on"}');
