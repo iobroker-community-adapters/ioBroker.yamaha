@@ -1788,6 +1788,22 @@ tests.integration(ADAPTER_DIR, {
           assert.deepStrictEqual(changed, [], `files the reports wrote, changed or removed:\n${changed.join("\n")}`);
         });
 
+        it("shows no address, hardware id or mail address in plain text", function () {
+          const forms = [
+            /(?<![\w.])(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?![\w.])/,
+            /(?<![0-9A-Fa-f:-])[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}(?![0-9A-Fa-f:-])/,
+            /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b/,
+          ];
+          const plain = [...reports.reports, ...reports.offline].flatMap(({ device, answer }) =>
+            forms.filter(f => f.test(answer?.content ?? "")).map(f => `${device}: ${f}`),
+          );
+          assert.deepStrictEqual(
+            plain,
+            [],
+            `reports that show an address, a hardware id or a mail address in plain text (DB-04):\n${plain.join("\n")}`,
+          );
+        });
+
         it("restarts at most once for its own instance object", function () {
           assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
         });

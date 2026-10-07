@@ -10,8 +10,16 @@
 // to the word, so a name never matches inside a longer token, and other casings never match: a name the user took from a
 // protocol word ("Radio") must leave the protocol's own tokens (`net_radio`, `NET RADIO`) readable. A device that reports a
 // name in yet another spelling registers that spelling with `name()` itself. Every other kind (a serial number, a network
-// or host name, an id) is no word of any protocol and is replaced wherever it stands, in any case, also inside a longer
-// token (`rx-v6a-ABC123`, `WLAN-ABC123_5G`) — the old adapter cores replaced known values that way.
+// or host name, an id) is no word of any protocol and is replaced wherever it stands, in any case, with nothing or up to
+// six characters between its words that are no letter or digit (`Home.WiFi`, `Home%20WiFi`, `FRITZ7590`; round 99, measured with
+// an independent reading), also inside a longer token (`rx-v6a-ABC123`, `WLAN-ABC123_5G`) — the old adapter cores
+// replaced known values that way. A short value therefore also takes the head of a longer word (`Home Net` in
+// `homenetwork`): the report stays private, the word loses its readable head.
+// A value registered twice keeps its first placeholder and the broader kind (round 99, yamaha 2026-10-07: a network name
+// registered again as a name stood in the report as `Fritz-7590`).
+// The canary check `leaked` reads on its own, never with a pattern of the replacement (round 99): a spelling `text()`
+// leaves standing turns the adapter's report test red, and the adapter registers that spelling. Text and values are
+// compared in their composed Unicode form (`Ku\u0308che` is `Küche`, macOS writes file names that way).
 // Order for every text: the adapter blanks secrets first, then this replaces, then the report is cut to size.
 // What else is personal (serial numbers, network names, an adapter's own fields) the adapter registers with `name()`.
 
@@ -32,23 +40,57 @@ const HARDWARE =
 /** A MAC address without separators: twelve hex digits with at least one letter and one digit. */
 const BARE_MAC = /(?<![0-9A-Za-z])(?=[0-9A-Fa-f]*[A-Fa-f])(?=[0-9A-Fa-f]*\d)[0-9A-Fa-f]{12}(?![0-9A-Za-z])/g;
 /**
+ * A text as a literal part of a pattern.
+ *
+ * @param s the text
+ * @returns the text with every pattern character escaped
+ */
+const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/**
+ * What may stand between two words of a value: up to six characters that are no letter or digit, also percent-encoded.
+ * The bound keeps a long text linear — `%aa` is a gap and holds letters, so an unbounded gap read on from every letter.
+ * Quotes, brackets and the backslash are no gap: a raw capture (`{"home":{"wifi":1}}`) keeps its structure.
+ */
+const GAP = "(?:%[0-9A-Fa-f]{2}|[^\\p{L}\\p{N}\"'`{}\\[\\]<>\\\\])";
+/**
+ * A value as a loose pattern: its words in order, a gap or none between them — at least one character between two
+ * numbers, so `10.0.0.1` is not `10001`. A word ends only where a gap character stands, so a quote or bracket inside the
+ * value stays part of it (`John's iPhone`, `Box [5G]`). A value without a word (`🏠`) stands as written.
+ *
+ * @param value the value, trimmed
+ * @returns the pattern text
+ */
+function loose(value: string): string {
+  const words = value.split(/[^\p{L}\p{N}"'`{}[\]<>\\]+/u).filter(word => word.length > 0);
+  if (words.length === 0) {
+    return escape(value);
+  }
+  return words
+    .map((word, i) =>
+      i === 0 ? escape(word) : `${GAP}{${/\d$/.test(words[i - 1]) && /^\d/.test(word) ? 1 : 0},6}${escape(word)}`,
+    )
+    .join("");
+}
+/**
  * Where a registered value matches. A `name`: as written or all in lower case with a space, `_` or `-` between its words,
- * never inside a longer token (`_` and `-` count as part of a word). Any other kind: those spellings in any case, anywhere.
+ * never inside a longer token (`_` and `-` count as part of a word). Any other kind: in any case, with nothing or a
+ * short gap between its words (`loose`), anywhere.
  *
  * @param value the registered value
  * @param kind its placeholder kind, `name` when not given
  * @returns the pattern
  */
 export function valuePattern(value: string, kind = "name"): RegExp {
-  const escape = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  value = value.normalize("NFC");
+  if (kind !== "name") {
+    return new RegExp(loose(value.trim()), "giu");
+  }
   const words = value
     .toLowerCase()
     .split(/[\s_-]+/)
     .map(escape);
   const forms = `(?:${escape(value)}|${words.join("[ _-]")})`;
-  return kind === "name"
-    ? new RegExp(`(?<![\\p{L}\\p{N}_-])${forms}(?![\\p{L}\\p{N}_-])`, "gu")
-    : new RegExp(forms, "giu");
+  return new RegExp(`(?<![\\p{L}\\p{N}_-])${forms}(?![\\p{L}\\p{N}_-])`, "gu");
 }
 
 /** A mail address — it starts only where a word starts, so a long text without `@` is read in linear time. */
@@ -85,7 +127,8 @@ export class Placeholders {
 
   /**
    * Register a name the user gave (a device, room or network name) or any other personal value: from now on it is
-   * replaced wherever it stands as a whole word, as written or in the lower-case id form (`valuePattern`).
+   * replaced wherever it stands as a whole word, as written or in the lower-case id form (`valuePattern`). Registered
+   * again, a value keeps its first placeholder, and any other kind replaces the narrower `name`, never the reverse.
    *
    * @param value the real value (blank ones are ignored)
    * @param kind the placeholder's word, `name` when not given
@@ -95,6 +138,13 @@ export class Placeholders {
     const trimmed = value.trim();
     if (!trimmed) {
       return value;
+    }
+    const known = this.names.get(trimmed);
+    if (known) {
+      if (kind !== "name") {
+        known.kind = kind;
+      }
+      return known.placeholder;
     }
     const placeholder = this.mark(kind, trimmed);
     this.names.set(trimmed, { placeholder, kind });
@@ -109,8 +159,11 @@ export class Placeholders {
    * @returns the text with placeholders
    */
   public text(text: string): string {
-    let out = text;
-    const names = [...this.names.entries()].sort(([a], [b]) => b.length - a.length);
+    let out = text.normalize("NFC");
+    // two spellings of one length (`Fritz-7590` as a network, `fritz-7590` as a name): the broader kind goes first
+    const names = [...this.names.entries()].sort(
+      ([a, x], [b, y]) => b.length - a.length || Number(x.kind === "name") - Number(y.kind === "name"),
+    );
     for (const [name, { placeholder, kind }] of names) {
       out = out.replace(valuePattern(name, kind), placeholder);
     }
@@ -142,12 +195,18 @@ export class Placeholders {
     }
     if (value !== null && typeof value === "object") {
       const out: Record<string, unknown> = {};
+      const counts = new Map<string, number>();
       for (const [key, item] of Object.entries(value)) {
-        // two keys that become the same placeholder (`Kitchen` and `kitchen`) both stay in the report
-        let name = this.text(key);
-        for (let n = 2; Object.hasOwn(out, name); n++) {
-          name = `${this.text(key)}#${n}`;
+        // two keys that become the same placeholder (`Kitchen` and `kitchen`) both stay in the report; one counter per
+        // placeholder keeps many such keys linear
+        const base = this.text(key);
+        let name = base;
+        let n = counts.get(base) ?? 1;
+        while (Object.hasOwn(out, name)) {
+          n++;
+          name = `${base}#${n}`;
         }
+        counts.set(base, n);
         out[name] = this.deep(item);
       }
       return out;
@@ -157,14 +216,56 @@ export class Placeholders {
 }
 
 /**
- * The canary check every adapter's report test runs: which of the real values still stand in the finished report — in
- * exactly the spellings `text()` replaces for their kind (`valuePattern`).
+ * A text the way the canary reads it: compatibility forms folded (full width `Ｈｏｍｅ` is `Home`), every
+ * percent-encoded character a gap, `ß` as `ss`.
+ *
+ * @param text the text
+ * @returns the text to search
+ */
+const plain = (text: string): string =>
+  text
+    .normalize("NFKC")
+    .replace(/%[0-9A-Fa-f]{2}/g, " ")
+    .replace(/[ßẞ]/g, "ss");
+
+/**
+ * The canary check every adapter's report test runs: which of the real values still stand in the finished report. It
+ * reads on its own, never with a pattern of the replacement: in any case and compatibility form, with nothing or any run
+ * of characters that are no letter, digit, quote, bracket or backslash between the words of a value, also inside a
+ * longer token (two keys of a raw capture, `{"home":{"wifi":1}}`, are no value `Home WiFi`); at least one
+ * character between two numbers, and a value that begins or ends with a digit only where no further digit continues it
+ * (`10.0.0.1` is neither `10001` nor in `10.0.0.10`). A spelling `text()` leaves standing is red here, and the adapter
+ * registers it with `name()`. Canary values are the fixture's distinct personal values — a value that is also a
+ * protocol word (an input named "Radio" next to `net_radio`) cannot be one. Measured and not read: one word spelled out
+ * letter by letter (`A B C 1 2 3`), HTML entities (`&#49;`) and a value written without its own quote or bracket
+ * (`Johns iPhone` for `John's iPhone`) — a report that carries those decodes them first.
  *
  * @param report the report text
  * @param secrets the real values that must not appear
- * @param kind their placeholder kind — the same one `name()` registered them with
  * @returns the ones that leaked
  */
-export function leaked(report: string, secrets: readonly string[], kind: string): string[] {
-  return secrets.filter(secret => secret.trim().length > 0 && valuePattern(secret.trim(), kind).test(report));
+export function leaked(report: string, secrets: readonly string[]): string[] {
+  const text = plain(report);
+  return secrets.filter(secret => {
+    const value = plain(secret).trim();
+    if (!value) {
+      return false;
+    }
+    // quotes, brackets and the backslash belong to a word and never join two — two keys of a capture stay two keys
+    const words = value.split(/[^\p{L}\p{N}"'`{}[\]<>\\]+/u).filter(word => word.length > 0);
+    const gap = "[^\\p{L}\\p{N}\"'`{}\\[\\]<>\\\\]";
+    const body =
+      words.length === 0
+        ? escape(value)
+        : words
+            .map((word, i) =>
+              i === 0
+                ? escape(word)
+                : `${gap}${/\d$/.test(words[i - 1]) && /^\d/.test(word) ? "+" : "*"}${escape(word)}`,
+            )
+            .join("");
+    const before = /^\d/.test(value) ? "(?<!\\d)" : "";
+    const after = /\d$/.test(value) ? "(?!\\d)" : "";
+    return new RegExp(`${before}${body}${after}`, "iu").test(text);
+  });
 }

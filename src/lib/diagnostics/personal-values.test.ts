@@ -161,8 +161,7 @@ describe("PersonalValues", () => {
     const out = scrub({
       "system/getNetworkStatus": { network_name: "WLAN-ABC123", wireless_lan: { ssid: "FRITZ-7590" } },
     });
-    expect(leaked(out, ["WLAN-ABC123"], "name")).toEqual([]);
-    expect(leaked(out, ["FRITZ-7590"], "network")).toEqual([]);
+    expect(leaked(out, ["WLAN-ABC123", "FRITZ-7590"])).toEqual([]);
   });
 
   it("leaves numbers, booleans and short values alone", () => {
@@ -215,8 +214,7 @@ describe("PersonalValues", () => {
       }),
     ) as string[];
     expect(out[7]).toMatch(/^line 7: name-\d+ at serial-1$/);
-    expect(leaked(JSON.stringify(out), ["Raumname"], "name")).toEqual([]);
-    expect(leaked(JSON.stringify(out), ["0a1b2b3c"], "serial")).toEqual([]);
+    expect(leaked(JSON.stringify(out), ["Raumname", "0a1b2b3c"])).toEqual([]);
   });
 
   it("replaces the longest known value first, in one pass", () => {
@@ -244,7 +242,7 @@ describe("PersonalValues", () => {
       "system/getNetworkStatus": { mac_address: { wired_lan: "00a0ded4f504" } },
       line: "MAC 00:A0:DE:D4:F5:04",
     });
-    expect(leaked(out, ["00A0DED4F504", "00:A0:DE:D4:F5:04"], "mac")).toEqual([]);
+    expect(leaked(out, ["00A0DED4F504", "00:A0:DE:D4:F5:04"])).toEqual([]);
     expect(out.match(/mac-\d/g)).toHaveLength(3);
     expect(out).not.toContain("serial-");
   });
@@ -254,7 +252,7 @@ describe("PersonalValues", () => {
       body: "<Name><Zone>Bad &amp; WC</Zone></Name>",
       val: "Bad & WC",
     });
-    expect(leaked(out, ["Bad & WC", "Bad &amp; WC"], "name")).toEqual([]);
+    expect(leaked(out, ["Bad & WC", "Bad &amp; WC"])).toEqual([]);
     expect(out).toMatch(/^\{"body":"<Name><Zone>name-\d<\/Zone><\/Name>","val":"name-\d"\}$/);
   });
 
