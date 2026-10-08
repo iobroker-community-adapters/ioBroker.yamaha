@@ -15,7 +15,6 @@ function source(devices: ReportSourceDevice[], overrides: Partial<ReportSource<s
     readLive: vi.fn(() => Promise.resolve("live answer")),
     build: vi.fn((id: string, live: string | undefined, liveError: string | undefined) =>
       Promise.resolve({
-        fileId: id,
         content: { device: id, ...(live ? { live } : {}), ...(liveError ? { liveError } : {}) },
       }),
     ),
@@ -133,6 +132,36 @@ describe("ReportJobs", () => {
     const again = jobs.start("lamp") as { job: string };
     expect(again.job).not.toBe(first.job);
     await settle();
+  });
+
+  it("keeps every frame field when the body names the same key (DB-06)", async () => {
+    const jobs = new ReportJobs(
+      source([{ id: "lamp", connected: false }], {
+        build: () =>
+          Promise.resolve({
+            content: { readMe: "mine", adapter: "other", connected: true, liveRead: "read", extra: 1 },
+          }),
+      }),
+    );
+    const { job } = jobs.start("lamp") as { job: string };
+    await settle();
+    const report = JSON.parse((jobs.result(job) as { content: string }).content);
+    expect(report).toMatchObject({ adapter: "iobroker.demo", connected: false, liveRead: "not connected", extra: 1 });
+    expect(report.readMe).not.toBe("mine");
+  });
+
+  it("says what the live read did (DB-02)", async () => {
+    const said = async (connected: boolean, readLive: ReportSource<string>["readLive"]): Promise<unknown> => {
+      const jobs = new ReportJobs(source([{ id: "lamp", connected }], { readLive }));
+      const { job } = jobs.start("lamp") as { job: string };
+      await settle();
+      return JSON.parse((jobs.result(job) as { content: string }).content).liveRead;
+    };
+    expect(await said(true, () => Promise.resolve("answer"))).toBe("read");
+    expect(await said(true, () => Promise.resolve(undefined as unknown as string))).toBe("nothing");
+    expect(await said(true, () => Promise.resolve(null as unknown as string))).toBe("nothing");
+    expect(await said(true, () => Promise.reject(new Error("connect ECONNREFUSED 192.168.1.20:80")))).toBe("failed");
+    expect(await said(false, () => Promise.resolve("answer"))).toBe("not connected");
   });
 
   it("drops a finished report nobody fetched after REPORT_KEEP_MS", async () => {

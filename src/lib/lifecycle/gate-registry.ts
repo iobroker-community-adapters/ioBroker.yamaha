@@ -10,7 +10,7 @@ import { isIPv4, resolveIPv4 } from "../network-interfaces";
  * them so an embedded device never faces a burst of parallel requests.
  */
 export const COMMAND_SPACING_MS: Readonly<Record<Transport, number>> = {
-  ynca: spacingMs("Yamaha receiver, YNCA", 1),
+  ynca: spacingMs("Yamaha receiver, YNCA commands", 1),
   yxc: 0,
   xml: 0,
 };

@@ -306,5 +306,5 @@ export function buildReportBody(input: ReportInput): ReportBody {
     personal.teach(idPart.kind, idPart.value);
   }
   personal.learn(body);
-  return { fileId: places.text(device.id), content: places.deep(body) as Record<string, unknown> };
+  return { content: places.deep(body) as Record<string, unknown> };
 }

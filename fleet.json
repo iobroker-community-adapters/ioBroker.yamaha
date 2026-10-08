@@ -13,6 +13,8 @@
     "desc": {}
   },
   "forumThread": "https://forum.iobroker.net/topic/85413/test-adapter-yamaha-2.11.0",
+  "_deviceIds": "Device object ids follow the fleet scheme model + the last four characters of the unit id (serial number), set once and never derived again (Y-09); without a serial the model with -2/-3, without a model the typed name or the address.",
+  "deviceIds": "unit",
   "_listenPorts": "The MusicCast event receiver: every MusicCast device pushes its changes to UDP 41100 of the client that subscribed (X-AppPort header) - the port is fixed by the protocol, and the adapter binds all interfaces. native.port/native.bind carry it so the Admin's port check sees the instance; the code binds the constant. The network-search listener shares UDP 1900 with every other UPnP service on the host (SO_REUSEADDR) to hear devices announce themselves; it runs only while the network search is on, and it binds the fixed SSDP port — nothing to configure (audit 2026-09-24, E2).",
   "listenPorts": [
     {

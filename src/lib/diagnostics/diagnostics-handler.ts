@@ -1,5 +1,5 @@
 import type { DeviceIdentity } from "../device-identity";
-import type { HandleCapture } from "./types";
+import type { HandleCapture, TransportCapture } from "./types";
 import type { LogRing } from "./log-ring";
 import type { TrafficSnapshot } from "./traffic-recorder";
 import type { ReportBody, ReportSource, ReportSourceDevice } from "./report-jobs";
@@ -120,7 +120,12 @@ export class YamahaReportSource implements ReportSource<HandleCapture | undefine
     const device = this.device(id);
     this.trails.set(id, device.trail?.());
     this.host.log.info(`${id}: reading the device for a diagnostics report — this takes up to a minute`);
-    return device.capture();
+    const live = await device.capture();
+    // A read nobody answered is a failed read, never `read` (round 104, DB-02): no transport got a single answer.
+    if (!live?.captures.some(answeredSomething)) {
+      throw new Error(live ? "the device answered nothing" : "the connection was lost during the read");
+    }
+    return live;
   }
 
   /**
@@ -332,4 +337,20 @@ export function musiccastStatus(installed: boolean, instances: readonly Instance
     return "switched on, not running";
   }
   return "installed, switched off";
+}
+
+/**
+ * Whether one protocol's live read got at least one answer from the device — a line, a body, a refusal or a
+ * description. A transport failure (`{ error }`) is no answer.
+ *
+ * @param capture the read
+ * @returns true when the device answered something
+ */
+export function answeredSomething(capture: TransportCapture): boolean {
+  if ((capture.lines?.length ?? 0) > 0 || (capture.descriptor !== undefined && capture.descriptor !== null)) {
+    return true;
+  }
+  return Object.values(capture.answers).some(
+    answer => !(typeof answer === "object" && answer !== null && Object.keys(answer).length === 1 && "error" in answer),
+  );
 }

@@ -96,6 +96,29 @@ const count = (kind, host, port, hook = byHook()) => {
     `${JSON.stringify(cause === undefined ? { t: Date.now(), kind, host, port } : { t: Date.now(), kind, host, port, cause })}\n`,
   );
 };
+// 6. It notes every answer a counterpart sends — data on a connection, a datagram, a fetch response — at most one line
+//    per counterpart and second in RESOURCE_PROBE_DIR/<pid>.answers (round 104, krobi 2026-10-03 12:01 for every
+//    listener: if the adapter cannot communicate, that is a fatal error — whether the adapter still
+//    talks to anything is whether an answer still arrives, not whether it still sends).
+const answers = path.join(dir, `${process.pid}.answers`);
+const lastAnswer = new Map();
+// `local` is the adapter's own port the answer came in on (0 when unknown) — an answer on a port another program took
+// is no path of its own (round 104, suite "a taken port")
+const answer = (kind, host, port, local = 0) => {
+  if (keep.has(Number(port))) {
+    return;
+  }
+  const key = `${kind} ${host} ${port} ${local}`;
+  const now = Date.now();
+  if (now - (lastAnswer.get(key) ?? 0) < 1000) {
+    return;
+  }
+  lastAnswer.set(key, now);
+  fs.appendFileSync(
+    answers,
+    `${JSON.stringify({ t: now, kind, host, port: Number(port), local: Number(local) || 0 })}\n`,
+  );
+};
 const ids = new WeakMap();
 let nextId = 0;
 const idOf = socket => {
@@ -113,9 +136,14 @@ const down = () => fs.existsSync(flag);
 //    connection either, and no datagram — a command then reaches no device that could confirm it.
 const hangFlag = path.join(dir, "hang");
 const hangWord = () => (fs.existsSync(hangFlag) ? fs.readFileSync(hangFlag, "utf8").trim() : "");
-const hung = host => {
+// Round 104: `<host> <port>` hangs one channel — where every counterpart shares one host (fixtures on 127.0.0.1)
+const hung = (host, port) => {
   const word = hangWord();
-  return word !== "" && (word === "*" || String(host) === word);
+  if (word === "" || word === "*") {
+    return word === "*";
+  }
+  const [wordHost, wordPort] = word.split(" ");
+  return String(host) === wordHost && (wordPort === undefined || Number(port) === Number(wordPort));
 };
 const silent = () => hangWord() === "*";
 let hangNext = false;
@@ -131,16 +159,22 @@ hole.unref();
 // Each hung attempt that ends writes `hang-end`; when the last open one of a host has ended, `hang-idle` follows — the
 // moment the adapter has given that counterpart up for now (one channel with a short deadline is not giving it up).
 const hangOpen = new Map();
-const hangStart = host => {
-  hangOpen.set(host, (hangOpen.get(host) ?? 0) + 1);
-  fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-start", host })}\n`);
+// Round 104: the records carry the port too — a hang of one channel (`<host> <port>`) is judged per channel
+const hangStart = (host, port) => {
+  const key = `${host} ${port}`;
+  hangOpen.set(key, (hangOpen.get(key) ?? 0) + 1);
+  fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-start", host, port })}\n`);
 };
-const hangEnd = host => {
-  fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-end", host })}\n`);
-  const left = (hangOpen.get(host) ?? 1) - 1;
-  hangOpen.set(host, left);
-  if (left === 0) {
+const hangEnd = (host, port) => {
+  fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-end", host, port })}\n`);
+  const key = `${host} ${port}`;
+  const left = (hangOpen.get(key) ?? 1) - 1;
+  hangOpen.set(key, left);
+  if ([...hangOpen].every(([k, n]) => !k.startsWith(`${host} `) || n === 0)) {
     fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-idle", host })}\n`);
+  }
+  if (left === 0) {
+    fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-idle", host, port })}\n`);
   }
 };
 const refused = () => Object.assign(new Error("connect ECONNREFUSED (outage switch)"), { code: "ECONNREFUSED" });
@@ -162,10 +196,21 @@ const track = (socket, opts) => {
   socket.once("close", () => open.delete(socket));
 };
 const connect = net.Socket.prototype.connect;
+// Round 104: an outgoing raw connection — not one an http client or fetch (undici) opened, whose requests are counted
+// where they begin, and not one a server of the adapter accepted (its writes are answers, not calls)
+const rawOut = new WeakSet();
+const byClient = () => /node:_http_(client|agent)|node:https|node:internal\/deps\/undici/.test(new Error().stack || "");
 function cutConnect(...args) {
   const opts = optionsOf(args);
+  if (!keep.has(Number(opts.port)) && typeof opts.path !== "string" && !byClient()) {
+    rawOut.add(this);
+  }
   // an http agent hands its request options on, with `path: null` — only a string path is a local socket
-  if (!keep.has(Number(opts.port)) && typeof opts.path !== "string" && (hangNext || hung(opts.host ?? "localhost"))) {
+  if (
+    !keep.has(Number(opts.port)) &&
+    typeof opts.path !== "string" &&
+    (hangNext || hung(opts.host ?? "localhost", opts.port))
+  ) {
     const host = hangNext || opts.host;
     hangNext = false;
     // an HTTP request to a hung host was counted where it began; a raw connection is counted here
@@ -173,8 +218,8 @@ function cutConnect(...args) {
       count("tcp", opts.host ?? "localhost", Number(opts.port));
     }
     const name = typeof host === "string" ? host : opts.host;
-    hangStart(name);
-    this.once("close", () => hangEnd(name));
+    hangStart(name, Number(opts.port));
+    this.once("close", () => hangEnd(name, Number(opts.port)));
     track(this, opts);
     return connect.call(this, { port: blackHole, host: "127.0.0.1" });
   }
@@ -208,20 +253,23 @@ function cutSocketEmit(event, ...args) {
   if (event === "data" && open.has(this) && silent()) {
     return false;
   }
+  if (event === "data" && open.has(this)) {
+    const target = targets.get(this);
+    if (target !== undefined) {
+      answer("tcp", target.host, target.port, this.localPort);
+    }
+  }
   return socketEmit.call(this, event, ...args);
 }
 net.Socket.prototype.emit = cutSocketEmit;
-// Round 101: a command written on a connection opened before it (a device protocol on one socket, MQTT) reaches that
-// counterpart too — counted with its cause, only while everything hangs, so the counts the limits judge stay as they were.
 const socketWrite = net.Socket.prototype.write;
+// Round 104 (krobi 2026-10-07 10:14: API limits are defined in the adapter and checked): every
+// write on such a connection is a call of kind `tcp-write` — a device protocol on one socket (YNCA, NUT, MQTT) sends its
+// commands there, and until now only the connections were counted, so no command limit was ever judged.
 function causeWrite(...args) {
-  const cause = command.getStore();
   const target = targets.get(this);
-  if (cause !== undefined && target !== undefined && open.has(this) && silent()) {
-    fs.appendFileSync(
-      calls,
-      `${JSON.stringify({ t: Date.now(), kind: "tcp", host: target.host, port: target.port, cause })}\n`,
-    );
+  if (target !== undefined && open.has(this) && rawOut.has(this)) {
+    count("tcp-write", target.host, target.port);
   }
   return socketWrite.apply(this, args);
 }
@@ -249,7 +297,7 @@ for (const mod of [require("node:http"), require("node:https")]) {
       }
       // a fixture hook below that calls http.request again is the same call, not a second one
       nested++;
-      if (host !== undefined && hung(String(host).replace(/:\d+$/, ""))) {
+      if (host !== undefined && hung(String(host).replace(/:\d+$/, ""), port)) {
         hangNext = String(host).replace(/:\d+$/, "");
         // a pooled keep-alive connection would answer it: the hung request opens its own
         const at = typeof args[1] === "object" && args[1] !== null && typeof args[1] !== "function" ? 1 : 0;
@@ -271,12 +319,19 @@ for (const mod of [require("node:http"), require("node:https")]) {
 
 // Listening TCP servers (http, fastify): the address the server really holds, once it listens.
 const listen = net.Server.prototype.listen;
+// Round 104: the port the adapter ASKED for (0 or none: the system picks one) — a fixed port is a declared one
+const askedPort = args => {
+  const first = args[0];
+  const port = first && typeof first === "object" ? first.port : first;
+  return Number(port) || 0;
+};
 function recordListen(...args) {
   const hook = byHook();
+  const asked = askedPort(args);
   this.once("listening", () => {
     const at = this.address();
     if (at && typeof at === "object") {
-      record({ kind: "listen", host: at.address, port: at.port }, hook);
+      record({ kind: "listen", host: at.address, port: at.port, asked }, hook);
     }
   });
   return listen.apply(this, args);
@@ -307,22 +362,39 @@ const cutFetch = (...args) => {
     // not a URL fetch would accept either — it rejects on its own
   }
   let target;
+  let targetPort;
   try {
-    target = new URL(args[0] instanceof Request ? args[0].url : String(args[0])).hostname;
+    const url = new URL(args[0] instanceof Request ? args[0].url : String(args[0]));
+    target = url.hostname;
+    targetPort = Number(url.port) || (url.protocol === "https:" ? 443 : 80);
   } catch {
     target = undefined;
   }
-  if (target !== undefined && hung(target)) {
+  // Round 104 (krobi 2026-10-03 11:38 "everything, cloud too"): a fetch a fixture hook answers opens no socket, so its
+  // address is never seen — the record says whether the call could be bound at all: a `dispatcher` of its own (a global
+  // one cannot be told from node's default Agent, measured round 104).
+  if (target !== undefined && !keep.has(targetPort)) {
+    record({ kind: "fetch", host: target, port: targetPort, bound: args[1]?.dispatcher !== undefined });
+  }
+  if (target !== undefined && hung(target, targetPort)) {
     const signal = args[1]?.signal ?? (args[0] instanceof Request ? args[0].signal : undefined);
-    hangStart(target);
+    hangStart(target, targetPort);
     return new Promise((_resolve, reject) => {
       signal?.addEventListener("abort", () => {
-        hangEnd(target);
+        hangEnd(target, targetPort);
         reject(signal.reason ?? new DOMException("aborted", "AbortError"));
       });
     });
   }
-  return down() ? Promise.reject(new TypeError("fetch failed", { cause: refused() })) : current(...args);
+  if (down()) {
+    return Promise.reject(new TypeError("fetch failed", { cause: refused() }));
+  }
+  return current(...args).then(response => {
+    if (target !== undefined) {
+      answer("http", target, targetPort);
+    }
+    return response;
+  });
 };
 function getFetch() {
   return current && cutFetch;
@@ -340,9 +412,10 @@ Object.defineProperty(globalThis, "fetch", {
 const bind = dgram.Socket.prototype.bind;
 function recordBind(...args) {
   const hook = byHook();
+  const asked = askedPort(args);
   this.once("listening", () => {
     const at = this.address();
-    record({ kind: "bind", id: idOf(this), address: at.address, port: at.port }, hook);
+    record({ kind: "bind", id: idOf(this), address: at.address, port: at.port, asked }, hook);
   });
   return bind.apply(this, args);
 }
@@ -386,7 +459,7 @@ function cutSend(...args) {
     sentTo.add(key);
     record({ kind: "send", id: idOf(this), host: target.host, port: target.port });
   }
-  if (!down() && !(at !== -1 && hung(target.host))) {
+  if (!down() && !(at !== -1 && hung(target.host, target.port))) {
     return send.apply(this, args);
   }
   const cb = args.find(a => typeof a === "function");
@@ -400,9 +473,67 @@ function cutEmit(event, ...args) {
   if (event === "message" && (down() || silent())) {
     return false;
   }
+  if (event === "message" && args[1] && typeof args[1].address === "string") {
+    let local = 0;
+    try {
+      local = this.address().port;
+    } catch {
+      // not bound any more
+    }
+    answer("udp", args[1].address, args[1].port, local);
+  }
   return emit.call(this, event, ...args);
 }
 dgram.Socket.prototype.emit = cutEmit;
+
+// 7. It notes every file the adapter process writes, with its time, in RESOURCE_PROBE_DIR/<pid>.files (round 104, DB-01,
+//    krobi 2026-09-14 23:12: a diagnostics export is never stored by the adapter): a report is made
+//    and downloaded, never stored — the suite judges every write while the reports are made, wherever it goes.
+const filesLog = path.join(dir, `${process.pid}.files`);
+const rawAppend = fs.appendFileSync;
+const noteFile = target => {
+  const file =
+    typeof target === "string"
+      ? target
+      : target instanceof URL
+        ? target.pathname
+        : Buffer.isBuffer(target)
+          ? target.toString()
+          : undefined;
+  if (file === undefined) {
+    return; // a file descriptor: its file was named where it was opened
+  }
+  const abs = path.resolve(file);
+  if (abs === dir || abs.startsWith(dir + path.sep)) {
+    return;
+  }
+  rawAppend(filesLog, `${JSON.stringify({ t: Date.now(), path: abs })}\n`);
+};
+const targetOf = (name, args) => (/^(rename|copyFile)/.test(name) ? args[1] : args[0]);
+for (const name of [
+  "writeFile",
+  "writeFileSync",
+  "appendFile",
+  "appendFileSync",
+  "createWriteStream",
+  "copyFile",
+  "copyFileSync",
+  "rename",
+  "renameSync",
+]) {
+  const original = fs[name];
+  fs[name] = function noteWrite(...args) {
+    noteFile(targetOf(name, args));
+    return original.apply(this, args);
+  };
+}
+for (const name of ["writeFile", "appendFile", "copyFile", "rename"]) {
+  const original = fs.promises[name];
+  fs.promises[name] = function noteWrite(...args) {
+    noteFile(targetOf(name, args));
+    return original.apply(this, args);
+  };
+}
 
 /** The patches a later hook replaced — each would let a path past the cut or the record. */
 function replaced() {

@@ -7,6 +7,9 @@
 // longer — so no answer waits for one. The report lives in memory until the card fetches it, never on disk (DB-01);
 // an unfetched one is dropped by the next message after KEEP_MS (no timer). A device that is not connected is never
 // read live (DB-03): `readLive` is called for connected devices only, and the report then says so.
+// Round 104 (krobi 2026-10-07 20:53, every fleet rule complete and checked in the gate): the frame is the report's own
+// — the adapter's body can add to it but never replace a frame field (DB-06) — and it says what the live read did
+// (`liveRead`), so the inventory suite can tell a read that reached the device from one that never asked it (DB-02).
 
 import { errText } from "../err-text";
 import { reportFileName, reportFrame, type ReportFrame } from "./report-file";
@@ -35,6 +38,13 @@ export interface Report {
   content: string;
 }
 
+/**
+ * What the live read did, as the report says it: `read` (it returned something), `nothing` (it returned nothing),
+ * `failed` or `not connected` (never asked). The reason of a failure stays in the body the adapter builds — the frame
+ * goes out as it is, and an error text can carry an address or a name (DB-04).
+ */
+export type LiveRead = "read" | "nothing" | "failed" | "not connected";
+
 /** What the card gets when it asks for a started report. */
 export type ReportAnswer = { pending: true } | { gone: true } | Report | { error: string };
 
@@ -48,11 +58,12 @@ export interface ReportSourceDevice {
   connected: boolean;
 }
 
-/** What the report body is made of, besides the frame. */
+/**
+ * What the report body is made of, besides the frame. The file is named after the device id itself (DB-12, krobi
+ * 2026-10-06 19:07 "db-12 auch gut": the id carries the model and the last four characters of the unit id).
+ */
 export interface ReportBody {
-  /** The device id as the report shows it — a placeholder where the real id would give something away. */
-  fileId: string;
-  /** Everything else the report holds. */
+  /** Everything the report holds besides the frame. */
   content: Record<string, unknown>;
 }
 
@@ -64,7 +75,10 @@ export interface ReportSource<L> {
   readonly version: string;
   /** The devices this instance runs right now. */
   devices(): ReportSourceDevice[];
-  /** Read one CONNECTED device live; never called for an unconnected one. */
+  /**
+   * Read one CONNECTED device live; never called for an unconnected one. Rejects when the device answered nothing — a
+   * read nobody answered is a failed read, and the report says `failed`, never `read` (round 104, DB-02).
+   */
   readLive(id: string): Promise<L>;
   /** Build the report body; `live` is undefined when the device was not connected or the read failed. */
   build(id: string, live: L | undefined, liveError: string | undefined): Promise<ReportBody>;
@@ -211,9 +225,16 @@ export class ReportJobs<L> {
       const body = await this.source.build(deviceId, live, liveError);
       const made = new Date(this.now());
       const frame: ReportFrame = reportFrame(this.source.adapter, this.source.version, made, device.connected);
-      const fileName = reportFileName(this.source.adapter, body.fileId, this.source.version, made);
+      const liveRead: LiveRead = !device.connected
+        ? "not connected"
+        : liveError !== undefined
+          ? "failed"
+          : live === undefined || live === null
+            ? "nothing"
+            : "read";
+      const fileName = reportFileName(this.source.adapter, deviceId, this.source.version, made);
       this.source.log.info(`${deviceId}: diagnostics report ready (${fileName})`);
-      return { fileName, content: JSON.stringify({ ...frame, ...body.content }, null, 2) };
+      return { fileName, content: JSON.stringify({ ...body.content, ...frame, liveRead }, null, 2) };
     } catch (e) {
       const reason = errText(e);
       this.source.log.warn(`${deviceId}: diagnostics report failed: ${reason}`);

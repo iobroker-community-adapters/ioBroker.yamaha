@@ -4,12 +4,12 @@ import { COMMAND_SPACING_MS } from "./lifecycle/gate-registry";
 
 describe("api-limits", () => {
   it("gives YNCA the 100 ms of Yamaha's specification, from its per-second limit", () => {
-    expect(spacingMs("Yamaha receiver, YNCA", 1)).toBe(100);
+    expect(spacingMs("Yamaha receiver, YNCA commands", 1)).toBe(100);
     expect(COMMAND_SPACING_MS.ynca).toBe(100);
   });
 
   it("names the counterpart or the window it does not know", () => {
-    expect(() => spacingMs("Yamaha receiver, YNCA", 5)).toThrow(/no 5-second limit/);
+    expect(() => spacingMs("Yamaha receiver, YNCA commands", 5)).toThrow(/no 5-second limit/);
     expect(() => spacingMs("somewhere", 1)).toThrow(/'somewhere'/);
   });
 

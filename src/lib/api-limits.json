@@ -1,15 +1,27 @@
 {
   "counterparts": [
     {
-      "name": "Yamaha receiver, YNCA",
-      "match": { "port": 50000, "kind": "tcp" },
+      "name": "Yamaha receiver, YNCA commands",
+      "match": {
+        "port": 50000,
+        "kind": "tcp-write"
+      },
       "limits": [
         {
           "max": 10,
           "seconds": 1,
           "per": "host",
           "source": "Yamaha YNCA specification: at least 100 ms between two commands (ynca-python protocol.py) — the command gate's YNCA spacing"
-        },
+        }
+      ]
+    },
+    {
+      "name": "Yamaha receiver, YNCA connection",
+      "match": {
+        "port": 50000,
+        "kind": "tcp"
+      },
+      "limits": [
         {
           "max": 7,
           "seconds": 60,
@@ -20,7 +32,10 @@
     },
     {
       "name": "Yamaha receiver, MusicCast and XML (HTTP)",
-      "match": { "port": 80, "kind": "http" },
+      "match": {
+        "port": 80,
+        "kind": "http"
+      },
       "limits": [
         {
           "max": 50,

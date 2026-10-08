@@ -2,6 +2,7 @@ import { TrafficRecorder } from "./traffic-recorder";
 import { describe, expect, it } from "vitest";
 import type { HandleCapture } from "./types";
 import {
+  answeredSomething,
   musiccastStatus,
   YamahaReportSource,
   type DiagnosticsDeviceState,
@@ -189,7 +190,7 @@ describe("YamahaReportSource", () => {
   });
 
   // Review 2026-10-05, B3: an id taken from a typed room name left in the file name and the content.
-  it("names the file after the pseudonymised id when the id was taken from a typed name", async () => {
+  it("names the file after the device id and replaces an id taken from a typed name in the content", async () => {
     const host = makeHost({
       devices: [device({ id: "kueche", ip: "192.168.178.41", model: undefined, label: "Küche", identity: undefined })],
     });
@@ -198,7 +199,7 @@ describe("YamahaReportSource", () => {
       fileName: string;
       content: string;
     };
-    expect(answer.fileName).toBe("yamaha_device-1_v3.3.0_2026-10-05_080000.json");
+    expect(answer.fileName).toBe("yamaha_kueche_v3.3.0_2026-10-05_080000.json");
     expect(answer.content).not.toContain("kueche");
     expect(answer.content).not.toContain("Küche");
     expect(answer.content).toContain("device-1: no reachable transport");
@@ -333,6 +334,41 @@ describe("YamahaReportSource", () => {
     const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
     expect(reads).toBe(0);
     expect(JSON.parse(answer.content).connected).toBe(false);
+  });
+
+  // Round 104 (DB-02): a read nobody answered is a failed read, never `read`.
+  it("calls a live read that got no answer a failed read", async () => {
+    const silent = (transport: "ynca" | "yxc" | "xml"): HandleCapture["captures"][number] => ({
+      transport,
+      startedAt: "",
+      durationMs: 1,
+      complete: false,
+      asked: 3,
+      answers: transport === "ynca" ? {} : { "system/getDeviceInfo": { error: "timeout" } },
+      lines: transport === "ynca" ? [] : undefined,
+    });
+    const capture = (): Promise<HandleCapture> =>
+      Promise.resolve({
+        live: ["ynca", "yxc", "xml"],
+        missing: [],
+        owners: {},
+        tree: { shared: {}, transports: [] } as unknown as HandleCapture["tree"],
+        captures: [silent("ynca"), silent("yxc"), silent("xml")],
+      });
+    const host = makeHost({ devices: [device({ capture })] });
+    const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
+    const report = JSON.parse(answer.content) as { liveRead: string; connection: { note: string } };
+    expect(report.liveRead).toBe("failed");
+    expect(report.connection.note).toBe("live read failed: the device answered nothing");
+  });
+
+  it("counts a refusal, a line or a description as an answer, a transport failure not", () => {
+    const base = { transport: "yxc" as const, startedAt: "", durationMs: 1, complete: true, asked: 1 };
+    expect(answeredSomething({ ...base, answers: { a: { error: "timeout" } } })).toBe(false);
+    expect(answeredSomething({ ...base, answers: { a: { response_code: 5 } } })).toBe(true);
+    expect(answeredSomething({ ...base, answers: {}, lines: ["@MAIN:PWR=On"] })).toBe(true);
+    expect(answeredSomething({ ...base, answers: {}, descriptor: "<Unit_Description/>" })).toBe(true);
+    expect(answeredSomething({ ...base, answers: {}, descriptor: null })).toBe(false);
   });
 
   it("says why the live read failed, and still hands back the report", async () => {

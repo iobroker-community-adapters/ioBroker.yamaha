@@ -25,7 +25,7 @@ function buildDiagnosticsReport(i: ReportInput): Record<string, unknown> {
  */
 function diagnosticsExport(i: ReportInput): { fileName: string; content: string } {
   const body = buildReportBody(i);
-  return { fileName: reportFileName("yamaha", body.fileId, "3.3.0", MADE), content: JSON.stringify(body.content) };
+  return { fileName: reportFileName("yamaha", i.device.id, "3.3.0", MADE), content: JSON.stringify(body.content) };
 }
 import { TrafficRecorder } from "./traffic-recorder";
 
@@ -176,7 +176,8 @@ describe("diagnostics report of a device that is not connected (B1)", () => {
 
 // Review 2026-10-05, B3: the device id and the file name were not pseudonymised.
 describe("diagnostics report: device id and file name (B3)", () => {
-  it("replaces an id taken from a typed room name, in the content and in the file name", () => {
+  // The file is named after the device id itself (fleet master, DB-12); the content replaces a personal id.
+  it("replaces an id taken from a typed room name in the content", () => {
     const report = diagnosticsExport(
       input({
         device: { id: "kueche", ip: "192.168.178.41", label: "Küche", connected: false, transports: {} },
@@ -186,8 +187,7 @@ describe("diagnostics report: device id and file name (B3)", () => {
     expect(report.content).not.toContain("Küche");
     expect(report.content).not.toContain("kueche");
     expect(report.content).toContain("device-1: no reachable transport");
-    expect(report.fileName).not.toContain("kueche");
-    expect(report.fileName).toBe("yamaha_device-1_v3.3.0_2026-10-05_000000.json");
+    expect(report.fileName).toBe("yamaha_kueche_v3.3.0_2026-10-05_000000.json");
   });
 
   it("replaces a hostname a device was entered with — it names the user's network", () => {
@@ -210,11 +210,10 @@ describe("diagnostics report: device id and file name (B3)", () => {
       );
       expect(report.content, id).not.toContain(id);
       expect(report.content).not.toContain("192.168.178.41");
-      expect(report.fileName, id).not.toContain(id);
     }
   });
 
-  it("replaces the whole serial of a second device of the same model, in the content and the file name", () => {
+  it("replaces the whole serial of a second device of the same model in the content", () => {
     const report = diagnosticsExport(
       input({
         device: {
@@ -228,8 +227,6 @@ describe("diagnostics report: device id and file name (B3)", () => {
       }),
     );
     expect(report.content.toLowerCase()).not.toContain("0b11aa22");
-    expect(report.fileName.toLowerCase()).not.toContain("0b11aa22");
-    expect(report.fileName).toBe("yamaha_wx-010-serial-1_v3.3.0_2026-10-05_000000.json");
   });
 
   it("keeps an id the adapter built from the model, and from the model and the serial's last four", () => {
