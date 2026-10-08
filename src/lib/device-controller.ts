@@ -265,7 +265,13 @@ export class YncaDeviceController {
     }
     const objects = yncaObjectsFor(capabilities, catalog, this.statesResolver(live, evidence));
     if (objects.length === 0) {
-      this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
+      // A receiver that took the connection and answered nothing is not reachable — a state, not a warning (an
+      // unreachable device logs nothing above debug, 2026-09-22); one that answered and named nothing we know warns.
+      if (Object.keys(capabilities.subunits).length === 0) {
+        this.deps.log.debug(`${this.deviceId}: answered nothing — creating no objects`);
+      } else {
+        this.deps.log.warn(`${this.deviceId}: no capabilities reported — creating no objects`);
+      }
       return false;
     }
     // A user command the device rejects must leave a trace: @RESTRICTED (not allowed /

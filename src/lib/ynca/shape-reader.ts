@@ -309,8 +309,11 @@ export class YncaShapeReader {
     }
     // No model, no identity — and without an identity nothing can ever invalidate what was remembered. The names are
     // written by the sweep regardless, so leaving them behind froze them for good on a device that does not answer
-    // SYS:MODELNAME. The two keys live and die together.
-    this.deps.probeMemory.drop(key => key === STATIC_KEY);
+    // SYS:MODELNAME. The two keys live and die together: a receiver whose shape is remembered answered its model before,
+    // and a read without it lost that answer (a connection that went silent) — rule 1, nothing is dropped.
+    if (remembered === undefined) {
+      this.deps.probeMemory.drop(key => key === STATIC_KEY);
+    }
     return { capabilities, fromCache: false };
   }
 
@@ -589,7 +592,11 @@ export class YncaShapeReader {
         }
       }
     }
-    this.deps.probeMemory.set(STATIC_KEY, names);
+    // Written only when a name is new or changed: a read that got no name (a connection nothing answered) wrote an empty
+    // memory and the device object with it (inventory run 2026-10-08).
+    if (JSON.stringify(names) !== JSON.stringify(remembered ?? {})) {
+      this.deps.probeMemory.set(STATIC_KEY, names);
+    }
     return names;
   }
 

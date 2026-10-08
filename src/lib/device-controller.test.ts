@@ -422,6 +422,25 @@ describe("YncaDeviceController two-pass sweep", () => {
     expect(persisted.at(-1)?.probed).toEqual([...PROBED]);
   });
 
+  // A receiver that takes the connection and answers nothing is not reachable — a state, never a log line above debug
+  // (inventory run 2026-10-08: one such device logged a warning while every counterpart hung).
+  test("a receiver that answered nothing creates no objects and logs no warning", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "", subunits: {} };
+    const { deps, log } = makeDeps(client);
+    expect(await new YncaDeviceController("silent", deps).start()).toBe(false);
+    expect(log.warn).not.toHaveBeenCalled();
+    expect(log.debug).toHaveBeenCalledWith("silent: answered nothing — creating no objects");
+  });
+
+  test("a receiver that answers but reports no capability still warns", async () => {
+    const client = new FakeClient();
+    client.capabilities = { model: "", subunits: { XYZ: { ABC: "1" } } };
+    const { deps, log } = makeDeps(client);
+    expect(await new YncaDeviceController("odd", deps).start()).toBe(false);
+    expect(log.warn).toHaveBeenCalledWith("odd: no capabilities reported — creating no objects");
+  });
+
   // The receiver loses the first command after its power-save state (ynca-python); an empty model
   // was taken for "another device" and every remembered YNCA answer dropped (audit 2026-09-24, B1).
   test("an empty identity answer drops no memory and clears no AVAIL cache", async () => {

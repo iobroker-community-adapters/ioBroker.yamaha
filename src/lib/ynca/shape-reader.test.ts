@@ -23,14 +23,25 @@ const silent = { debug: (): void => undefined, info: (): void => undefined, warn
  * @param memory the device's memory, kept across starts by the caller
  * @param snap the AVAIL snapshot holder, kept across starts by the caller
  * @param snap.s the snapshot
+ * @param lost the functions whose answers never arrive (`SUBUNIT:FUNC`), all of them when true
  * @returns whether the start succeeded and which objects it built
  */
 async function startOnSim(
   values: Record<string, string>,
   memory: ProbeMemory,
   snap: { s?: YncaAvailSnapshot },
+  lost: ReadonlySet<string> | true = new Set(),
 ): Promise<{ ok: boolean; objects: string[] }> {
   const socket = new SimSocket(5, { ...values });
+  const answer = socket.write.bind(socket);
+  socket.write = (data: string | Uint8Array): void => {
+    const key = /^@([A-Z0-9]+:[A-Z0-9]+)=/.exec(String(data))?.[1] ?? "";
+    if (lost === true || lost.has(key)) {
+      socket.written.push(String(data).trim());
+      return;
+    }
+    answer(data);
+  };
   const gate = new CommandGate({ minSpacingMs: 100, timers: simTimers });
   const client = new YncaClient("192.0.2.1", simTimers, gate, () => socket);
   const objects: string[] = [];
@@ -162,6 +173,38 @@ const settle = async (): Promise<void> => {
     await new Promise(resolve => setImmediate(resolve));
   }
 };
+
+describe("a read that got no model drops nothing (rule 1; inventory run 2026-10-08)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  test("a connection nothing answers writes nothing to the device's memory", async () => {
+    // Measured: a device whose connection was taken and never answered got its device object written twice — an empty
+    // name memory added, and taken away again because the read had no model.
+    const writes: Array<Record<string, unknown>> = [];
+    const memory = new ProbeMemory({ __schema: DISCOVERY_SCHEMA }, entries => writes.push(entries));
+    const { ok } = await startOnSim(RECEIVER, memory, {}, true);
+    expect(ok).toBe(false);
+    expect(writes).toEqual([]);
+  });
+
+  test("a model answer lost on a known receiver keeps the names it read before", async () => {
+    // Measured: a receiver read in before went silent for a moment and came back; its read lost the model answer, and
+    // the names the user gave its inputs were dropped from the memory.
+    const names = { SYS: { INPNAMEHDMI1: "Kodi" } };
+    const memory = new ProbeMemory({
+      __schema: DISCOVERY_SCHEMA,
+      yncaCapabilities: {
+        model: "RX-V473",
+        firmware: "1.00",
+        subunits: { SYS: { MODELNAME: "RX-V473", VERSION: "1.00" }, MAIN: { PWR: "On" } },
+      },
+      yncaStaticValues: names,
+    });
+    await startOnSim(RECEIVER, memory, {}, new Set(["SYS:MODELNAME"]));
+    expect(memory.remembered("yncaStaticValues")).toEqual(names);
+  });
+});
 
 describe("a subunit the snapshot never asked is asked on the fast path too (review 2026-10-05, A25)", () => {
   test("an update that adds a subunit to the catalog reaches an installation that starts from its memory", async () => {
