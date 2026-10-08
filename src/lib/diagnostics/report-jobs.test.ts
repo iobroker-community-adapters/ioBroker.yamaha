@@ -15,6 +15,7 @@ function source(devices: ReportSourceDevice[], overrides: Partial<ReportSource<s
     readLive: vi.fn(() => Promise.resolve("live answer")),
     build: vi.fn((id: string, live: string | undefined, liveError: string | undefined) =>
       Promise.resolve({
+        fileId: id,
         content: { device: id, ...(live ? { live } : {}), ...(liveError ? { liveError } : {}) },
       }),
     ),
@@ -139,6 +140,7 @@ describe("ReportJobs", () => {
       source([{ id: "lamp", connected: false }], {
         build: () =>
           Promise.resolve({
+            fileId: "lamp",
             content: { readMe: "mine", adapter: "other", connected: true, liveRead: "read", extra: 1 },
           }),
       }),
@@ -162,6 +164,20 @@ describe("ReportJobs", () => {
     expect(await said(true, () => Promise.resolve(null as unknown as string))).toBe("nothing");
     expect(await said(true, () => Promise.reject(new Error("connect ECONNREFUSED 192.168.1.20:80")))).toBe("failed");
     expect(await said(false, () => Promise.resolve("answer"))).toBe("not connected");
+  });
+
+  it("names the file after the body's placeholder, never the raw device id (DB-04, DB-12)", async () => {
+    const jobs = new ReportJobs(
+      source([{ id: "kueche", connected: true }], {
+        build: () => Promise.resolve({ fileId: "name-1", content: { device: "name-1" } }),
+      }),
+      () => Date.parse("2026-10-08T05:00:00Z"),
+    );
+    const { job } = jobs.start("kueche") as { job: string };
+    await settle();
+    const report = jobs.result(job) as { fileName: string; content: string };
+    expect(report.fileName).toBe("demo_name-1_v1.0.0_2026-10-08_050000.json");
+    expect(report.fileName + report.content).not.toContain("kueche");
   });
 
   it("drops a finished report nobody fetched after REPORT_KEEP_MS", async () => {

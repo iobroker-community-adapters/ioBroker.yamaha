@@ -190,7 +190,7 @@ describe("YamahaReportSource", () => {
   });
 
   // Review 2026-10-05, B3: an id taken from a typed room name left in the file name and the content.
-  it("names the file after the device id and replaces an id taken from a typed name in the content", async () => {
+  it("names the file after the pseudonymised id when the id was taken from a typed name", async () => {
     const host = makeHost({
       devices: [device({ id: "kueche", ip: "192.168.178.41", model: undefined, label: "Küche", identity: undefined })],
     });
@@ -199,7 +199,7 @@ describe("YamahaReportSource", () => {
       fileName: string;
       content: string;
     };
-    expect(answer.fileName).toBe("yamaha_kueche_v3.3.0_2026-10-05_080000.json");
+    expect(answer.fileName).toBe("yamaha_device-1_v3.3.0_2026-10-05_080000.json");
     expect(answer.content).not.toContain("kueche");
     expect(answer.content).not.toContain("Küche");
     expect(answer.content).toContain("device-1: no reachable transport");

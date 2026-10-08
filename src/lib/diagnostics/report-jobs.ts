@@ -58,12 +58,16 @@ export interface ReportSourceDevice {
   connected: boolean;
 }
 
-/**
- * What the report body is made of, besides the frame. The file is named after the device id itself (DB-12, krobi
- * 2026-10-06 19:07 "db-12 auch gut": the id carries the model and the last four characters of the unit id).
- */
+/** What the report body is made of, besides the frame. */
 export interface ReportBody {
-  /** Everything the report holds besides the frame. */
+  /**
+   * The device id for the file name, rendered by the same placeholders as the content (`places.text(id)`). A scheme id
+   * (model and the last four characters of the unit id, DB-12) stays as it is; an id that falls back to a name, an
+   * address or a whole serial becomes its placeholder — the file goes out as the attachment of a public issue, its name
+   * is never pseudonymised by anyone else (DB-04, round 105).
+   */
+  fileId: string;
+  /** Everything else the report holds. */
   content: Record<string, unknown>;
 }
 
@@ -232,7 +236,7 @@ export class ReportJobs<L> {
           : live === undefined || live === null
             ? "nothing"
             : "read";
-      const fileName = reportFileName(this.source.adapter, deviceId, this.source.version, made);
+      const fileName = reportFileName(this.source.adapter, body.fileId, this.source.version, made);
       this.source.log.info(`${deviceId}: diagnostics report ready (${fileName})`);
       return { fileName, content: JSON.stringify({ ...body.content, ...frame, liveRead }, null, 2) };
     } catch (e) {
