@@ -345,6 +345,10 @@ describe("YNCA catalog", () => {
     expect(yncaCommand("tuner.preset", 0, tun)).toBeUndefined();
     expect(yncaCommand("tuner.preset", 5, tun)).toMatchObject({ func: "PRESET", value: "5" });
     expect(yncaCommand("advanced.audioSelect", "Unavailable", main)).toBeUndefined();
+    // The slot check refuses 0 first; a number without a slot is held to its report-only words just the same (W23-97).
+    const unslotted = { ...tun.get("tuner.preset")!, slot: undefined };
+    expect(writeProblem(unslotted, 0)).toMatch(/only reports/);
+    expect(writeProblem(unslotted, 5)).toBeUndefined();
   });
 
   test("a repeat code without a word is not sent — the code check runs for entries with their own wire form too", () => {
