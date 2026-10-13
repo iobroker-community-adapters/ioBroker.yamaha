@@ -2952,6 +2952,28 @@ describe("Yamaha datapoint balance in the log", () => {
     expect(ctx.i.states.get("Living_room.sound.bass")).toEqual({ val: -3.5, ack: true });
   });
 
+  it("a value held back for its new form says so once, not on every report", async () => {
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.sound.adaptiveDrc", {
+      type: "state",
+      common: { name: "d", type: "string", role: "state", states: { Off: "Off", Auto: "Auto" } },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const setStateAck = ctx.calls[0].deps.setStateAck as (id: string, value: unknown) => void;
+    await upsertOf(ctx)("Living_room.sound.adaptiveDrc", {
+      type: "state",
+      common: { name: "d", type: "boolean", role: "switch", read: true, write: true },
+    });
+    setStateAck("Living_room.sound.adaptiveDrc", false);
+    setStateAck("Living_room.sound.adaptiveDrc", true);
+    setStateAck("Living_room.sound.adaptiveDrc", false);
+    await flush();
+    const lines = ctx.i.log.debug.mock.calls.filter(c => String(c[0]).includes("value kept back"));
+    expect(lines).toHaveLength(1);
+  });
+
   it("a read-in that is complete holds back no value", async () => {
     const ctx = setup();
     ctx.i.objects.set("Living_room.sound.bass", {
