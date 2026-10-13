@@ -109,3 +109,43 @@ http.get = function get(...args) {
   const target = deviceTarget(args[0]);
   return target ? realGet.call(http, target.options, ...args.slice(1)) : realGet.apply(http, args);
 };
+
+// UDP stays inside the run (round 104, measured 2026-10-07: the network search sent its M-SEARCH into the real LAN and
+// receivers there answered). A datagram to an address that is neither this machine nor a fixture device — the SSDP
+// multicast group, a broadcast, a host of the LAN — is dropped as if the network lost it, and a datagram from such an
+// address never reaches the adapter. The sockets are still bound and joined as in production, so the suites about the
+// chosen address see them; only nothing outside the fixtures takes part.
+const dgram = require("node:dgram");
+
+/**
+ * Whether an address belongs to this run: this machine or a fixture device.
+ *
+ * @param {unknown} address the address
+ * @returns {boolean} true when the datagram may pass
+ */
+function insideTheRun(address) {
+  return typeof address === "string" && (/^127\./.test(address) || address === "::1" || address in ROUTES);
+}
+
+const realSend = dgram.Socket.prototype.send;
+dgram.Socket.prototype.send = function send(...args) {
+  // send(msg, port, address, cb) or send(msg, offset, length, port, address, cb); a connected socket names no address
+  const withOffset = typeof args[1] === "number" && typeof args[2] === "number";
+  const address = withOffset ? args[4] : args[2];
+  if (typeof address !== "string" || insideTheRun(address)) {
+    return realSend.apply(this, args);
+  }
+  const callback = args.findLast(a => typeof a === "function");
+  if (callback) {
+    setImmediate(() => callback(null, 0));
+  }
+  return undefined;
+};
+
+const realEmit = dgram.Socket.prototype.emit;
+dgram.Socket.prototype.emit = function emit(event, ...rest) {
+  if (event === "message" && rest[1] && !insideTheRun(rest[1].address)) {
+    return false;
+  }
+  return realEmit.call(this, event, ...rest);
+};

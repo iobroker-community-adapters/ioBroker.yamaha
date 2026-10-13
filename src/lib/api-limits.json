@@ -50,6 +50,22 @@
           "source": "own cap: one read-in plus the steady polls (XML status every 60 s, MusicCast liveness every 60 s and keepalive every 5 min); measured 67 within a minute through the outage and hang suites, 2026-10-07"
         }
       ]
+    },
+    {
+      "name": "SSDP network search",
+      "match": {
+        "host": "239.255.255.250",
+        "port": 1900,
+        "kind": "udp"
+      },
+      "limits": [
+        {
+          "max": 12,
+          "seconds": 20,
+          "per": "host",
+          "source": "own cap: one search sends its M-SEARCH three times, one second apart, on every chosen interface (network-search.ts SSDP_SEARCH_BURST), and a new search follows at the earliest after 20 s (main.ts REDISCOVER_QUICK_INTERVAL_MS) — 12 covers four interfaces"
+        }
+      ]
     }
   ]
 }

@@ -84,7 +84,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 - (krobipd) Changed: The Zone B name moves from multiroom.zoneB.name to multiroom.zoneB.zoneName
 - (krobipd) Changed: The network interface setting applies to every connection of the adapter
 - (krobipd) Fixed: info.model and info.firmware are filled on devices without YNCA
-- (krobipd) Fixed: Commands refused over one protocol go over another one also for scenes, tuner, party mode, HDMI outputs, speakers and playback keys
+- (krobipd) Fixed: Scene, tuner and playback commands work on more receivers
 - (krobipd) Fixed: Empty or invalid values written to scene.recall or a preset no longer recall anything
 - (krobipd) Fixed: A tuner frequency written right after the band goes to the new band
 - (krobipd) Fixed: Switches on 2008–2017 receivers no longer show an On/Standby list

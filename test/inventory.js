@@ -105,12 +105,17 @@ const OUTAGE_HOLD_MS = 30000;
 // that one counterpart hang — it takes nothing and answers nothing. How long the other counterparts may take to be reached.
 const HANG_FLAG = path.join(RESOURCE_DIR, "hang");
 const HANG_DEADLINE_MS = 120000;
+// Round 107 (W100-5): how long the adapter talks to its counterparts undisturbed before one of them begins to hang — long
+// enough for its own rhythm to show (a cadence seen only in the start burst is no rhythm).
+const HANG_WARMUP_MS = 90000;
 // Round 100 (krobi 2026-10-07 10:14: API limits are defined in the adapter and checked): the one place the adapter defines
 // the limits of every counterpart it calls — it imports the file itself, and the suite counts every call against it.
 const API_LIMITS = path.join(ADAPTER_DIR, "src", "lib", "api-limits.json");
 // Round 101 (krobi 2026-10-07 15:54, GV-13 as the fleet rule: never `ack: true` unless the device confirmed): how long
 // after the last command the suite waits — no counterpart answers in that time, so no command may be confirmed.
 const COMMAND_WINDOW_MS = 30000;
+// Round 104 (GV-28): how long a start with a taken port may take to stop with an error or to talk to something else.
+const TAKEN_WINDOW_MS = 60000;
 // Round 87 (krobi 2026-10-03 00:27, 11:38): the address the user picks in the instance settings (jsonConfig `type: "ip"`)
 // is the only one the adapter listens, sends and connects on — the cloud included; one the host does not carry falls back
 // to every address with exactly one warning. ADDRESS_KEY is the native key of that field, undefined where the adapter
@@ -155,7 +160,7 @@ const RESERVED_ROW = { name: "info", ip: "127.0.0.252" };
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness
  */
 async function watchObjectWrites(harness) {
-  const watch = { writes: new Map(), peak: new Map(), unchanged: [], deleted: [], times: [], unchangedIndicators: [] };
+  const watch = { writes: new Map(), peak: new Map(), unchanged: [], deleted: [], times: [], unchangedStates: [] };
   const known = new Map();
   const roles = new Map();
   const states = new Map();
@@ -194,14 +199,15 @@ async function watchObjectWrites(harness) {
   // Round 62: an indicator state (`indicator.*`) is written only on a change (read-only: compared in memory,
   // writable: setStateChangedAsync) — a write that changes nothing is a finding. Compared is what js-controller
   // 7.2.2 compares in setStateChangedAsync: val strictly, ack, q, c; an object value always counts as changed.
+  // Round 104 (krobi 2026-09-29: adapters waste no resources, GV-05): every state, not only `indicator.*`.
   harness.on("stateChange", (id, state) => {
     if (!id.startsWith(NS) || !state || state.from !== `system.adapter.${ADAPTER}.0`) {
       return;
     }
     const now =
       state.val !== null && typeof state.val === "object" ? null : canonical([state.val, state.ack, state.q, state.c]);
-    if (now !== null && states.get(id) === now && String(roles.get(id)).startsWith("indicator")) {
-      watch.unchangedIndicators.push(id);
+    if (now !== null && states.get(id) === now) {
+      watch.unchangedStates.push(id);
     }
     states.set(id, now);
   });
@@ -255,6 +261,44 @@ const MOVES = {};
  * showsEveryDevice). Round 96: every state that shows the outage belongs here — the value test exempts only these.
  */
 const OUTAGE_SHOWN = { "info.connection": false, "info.devicesOnline": 0, "info.devicesAllOnline": false };
+/**
+ * Round 104: adapter-specific like FIXTURE_NATIVE — the writable states (ids below the namespace) that are the adapter's
+ * own setting and never go to a counterpart, so `ack: true` right away is right for them. Every other writable state
+ * stays unconfirmed while no counterpart answers (krobi 2026-10-07 15:54: never `ack: true` unless the device confirmed).
+ * B02 checks each id is a writable state of the inventory.
+ */
+const LOCAL_STATES = [];
+/**
+ * Round 107 (krobi 2026-10-08 09:31, an exception to the fleet rule for one adapter: "in this particular case a small
+ * exception"): adapter-specific like LOCAL_STATES — the writable states (ids below the namespace, `*` for one
+ * segment) whose protocol has no answer from the device at all, so a command that went out without waiting for an answer
+ * may be confirmed. Only what krobi granted: B02 checks every pattern against `commandConfirmation.sendOnly.states` in the
+ * adapter's decision register (gate A14) and that it matches a writable state of the inventory; without that grant the
+ * list stays empty.
+ */
+const SEND_CONFIRMED = [];
+/**
+ * Round 104: adapter-specific like FIXTURE_NATIVE — for an adapter with a diagnostics report, every value the fixtures
+ * give that is the user's own and must never stand in a report in plain text: the names a user gives (DB-05, krobi
+ * 2026-10-06 15:20: replace the input names a user sets, 17:21: the newer decision holds), account names, tokens and
+ * serial numbers (DB-04, krobi 2026-09-22 19:42: the report keeps the privacy it promises). Each value stands in a fixture
+ * file under test/ (B02 checks it), so the list cannot name something the run never sees.
+ */
+const REPORT_PERSONAL = [
+  // the MusicCast network name and WLAN a user sets (wx030.json, ysp1600.json)
+  "Badezimmer",
+  "shootingrange 4",
+  // the serial numbers (system_id, XML System_ID) and MACs (device_id) of the fixture receivers
+  "0B23E7D3",
+  "0B587073",
+  "0E897553",
+  "0CE4E483",
+  "00A0DED15025",
+  "00A0DED4F504",
+  "AC44F241D7D9",
+  // the room name the typed row of the device table carries — its device id falls back to it (inventory-fixtures.cjs)
+  "Kueche",
+];
 /** Round 87: every fixture device of this run shows the outage in its own `info.connection` and per protocol too. */
 function showsEveryDevice() {
   for (const device of fixtures.devices) {
@@ -894,40 +938,72 @@ function instanceFiles(harness) {
  */
 async function playReports(harness, watch) {
   await harness.enableSendTo();
-  const fetchReport = async device => {
-    const started = await askDiagnostics(harness, { action: "start", device });
-    assert.ok(
-      typeof started?.job === "string",
-      `start of the report for ${device} answered ${JSON.stringify(started)}`,
-    );
-    const deadline = Date.now() + REPORT_DEADLINE_MS;
-    for (;;) {
-      await new Promise(resolve => setTimeout(resolve, REPORT_POLL_MS));
-      const answer = await askDiagnostics(harness, { action: "result", job: started.job });
-      if (!answer?.pending) {
-        return { device, answer };
-      }
-      assert.ok(Date.now() < deadline, `the report for ${device} was not done (deadline ${REPORT_DEADLINE_MS} ms)`);
+  // The jobs of one round run side by side in the adapter; the messages go one at a time — the harness keeps one
+  // answer slot per message, two at once get each other's answer (measured round 104, yamaha copy: eight starts at once,
+  // eight answers naming the first device).
+  const fetchReports = async devices => {
+    const jobs = [];
+    for (const device of devices) {
+      const started = await askDiagnostics(harness, { action: "start", device });
+      assert.ok(
+        typeof started?.job === "string",
+        `start of the report for ${device} answered ${JSON.stringify(started)}`,
+      );
+      jobs.push({ device, job: started.job, deadline: Date.now() + REPORT_DEADLINE_MS });
     }
+    const done = [];
+    while (jobs.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, REPORT_POLL_MS));
+      for (const job of [...jobs]) {
+        const answer = await askDiagnostics(harness, { action: "result", job: job.job });
+        if (!answer?.pending) {
+          done.push({ device: job.device, answer });
+          jobs.splice(jobs.indexOf(job), 1);
+        } else {
+          assert.ok(
+            Date.now() < job.deadline,
+            `the report for ${job.device} was not done (deadline ${REPORT_DEADLINE_MS} ms)`,
+          );
+        }
+      }
+    }
+    return done;
   };
   const run = {
     files: instanceFiles(harness),
     keys: new Set(await harness.states.getKeys(`${NS}*`)),
+    values: await dumpStates(harness),
     deleted: watch.deleted.length,
     start: Date.now(),
-    reports: [],
-    offline: [],
     writes: [],
+    onlineWrites: [],
   };
-  run.devices = (await askDiagnostics(harness, { action: "list" }))?.devices ?? [];
-  for (const device of run.devices) {
-    run.reports.push(await fetchReport(device.value));
-  }
-  const record = (id, state) => {
+  const recordInto = list => (id, state) => {
     if (id.startsWith(NS) && (!state || state.from === `system.adapter.${ADAPTER}.0`)) {
-      run.writes.push(id);
+      list.push(id);
     }
   };
+  const online = recordInto(run.onlineWrites);
+  harness.on("stateChange", online);
+  try {
+    run.devices = (await askDiagnostics(harness, { action: "list" }))?.devices ?? [];
+    run.reports = await fetchReports(run.devices.map(device => device.value));
+  } finally {
+    harness.removeListener("stateChange", online);
+  }
+  run.valuesAfterOnline = await dumpStates(harness);
+  // past the gap a finished report keeps before the same device's next one
+  await new Promise(resolve => setTimeout(resolve, REPORT_POLL_MS));
+  fs.writeFileSync(HANG_FLAG, "*");
+  try {
+    run.silent = await fetchReports(run.devices.filter(d => d.connected).map(device => device.value));
+  } finally {
+    fs.rmSync(HANG_FLAG, { force: true });
+  }
+  // back to what showed the connection before the silence, before the outage round begins
+  const before = Object.fromEntries(Object.keys(OUTAGE_SHOWN).map(id => [id, run.values[`${NS}${id}`]?.val]));
+  await waitForStates(harness, before, "the adapter did not come back after the silent counterparts");
+  const record = recordInto(run.writes);
   fs.writeFileSync(OUTAGE_FLAG, "");
   try {
     await waitForStates(harness, OUTAGE_SHOWN, "the adapter did not show the outage");
@@ -935,9 +1011,7 @@ async function playReports(harness, watch) {
     await new Promise(resolve => setTimeout(resolve, REPORT_POLL_MS));
     harness.on("stateChange", record);
     run.offlineDevices = (await askDiagnostics(harness, { action: "list" }))?.devices ?? [];
-    for (const device of run.offlineDevices) {
-      run.offline.push(await fetchReport(device.value));
-    }
+    run.offline = await fetchReports(run.offlineDevices.map(device => device.value));
   } finally {
     harness.removeListener("stateChange", record);
     run.end = Date.now();
@@ -972,20 +1046,28 @@ function channel(c) {
  * Round 100 (krobi 2026-10-07 10:12: one device never blocks another): the counterpart the adapter reached first in the
  * starts before this suite hangs from the start of the next one — it takes the connection and never answers. The verdict
  * compares with `hang-idle`, the moment the adapter has no attempt at it open any more: a start loop that awaits the hung
- * device reaches the others only after that. A queue shared by every device AFTER their first contact is not seen — a
- * measured boundary (round 100, yamaha copy with one planted MusicCast queue: green). Returns it
+ * device reaches the others only after that. A queue shared by every device AFTER their first contact is not seen here
+ * (round 100, yamaha copy with one planted MusicCast queue: green) — the suite "one counterpart hangs mid-run" sees it
+ * (round 107, playHangMidRun). Returns it
  * and every channel of the OTHER counterparts in those starts (a device reached over one channel can still wait on the hung
  * one over another); `hung` is null where there are fewer than two counterparts — the rule does not apply there.
  */
 function startHang() {
   const calls = readCalls().filter(c => !c.kind.startsWith("hang-"));
   const hosts = [...new Set(calls.map(c => c.host))];
-  if (hosts.length < 2) {
+  if (hosts.length >= 2) {
+    fs.writeFileSync(HANG_FLAG, hosts[0]);
+    const others = [...new Set(calls.filter(c => c.host !== hosts[0]).map(channel))];
+    return { hung: hosts[0], others, since: Date.now() };
+  }
+  // Round 104: every counterpart on one host (fixtures on 127.0.0.1) — one CHANNEL hangs, the hook takes `<host> <port>`
+  const ports = [...new Set(calls.map(c => `${c.host} ${c.port}`))];
+  if (ports.length < 2) {
     return { hung: null, others: [], since: Date.now() };
   }
-  fs.writeFileSync(HANG_FLAG, hosts[0]);
-  const others = [...new Set(calls.filter(c => c.host !== hosts[0]).map(channel))];
-  return { hung: hosts[0], others, since: Date.now() };
+  fs.writeFileSync(HANG_FLAG, ports[0]);
+  const others = [...new Set(calls.filter(c => `${c.host} ${c.port}` !== ports[0]).map(channel))];
+  return { hung: ports[0], others, since: Date.now() };
 }
 
 /**
@@ -1028,6 +1110,62 @@ async function playHang(harness, hang, restarts) {
 }
 
 /**
+ * Round 107 (W100-5, krobi 2026-10-07 10:12: one device never blocks another): the adapter first runs undisturbed for
+ * HANG_WARMUP_MS (a restart the host plays starts the warm-up again), then the counterpart it reached first over a request
+ * or a connection begins to hang while the adapter already talks to it — an open connection goes silent, every new contact
+ * hangs — until HANG_DEADLINE_MS have passed. Returns the hung counterpart and every channel of the others, the calls of
+ * that one process from the start of its warm-up, and the end.
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @param {{ done: Promise<void> }} restarts the host play of the suite
+ */
+async function playHangMidRun(harness, restarts) {
+  const since = Date.now();
+  const fed = feedFixtures(harness).then(
+    () => undefined,
+    err => err,
+  );
+  let pid;
+  let warm = since;
+  for (;;) {
+    await restarts.done;
+    const calls = readCalls().filter(c => c.t >= since);
+    const last = [...new Set(calls.map(c => c.pid))].at(-1);
+    if (last !== pid) {
+      pid = last;
+      warm = calls.find(c => c.pid === pid)?.t ?? Date.now();
+    }
+    if (Date.now() >= warm + HANG_WARMUP_MS) {
+      break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  // the counterpart this process reached first over a request or a connection — one that only gets datagrams never
+  // waits on an answer; a host hangs as a whole where the requests go to two hosts or more, else one channel
+  const seen = readCalls().filter(c => c.pid === pid && c.t >= warm && !c.kind.startsWith("hang-"));
+  const first = seen.find(c => c.kind !== "udp");
+  const byHost = new Set(seen.filter(c => c.kind !== "udp").map(c => c.host)).size >= 2;
+  const word = first === undefined ? null : byHost ? first.host : `${first.host} ${first.port}`;
+  const others =
+    word === null
+      ? []
+      : [...new Set(seen.filter(c => (byHost ? c.host : `${c.host} ${c.port}`) !== word).map(channel))];
+  const hang = { hung: others.length > 0 ? word : null, others, since: Date.now() };
+  if (hang.hung !== null) {
+    fs.writeFileSync(HANG_FLAG, hang.hung);
+  }
+  try {
+    while (hang.hung !== null && Date.now() < hang.since + HANG_DEADLINE_MS) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    void fed;
+    return { ...hang, pid, end: Date.now(), calls: readCalls().filter(c => c.pid === pid && c.t >= warm) };
+  } finally {
+    fs.rmSync(HANG_FLAG, { force: true });
+  }
+}
+
+/**
  * Round 100 (krobi 2026-10-07 10:14): the limits the adapter defines — `counterparts[]`, each with `name`, `match`
  * (`host`, `port`, `kind`: http, tcp or udp — every field given must fit) and `limits[]` (`max` calls in `seconds`, `per`
  * account or host, and the `source`: a link to the documentation, a measurement with its date, or the adapter's own cap).
@@ -1042,7 +1180,10 @@ function apiLimits() {
 
 /** Round 100: whether a counted call belongs to a declared counterpart. */
 function fits(call, match) {
-  return Object.entries(match).every(([key, value]) => call[key] === value);
+  // round 107 (K18): `hostPattern`, an anchored regular expression, for a counterpart whose host differs per account
+  return Object.entries(match).every(([key, value]) =>
+    key === "hostPattern" ? new RegExp(value).test(String(call.host)) : call[key] === value,
+  );
 }
 
 /**
@@ -1115,6 +1256,121 @@ async function playCommands(harness) {
   return run;
 }
 
+/**
+ * Round 107: a command to a state SEND_CONFIRMED grants may be confirmed once it went out — at least one call in its own
+ * context, and every one of them a kind that waits for no answer (a UDP datagram, a write on a connection already open).
+ * A request that waits (HTTP, fetch, a new connection) never gets its answer while everything hangs, so such a command
+ * stays unconfirmed even for a granted state (krobi 09:31 / 09:39: sent without error, or the cloud's "success").
+ *
+ * @param {{ calls: { kind: string, cause?: string }[] }} command
+ * @param {string} id
+ */
+function sentWithoutAnswer(command, id) {
+  const rel = id.slice(NS.length).split(".");
+  const granted = SEND_CONFIRMED.some(p => {
+    const parts = p.split(".");
+    return parts.length === rel.length && parts.every((s, i) => s === "*" || s === rel[i]);
+  });
+  const caused = command.calls.filter(c => c.cause === id);
+  return granted && caused.length > 0 && caused.every(c => c.kind === "udp" || c.kind === "tcp-write");
+}
+
+/** Round 104 (DB-01): every file the adapter process wrote (`<pid>.files`, test/network-hook.js), with its time. */
+function fileWrites() {
+  return fs
+    .readdirSync(RESOURCE_DIR)
+    .filter(f => f.endsWith(".files"))
+    .flatMap(f =>
+      fs
+        .readFileSync(path.join(RESOURCE_DIR, f), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map(l => JSON.parse(l)),
+    );
+}
+
+/**
+ * Round 104: every answer a counterpart sent (`<pid>.answers`, test/network-hook.js) from `from` until `until`, with the
+ * adapter's own port it came in on (`local`).
+ */
+function readAnswers(from, until = Infinity) {
+  return fs
+    .readdirSync(RESOURCE_DIR)
+    .filter(f => f.endsWith(".answers"))
+    .flatMap(f =>
+      fs
+        .readFileSync(path.join(RESOURCE_DIR, f), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map(l => JSON.parse(l)),
+    )
+    .filter(a => a.t >= from && a.t < until);
+}
+
+/**
+ * Round 104 (krobi 2026-10-03 12:01, GV-28, his answer for every listener: fakeroku only warns because every Roku has a
+ * port of its own; when the adapter cannot communicate at all, that is a fatal error): the ports another program may
+ * hold before the adapter starts — every `primary` port of fleet.json
+ * `listenPorts` and the first device's port of a `perDevice` entry, at the value the fixture gives it — and every other
+ * port the adapter declares (`secondary`, the other devices), each a path it can still talk on. `shared` ports (SSDP)
+ * are no path of their own. `declared` holds every port fleet.json names, at its fixture value (F6, round 104).
+ */
+function listenPortPlan() {
+  const file = path.join(ADAPTER_DIR, "fleet.json");
+  const fleet = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+  const native = { ...require(path.join(ADAPTER_DIR, "io-package.json")).native, ...FIXTURE_NATIVE };
+  const taken = [];
+  const others = [];
+  const declared = new Set();
+  for (const entry of fleet.listenPorts ?? []) {
+    if (entry.role === "perDevice") {
+      const [list, key] = String(entry.key).split("[].");
+      const ports = (Array.isArray(native[list]) ? native[list] : []).map(d => Number(d?.[key])).filter(n => n > 0);
+      taken.push(...ports.slice(0, 1).map(port => ({ protocol: entry.protocol, port })));
+      others.push(...ports.slice(1));
+      ports.forEach(port => declared.add(port));
+    } else {
+      const port = Number(entry.fixed ?? native[entry.key]);
+      if (port > 0) {
+        declared.add(port);
+        if (entry.role === "primary") {
+          taken.push({ protocol: entry.protocol, port });
+        } else if (entry.role === "secondary") {
+          others.push(port);
+        }
+      }
+    }
+  }
+  return { taken, others, declared, address: native.bind || "0.0.0.0" };
+}
+
+/**
+ * Round 104: hold each port the way another program would — a TCP server, an exclusive UDP socket — on the address the
+ * adapter binds.
+ *
+ * @param {{ protocol: string, port: number }[]} ports the ports
+ * @param {string} address the address
+ */
+async function takePorts(ports, address) {
+  const held = [];
+  for (const { protocol, port } of ports) {
+    const holder =
+      protocol === "udp"
+        ? require("node:dgram").createSocket({ type: "udp4", reuseAddr: false })
+        : require("node:net").createServer();
+    await new Promise((resolve, reject) => {
+      holder.once("error", reject);
+      if (protocol === "udp") {
+        holder.bind({ port, address, exclusive: true }, resolve);
+      } else {
+        holder.listen(port, address, resolve);
+      }
+    });
+    held.push(holder);
+  }
+  return held;
+}
+
 /** Round 87: the network records (`<pid>.net`, test/network-hook.js) present now — a suite reads only the ones after. */
 function networkFiles() {
   return new Set(fs.readdirSync(RESOURCE_DIR).filter(f => f.endsWith(".net")));
@@ -1157,6 +1413,10 @@ function offTheAddress(use, address) {
     }
     if (r.kind === "connect" && r.localAddress !== address) {
       wrong.push(`connects to ${r.host}:${r.port} from ${r.localAddress ?? "any address"}`);
+    }
+    // round 104: a fetch a fixture answers opens no socket — without a dispatcher of its own it is bound to nothing
+    if (r.kind === "fetch" && !r.bound) {
+      wrong.push(`fetches ${r.host}:${r.port} without a dispatcher on the chosen address`);
     }
     if (r.kind === "join" && r.iface !== address) {
       wrong.push(`joins ${r.group} on ${r.iface ?? "the default interface"}`);
@@ -1254,6 +1514,7 @@ tests.integration(ADAPTER_DIR, {
       let harness;
       let watch;
       let restarts;
+      let seen;
       before(async function () {
         this.timeout(600000);
         harness = getHarness();
@@ -1261,8 +1522,9 @@ tests.integration(ADAPTER_DIR, {
         watch = await watchObjectWrites(harness);
         await resetInstanceNative(harness, await fixtureNative());
         await setSystemLanguage(harness, FIRST_LANGUAGE);
-        restarts = playControllerRestarts(harness, watch, HOOK);
-        await harness.startAdapterAndWait(false, adapterEnv(HOOK));
+        seen = networkFiles();
+        restarts = playControllerRestarts(harness, watch, HOOK, NETWORK_HOOK);
+        await harness.startAdapterAndWait(false, adapterEnv(HOOK, NETWORK_HOOK));
         await waitForAdapterWork(harness);
         await restarts.done;
         await waitForAdapterWork(harness);
@@ -1274,6 +1536,23 @@ tests.integration(ADAPTER_DIR, {
         // closing the fixture servers first is a race against its own retry loop.
         await harness?.stopAdapter();
         await fixtures?.stop();
+      });
+      // Round 104 (krobi 2026-09-15 09:12: every listener, fixed ports included, F6): every port the adapter asks for
+      // while it runs stands in fleet.json `listenPorts` — the package check reads the source, this the running process.
+      it("listens only on the ports it declares", function () {
+        const { declared } = listenPortPlan();
+        const undeclared = [
+          ...new Set(
+            networkUse(seen)
+              .filter(r => (r.kind === "listen" || r.kind === "bind") && r.asked > 0 && !declared.has(r.asked))
+              .map(r => `${r.kind} ${r.asked}`),
+          ),
+        ];
+        assert.deepStrictEqual(
+          undeclared,
+          [],
+          `ports the adapter takes that fleet.json listenPorts does not declare:\n${undeclared.join("\n")}`,
+        );
       });
 
       it("writes test/objects.inventory.json", async function () {
@@ -1300,9 +1579,9 @@ tests.integration(ADAPTER_DIR, {
         assert.deepStrictEqual(idle, [], `objects written without a change:\n${idle.join("\n")}`);
       });
 
-      it("rewrites no indicator state unchanged", function () {
-        const idle = [...new Set(watch.unchangedIndicators)];
-        assert.deepStrictEqual(idle, [], `indicator states written without a change:\n${idle.join("\n")}`);
+      it("rewrites no state unchanged", function () {
+        const idle = [...new Set(watch.unchangedStates)];
+        assert.deepStrictEqual(idle, [], `states written without a change:\n${idle.join("\n")}`);
       });
 
       it("restarts at most once for its own instance object", function () {
@@ -1662,7 +1941,10 @@ tests.integration(ADAPTER_DIR, {
         harness = getHarness();
         clearInstanceData(harness);
         watch = await watchObjectWrites(harness);
-        await resetInstanceNative(harness, await fixtureNative());
+        // The network search runs here (round 107, K18: every declared counterpart is reached): typed rows alone keep
+        // it off, and a device that goes away is where it searches again at its quick pace — the SSDP limit is measured
+        // on that. The fixture hook drops every datagram outside the run, so nothing on the network takes part.
+        await resetInstanceNative(harness, await fixtureNative({ discovery: "always" }));
         showsEveryDevice();
         await setSystemLanguage(harness, FIRST_LANGUAGE);
         restarts = playControllerRestarts(harness, watch, HOOK, NETWORK_HOOK);
@@ -1732,6 +2014,33 @@ tests.integration(ADAPTER_DIR, {
         assert.deepStrictEqual(loud, [], `log lines above debug during the outage or the return:\n${loud.join("\n")}`);
       });
 
+      // Round 104 (krobi 2026-10-06 17:55, F1/GV-04): an outage shows only on reachability — OUTAGE_SHOWN may name
+      // no other state, or a value reset by the outage would hide behind it
+      it("shows the outage only on states that tell reachability", async function () {
+        const roles = [
+          "indicator.connected",
+          "indicator.reachable",
+          "indicator.alive",
+          "indicator.maintenance.unreach",
+        ];
+        const other = [];
+        for (const id of Object.keys(OUTAGE_SHOWN)) {
+          const obj = await harness.objects.getObjectAsync(`${NS}${id}`);
+          const role = String(obj?.common?.role ?? "");
+          if (
+            !roles.some(r => role === r || role.startsWith(`${r}.`)) &&
+            !/(online|connect|reach|alive)/i.test(id.split(".").at(-1))
+          ) {
+            other.push(`${id} (role ${role || "none"})`);
+          }
+        }
+        assert.deepStrictEqual(
+          other,
+          [],
+          `OUTAGE_SHOWN names states that do not tell reachability:\n${other.join("\n")}`,
+        );
+      });
+
       it("restarts at most once for its own instance object", function () {
         assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
       });
@@ -1750,7 +2059,9 @@ tests.integration(ADAPTER_DIR, {
         harness = getHarness();
         clearInstanceData(harness);
         watch = await watchObjectWrites(harness);
-        await resetInstanceNative(harness, await fixtureNative());
+        // The network search runs as in "counterpart gone and back", whose starts name the channels judged here: a hung
+        // receiver must not hold the search back either.
+        await resetInstanceNative(harness, await fixtureNative({ discovery: "always" }));
         showsEveryDevice();
         await setSystemLanguage(harness, FIRST_LANGUAGE);
         restarts = playControllerRestarts(harness, watch, HOOK, NETWORK_HOOK);
@@ -1768,11 +2079,17 @@ tests.integration(ADAPTER_DIR, {
       });
 
       it("reaches every other counterpart before it gives up on a hung one", function () {
+        // a host hangs as a whole, or one channel `<host> <port>` (round 104) — its idle line names the port then
+        const hungIs = c =>
+          hang.hung.includes(" ") ? `${c.host} ${c.port}` === hang.hung : c.host === hang.hung && c.port === undefined;
         assert.ok(
-          hang.hung === null || hang.calls.some(c => c.kind === "hang-start" && c.host === hang.hung),
+          hang.hung === null ||
+            hang.calls.some(
+              c => c.kind === "hang-start" && (c.host === hang.hung || `${c.host} ${c.port}` === hang.hung),
+            ),
           `${hang.hung} never hung — a pooled connection or a hook below answered for it`,
         );
-        const end = hang.calls.find(c => c.kind === "hang-idle" && c.host === hang.hung)?.t ?? Infinity;
+        const end = hang.calls.find(c => c.kind === "hang-idle" && hungIs(c))?.t ?? Infinity;
         const late = hang.others.filter(
           k => !(hang.calls.find(c => !c.kind.startsWith("hang-") && channel(c) === k)?.t < end),
         );
@@ -1832,6 +2149,167 @@ tests.integration(ADAPTER_DIR, {
       });
     });
 
+    // Round 107 (W100-5): the same rule while the adapter already runs — a device that answered and then stops answering
+    // never delays the others. A queue every device shares after its first contact is red here; the suite above, where
+    // the device hangs from the start, cannot see it (measured round 100 on a yamaha copy).
+    suite("one counterpart hangs mid-run", getHarness => {
+      let harness;
+      let watch;
+      let restarts;
+      let hang;
+      before(async function () {
+        this.timeout(
+          HANG_WARMUP_MS + HANG_DEADLINE_MS + STOP_DEADLINE_MS + RESTART_DELAY_MS + START_DEADLINE_MS + 120000,
+        );
+        harness = getHarness();
+        clearInstanceData(harness);
+        watch = await watchObjectWrites(harness);
+        await resetInstanceNative(harness, await fixtureNative());
+        showsEveryDevice();
+        await setSystemLanguage(harness, FIRST_LANGUAGE);
+        restarts = playControllerRestarts(harness, watch, HOOK, NETWORK_HOOK);
+        await harness.startAdapterAndWait(false, adapterEnv(HOOK, NETWORK_HOOK));
+        hang = await playHangMidRun(harness, restarts);
+      });
+      // Mocha may give up on before() while playHangMidRun still waits — the next suite must not start with a hung counterpart.
+      after(() => fs.rmSync(HANG_FLAG, { force: true }));
+
+      after(async function () {
+        this.timeout(60000);
+        await harness?.stopAdapter();
+        await fixtures?.stop();
+      });
+
+      it("keeps every other counterpart in its rhythm while one hangs mid-run", function () {
+        if (hang.hung === null) {
+          return;
+        }
+        const starts = c => c.kind === "hang-start" && (c.host === hang.hung || `${c.host} ${c.port}` === hang.hung);
+        assert.ok(
+          hang.calls.some(starts),
+          `${hang.hung} never hung — a pooled connection or a hook below answered for it`,
+        );
+        // each attempt the adapter keeps open at the hung counterpart, from its hang-start to its own hang-end (a
+        // request it gives up after its timeout is one wait, a connection that went silent another); one still
+        // open ends at the deadline
+        const waits = [];
+        const open = new Map();
+        for (const c of hang.calls) {
+          const key = `${c.host} ${c.port}`;
+          if (starts(c)) {
+            open.set(key, [...(open.get(key) ?? []), c.t]);
+          } else if (c.kind === "hang-end" && open.get(key)?.length) {
+            waits.push([open.get(key).shift(), c.t]);
+          }
+        }
+        for (const left of open.values()) {
+          waits.push(...left.map(s => [s, hang.end]));
+        }
+        // a channel is judged by the rhythm it showed itself: its largest gap between calls before the wait (fewer
+        // than two calls, or quiet for longer than that gap already, shows none) — it was due during the wait when
+        // its last call plus that gap fell inside it, and then its next call must come inside it too
+        const judged = [];
+        const late = [];
+        for (const k of hang.others) {
+          const times = hang.calls.filter(c => !c.kind.startsWith("hang-") && channel(c) === k).map(c => c.t);
+          for (const [s, e] of waits) {
+            const before = times.filter(t => t < s);
+            if (before.length < 2) {
+              continue;
+            }
+            const gap = Math.max(...before.slice(1).map((t, i) => t - before[i]));
+            const last = before[before.length - 1];
+            if (s - last > gap || last + gap >= e) {
+              continue;
+            }
+            judged.push(k);
+            if (!(times.find(t => t >= s) < e)) {
+              late.push(`${k}: due ${last + gap - s} ms into a wait of ${e - s} ms, reached only after it`);
+              break;
+            }
+          }
+        }
+        if (judged.length === 0) {
+          console.log(`      no other counterpart was due while ${hang.hung} hung — this run measured nothing`);
+        }
+        assert.deepStrictEqual(late, [], `waited for the hung ${hang.hung}:\n${late.join("\n")}`);
+      });
+    });
+
+    // Round 104 (krobi 2026-10-03 12:01, GV-28 for every listener: an adapter that cannot communicate has a fatal
+    // error): another program holds the adapter's own port before it starts. With no other path —
+    // nothing answers, no other declared port is open — the adapter stops with an error; with one it runs on.
+    if (listenPortPlan().taken.length > 0) {
+      suite("a taken port", getHarness => {
+        let harness;
+        let held = [];
+        let verdict;
+        before(async function () {
+          this.timeout(TAKEN_WINDOW_MS + 120000);
+          harness = getHarness();
+          clearInstanceData(harness);
+          await resetInstanceNative(harness, await fixtureNative());
+          const plan = listenPortPlan();
+          held = await takePorts(plan.taken, plan.address);
+          const seen = networkFiles();
+          const since = Date.now();
+          await harness.startAdapter(adapterEnv(HOOK, NETWORK_HOOK));
+          const fed = feedFixtures(harness).then(
+            () => undefined,
+            err => err,
+          );
+          while (!harness.didAdapterStop() && Date.now() < since + TAKEN_WINDOW_MS) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+          await Promise.race([fed, new Promise(resolve => setTimeout(resolve, 1000))]);
+          const taken = new Set(plan.taken.map(p => p.port));
+          const via = answers => [
+            ...new Set(answers.filter(a => !taken.has(a.local)).map(a => `${a.kind} ${a.host}:${a.port} answers`)),
+          ];
+          const open = networkUse(seen)
+            .filter(r => (r.kind === "listen" || r.kind === "bind") && plan.others.includes(r.port))
+            .map(r => `listens on ${r.port}`);
+          // the suites before this one ran with the port free: what answered there on another port is a path too —
+          // an adapter that stops at once never gets to show it here
+          verdict = {
+            plan,
+            stopped: harness.didAdapterStop(),
+            exit: harness.adapterExit,
+            paths: [...open, ...via(readAnswers(since))],
+            before: via(readAnswers(0, since)),
+          };
+        });
+        after(() => Promise.all(held.map(h => new Promise(resolve => h.close(() => resolve())))));
+
+        after(async function () {
+          this.timeout(60000);
+          await harness?.stopAdapter();
+          await fixtures?.stop();
+        });
+
+        it("stops with an error when it can talk to nothing, and runs on when it can", function () {
+          const ports = verdict.plan.taken.map(p => `${p.protocol} ${p.port}`).join(", ");
+          if (verdict.stopped) {
+            assert.notStrictEqual(
+              verdict.exit,
+              0,
+              `stopped with exit code 0 while ${ports} was taken — a port it cannot do without is a fatal error`,
+            );
+            assert.deepStrictEqual(
+              [...verdict.paths, ...verdict.before],
+              [],
+              `stopped although it still had a path while ${ports} was taken`,
+            );
+          } else {
+            assert.ok(
+              verdict.paths.length > 0,
+              `runs on ${TAKEN_WINDOW_MS} ms after a start with ${ports} taken, and nothing answered and no other port of it is open — it talks to nothing, that is a fatal error`,
+            );
+          }
+        });
+      });
+    }
+
     // Round 101 (krobi 2026-10-07 15:54, GV-13 as the fleet rule): no counterpart answers, every writable state gets
     // one command — a command that reached a counterpart stays unconfirmed (`ack: false`), and where the adapter has
     // writable states at least one command reaches a counterpart (otherwise the suite judged nothing).
@@ -1867,9 +2345,14 @@ tests.integration(ADAPTER_DIR, {
       });
 
       it("confirms no command no counterpart answered", function () {
-        const reached = new Set(command.calls.map(c => c.cause));
+        // round 104: every writable state is judged, not only the ones whose call carried the command as its cause
+        // (a queue started before the command loses it — yamaha 11 of 436); nothing answers, so no `ack: true` but
+        // for a state LOCAL_STATES names as the adapter's own setting, and (round 107) for a state SEND_CONFIRMED
+        // grants whose command went out without waiting for an answer
+        const local = new Set(LOCAL_STATES.map(id => `${NS}${id}`));
         const confirmed = command.writes
-          .filter(w => reached.has(w.id) && command.acks.some(([id, ts]) => id === w.id && ts >= w.t))
+          .filter(w => !local.has(w.id) && !sentWithoutAnswer(command, w.id))
+          .filter(w => command.acks.some(([id, ts]) => id === w.id && ts >= w.t))
           .map(w => `${w.id} = ${JSON.stringify(w.val)}`);
         assert.deepStrictEqual(
           confirmed,
@@ -1882,6 +2365,21 @@ tests.integration(ADAPTER_DIR, {
         assert.ok(
           command.writes.length === 0 || command.calls.length > 0,
           `none of ${command.writes.length} commands reached a counterpart in its own context — a queue that started before the command, or no device command at all: the suite judged nothing`,
+        );
+      });
+
+      // Round 107 (K18, govee): a limit is proven only where the run reaches its counterpart — every counterpart
+      // src/lib/api-limits.json declares is called at least once in this run (every suite so far, the commands of this
+      // one last); one that only credentials or a protocol the fixtures lack would reach needs its fixture
+      it("reaches every counterpart it declares", function () {
+        const calls = readCalls().filter(c => !c.kind.startsWith("hang-"));
+        const unreached = apiLimits()
+          .filter(d => !calls.some(c => fits(c, d.match)))
+          .map(d => d.name);
+        assert.deepStrictEqual(
+          unreached,
+          [],
+          `counterparts src/lib/api-limits.json declares that the run never reached — their limits are unproven:\n${unreached.join("\n")}`,
         );
       });
 
@@ -2043,7 +2541,10 @@ tests.integration(ADAPTER_DIR, {
           harness = getHarness();
           clearInstanceData(harness);
           watch = await watchObjectWrites(harness);
-          await resetInstanceNative(harness, await fixtureNative());
+          // Round 105: the typed row of the device table — its id falls back to the room name (DB-04)
+          const native = await fixtureNative();
+          native.devices = [...native.devices, fixtures.typedRow];
+          await resetInstanceNative(harness, native);
           showsEveryDevice();
           await setSystemLanguage(harness, FIRST_LANGUAGE);
           restarts = playControllerRestarts(harness, watch, HOOK, NETWORK_HOOK);
@@ -2064,21 +2565,55 @@ tests.integration(ADAPTER_DIR, {
 
         it("hands over a report for every device", function () {
           assert.ok(reports.devices.length > 0, "the adapter lists no device — feedFixtures gives it none");
-          const version = require(path.join(ADAPTER_DIR, "io-package.json")).common.version.replace(
-            /[.*+?^${}()|[\]\\]/g,
-            "\\$&",
-          );
-          const name = new RegExp(`^${ADAPTER}_[A-Za-z0-9_-]+_v${version}_\\d{4}-\\d{2}-\\d{2}_\\d{6}\\.json$`);
-          const wrong = [...reports.reports, ...reports.offline]
+          const quote = text => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const version = quote(require(path.join(ADAPTER_DIR, "io-package.json")).common.version);
+          // DB-12 (krobi 2026-10-06 19:07, one file name for every adapter): the device part is the device id the card
+          // lists — or, where the id falls back to a name, an address or a whole serial, the placeholder the content uses
+          // for it (DB-04, round 105: the file goes out as the attachment of a public issue)
+          const named = new RegExp(`^${ADAPTER}_([A-Za-z0-9_-]+)_v${version}_\\d{4}-\\d{2}-\\d{2}_\\d{6}\\.json$`);
+          const ownName = (device, answer) => {
+            const part = named.exec(answer?.fileName ?? "")?.[1];
+            if (part === undefined) {
+              return false;
+            }
+            // a placeholder has the core's form `<kind>-<n>` (placeholders.ts) and stands in the content too; the id
+            // may keep its own parts around it (a second device of a model: `wx-010-serial-1`, measured by yamaha)
+            const own = device.replace(/[^a-z0-9-]+/gi, "_");
+            const placed = (part.match(/[a-z]+-\d+/g) ?? []).filter(t => !own.includes(t));
+            const rest = placed.reduce((text, t) => text.replace(t, ""), part);
+            return (
+              part === own ||
+              (placed.length > 0 && placed.every(t => (answer?.content ?? "").includes(t)) && own.includes(rest))
+            );
+          };
+          const wrong = [...reports.reports, ...reports.silent, ...reports.offline]
             .filter(
-              ({ answer }) =>
-                !name.test(answer?.fileName) || JSON.parse(answer.content).adapter !== `iobroker.${ADAPTER}`,
+              ({ device, answer }) =>
+                !ownName(device, answer) || JSON.parse(answer.content).adapter !== `iobroker.${ADAPTER}`,
             )
             .map(({ device, answer }) => `${device}: ${JSON.stringify(answer).slice(0, 300)}`);
           assert.deepStrictEqual(
             wrong,
             [],
             `no report, or not named <adapter>_<device-id>_v<version>_<date>_<time>.json:\n${wrong.join("\n")}`,
+          );
+        });
+
+        it("reads every connected device live and makes no answer up", function () {
+          // DB-02 (krobi 2026-10-05 22:47 for yamaha, 2026-10-06 13:40 for govee): a connected device is read live
+          const unread = reports.reports
+            .filter(({ device }) => reports.devices.find(d => d.value === device)?.connected)
+            .filter(({ answer }) => JSON.parse(answer?.content ?? "{}").liveRead !== "read")
+            .map(({ device, answer }) => `${device}: ${JSON.parse(answer?.content ?? "{}").liveRead}`);
+          assert.deepStrictEqual(unread, [], `connected devices the report did not read live:\n${unread.join("\n")}`);
+          assert.ok(reports.silent.length > 0, "no connected device — the live read was never played");
+          const madeUp = reports.silent
+            .filter(({ answer }) => JSON.parse(answer?.content ?? "{}").liveRead === "read")
+            .map(({ device }) => device);
+          assert.deepStrictEqual(
+            madeUp,
+            [],
+            `reports that say the device was read while no counterpart answered:\n${madeUp.join("\n")}`,
           );
         });
 
@@ -2093,6 +2628,14 @@ tests.integration(ADAPTER_DIR, {
             .filter(({ answer }) => JSON.parse(answer?.content ?? "{}").connected !== false)
             .map(({ device }) => device);
           assert.deepStrictEqual(read, [], `reports that do not say the device was not connected:\n${read.join("\n")}`);
+          // DB-03 (krobi 2026-10-06 13:02: every device is listed and reported, online and offline): every device stays listed
+          const listedThen = reports.devices.map(d => d.value).sort();
+          const listedNow = reports.offlineDevices.map(d => d.value).sort();
+          assert.deepStrictEqual(
+            listedNow,
+            listedThen,
+            "the card does not list every device while every counterpart is gone",
+          );
         });
 
         it("adds no datapoint and writes no value for a report", function () {
@@ -2103,11 +2646,16 @@ tests.integration(ADAPTER_DIR, {
           const lost = [...new Set(watch.deleted.slice(reports.deleted))];
           const shown = new Set(Object.keys(OUTAGE_SHOWN).map(id => `${NS}${id}`));
           const values = [...new Set(reports.writes.filter(id => !shown.has(id)))];
+          // DB-02, the read changes nothing in the adapter: a value the live read changes while the counterparts answer as before
+          const same = id =>
+            JSON.stringify(reports.values[id]?.val) === JSON.stringify(reports.valuesAfterOnline[id]?.val);
+          const changed = [...new Set(reports.onlineWrites)].filter(id => !same(id));
           const all = [
             ...written.map(id => `object ${id}`),
             ...added.map(id => `state ${id}`),
             ...lost.map(id => `deleted ${id}`),
             ...values.map(id => `value ${id}`),
+            ...changed.map(id => `changed ${id}`),
           ];
           assert.deepStrictEqual(all, [], `the reports added, wrote or deleted:\n${all.join("\n")}`);
         });
@@ -2115,7 +2663,16 @@ tests.integration(ADAPTER_DIR, {
         it("writes no file for a report", function () {
           const files = [...new Set([...Object.keys(reports.files), ...Object.keys(reports.filesAfter)])];
           const changed = files.filter(f => reports.files[f] !== reports.filesAfter[f]);
-          assert.deepStrictEqual(changed, [], `files the reports wrote, changed or removed:\n${changed.join("\n")}`);
+          // round 104: anywhere — the network hook notes every file the adapter process writes (os.tmpdir too)
+          const anywhere = [
+            ...new Set(
+              fileWrites()
+                .filter(w => w.t >= reports.start && w.t <= reports.end)
+                .map(w => w.path),
+            ),
+          ];
+          const all = [...changed, ...anywhere.filter(f => !changed.includes(f))];
+          assert.deepStrictEqual(all, [], `files the reports wrote, changed or removed:\n${all.join("\n")}`);
         });
 
         it("shows no address, hardware id or mail address in plain text", function () {
@@ -2124,13 +2681,63 @@ tests.integration(ADAPTER_DIR, {
             /(?<![0-9A-Fa-f:-])[0-9A-Fa-f]{2}(?:[:-][0-9A-Fa-f]{2}){5}(?![0-9A-Fa-f:-])/,
             /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,}\b/,
           ];
-          const plain = [...reports.reports, ...reports.offline].flatMap(({ device, answer }) =>
-            forms.filter(f => f.test(answer?.content ?? "")).map(f => `${device}: ${f}`),
-          );
+          // round 104: IPv6 too — two colons in a row or at least four groups, one group with two hex digits
+          // (measured on 24 reports of the yamaha copy: no time, date or id matched)
+          const v6 = text =>
+            (text.match(/(?<![\w:.])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:.])/g) ?? []).filter(
+              m => (m.includes("::") || m.split(":").length >= 4) && /[0-9A-Fa-f]{2}/.test(m),
+            );
+          // round 105: the file name too — its device part is never pseudonymised by anyone but the adapter
+          const part = answer => (answer?.fileName ?? "").replace(/_v[^_]*_\d{4}-\d{2}-\d{2}_\d{6}\.json$/, "");
+          const dashed =
+            /(?<!\d)(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)[._-]){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?!\d)/;
+          const plain = [...reports.reports, ...reports.silent, ...reports.offline].flatMap(({ device, answer }) => [
+            ...forms.filter(f => f.test(answer?.content ?? "")).map(f => `${device}: ${f}`),
+            ...v6(answer?.content ?? "").map(m => `${device}: ${m}`),
+            ...(dashed.test(part(answer)) ? [`${device}: file name ${answer.fileName}`] : []),
+          ]);
           assert.deepStrictEqual(
             plain,
             [],
             `reports that show an address, a hardware id or a mail address in plain text (DB-04):\n${plain.join("\n")}`,
+          );
+        });
+
+        it("shows no name, account or key of the user in plain text", function () {
+          assert.ok(
+            REPORT_PERSONAL.length > 0,
+            "REPORT_PERSONAL names no value — list the fixtures' names, accounts, tokens and serials a user owns (DB-04, DB-05)",
+          );
+          // round 105: the file name too, in the spelling a file name takes (Küche → kueche, k_che)
+          const slug = v =>
+            v
+              .toLowerCase()
+              .replace(/ä/g, "ae")
+              .replace(/ö/g, "oe")
+              .replace(/ü/g, "ue")
+              .replace(/ß/g, "ss")
+              .normalize("NFKD")
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "");
+          const loose = v =>
+            v
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-+|-+$/g, "");
+          const part = answer =>
+            slug(
+              (answer?.fileName ?? "").replace(`${ADAPTER}_`, "").replace(/_v[^_]*_\d{4}-\d{2}-\d{2}_\d{6}\.json$/, ""),
+            );
+          const inName = (answer, v) => [slug(v), loose(v)].some(s => s !== "" && part(answer).includes(s));
+          const plain = [...reports.reports, ...reports.silent, ...reports.offline].flatMap(({ device, answer }) =>
+            REPORT_PERSONAL.filter(v => (answer?.content ?? "").includes(v) || inName(answer, v)).map(
+              v => `${device}: ${v}`,
+            ),
+          );
+          assert.deepStrictEqual(
+            plain,
+            [],
+            `reports that show the user's own values in plain text (DB-04, DB-05):\n${plain.join("\n")}`,
           );
         });
 
@@ -2410,9 +3017,9 @@ tests.integration(ADAPTER_DIR, {
           assert.deepStrictEqual(idle, [], `objects written without a change:\n${idle.join("\n")}`);
         });
 
-        it("rewrites no indicator state unchanged", function () {
-          const idle = [...new Set(watch.unchangedIndicators)];
-          assert.deepStrictEqual(idle, [], `indicator states written without a change:\n${idle.join("\n")}`);
+        it("rewrites no state unchanged", function () {
+          const idle = [...new Set(watch.unchangedStates)];
+          assert.deepStrictEqual(idle, [], `states written without a change:\n${idle.join("\n")}`);
         });
 
         // A kept object that is deleted and created anew makes the suite judge a fresh object, not the

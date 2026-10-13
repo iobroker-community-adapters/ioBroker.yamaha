@@ -280,10 +280,13 @@ function listen(server) {
   });
 }
 
+/** A typed row of the device table: a room name, no stored id, an address no fixture answers on (round 105). */
+const TYPED_ROW = { name: "Kueche", ip: "10.10.0.99" };
+
 /**
  * Start every fixture device and report how the adapter process must be routed to them.
  *
- * @returns {Promise<{devices: {id: string, name: string, ip: string, transports: string[]}[], legacyDevices: {ip: string}[], routes: Record<string, {http: number, ynca: number|null}>, power: (on: boolean) => void, stop: () => Promise<void>}>}
+ * @returns {Promise<{devices: {id: string, name: string, ip: string, transports: string[]}[], legacyDevices: {ip: string}[], typedRow: {name: string, ip: string}, routes: Record<string, {http: number, ynca: number|null}>, power: (on: boolean) => void, stop: () => Promise<void>}>}
  *   the device list for the adapter's configuration — as 3.0.0 writes it (the id stored), and as
  *   2.x held it (the address only, the id derived from it) — the hook's routing table, a power switch for the YNCA
  *   receivers, and a stopper
@@ -314,6 +317,12 @@ async function startFixtureDevices() {
     servers.push(ynca, httpServer);
     routes[fixture.ip] = { http: httpServer.port, ynca: ynca ? ynca.port : null };
   }
+  // A row the user typed with a room name and no stored id, for an address where nothing answers (round 105): its device
+  // id falls back to the typed name (`rowDeviceId` → the name), the branch whose report must not carry the name in its
+  // file name or its content (DB-04). Its route ends at a port that refuses every request, YNCA is refused by the hook.
+  const refusing = await listen(http.createServer((_req, res) => res.destroy()));
+  servers.push(refusing);
+  routes[TYPED_ROW.ip] = { http: refusing.port, ynca: null };
   return {
     // `transports`: the protocols the capture answers — each device's `info.transports.<protocol>` shows an outage.
     devices: fixtures.map(f => ({
@@ -323,6 +332,9 @@ async function startFixtureDevices() {
       transports: ["ynca", "yxc", "xml"].filter(protocol => f[protocol]),
     })),
     legacyDevices: fixtures.map(f => ({ ip: f.ip })),
+    // The typed row is added by the suite that judges it (diagnostics report) — elsewhere a device that never answers
+    // would keep `info.devicesAllOnline` false and its id unfinished, which those suites rightly do not expect.
+    typedRow: { ...TYPED_ROW },
     routes,
     /**
      * Switch every YNCA receiver on, or back to the state its capture shows.

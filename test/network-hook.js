@@ -13,6 +13,7 @@
 // Fleet master (.consistency-master/test/network-hook.js) — never edit the copy in an adapter.
 const fs = require("node:fs");
 const net = require("node:net");
+const tls = require("node:tls");
 const dgram = require("node:dgram");
 const path = require("node:path");
 const { AsyncLocalStorage } = require("node:async_hooks");
@@ -177,6 +178,19 @@ const hangEnd = (host, port) => {
     fs.appendFileSync(calls, `${JSON.stringify({ t: Date.now(), kind: "hang-idle", host, port })}\n`);
   }
 };
+// Round 107 (W100-5): the hang can begin while the adapter already talks to the counterpart — an open connection to it
+// then goes silent from that moment (`hang-start`) until the adapter closes it (`hang-end`), like a device that answered
+// and then stopped. A connection sent to the black hole is silent from its start and has its own records.
+const silenced = new WeakSet();
+const silenceIfHung = socket => {
+  const target = targets.get(socket);
+  if (target === undefined || silenced.has(socket) || !open.has(socket) || !hung(target.host, target.port)) {
+    return;
+  }
+  silenced.add(socket);
+  hangStart(target.host, target.port);
+  socket.once("close", () => hangEnd(target.host, target.port));
+};
 const refused = () => Object.assign(new Error("connect ECONNREFUSED (outage switch)"), { code: "ECONNREFUSED" });
 const reset = () => Object.assign(new Error("read ECONNRESET (outage switch)"), { code: "ECONNRESET" });
 const optionsOf = args => {
@@ -201,7 +215,10 @@ const connect = net.Socket.prototype.connect;
 const rawOut = new WeakSet();
 const byClient = () => /node:_http_(client|agent)|node:https|node:internal\/deps\/undici/.test(new Error().stack || "");
 function cutConnect(...args) {
-  const opts = optionsOf(args);
+  // Round 107: the host and port a TLS connection was asked for, before a fixture hook below rerouted it (tls.connect)
+  const asked = tlsAsked;
+  tlsAsked = null;
+  const opts = asked === null ? optionsOf(args) : { ...optionsOf(args), host: asked.host, port: asked.port };
   if (!keep.has(Number(opts.port)) && typeof opts.path !== "string" && !byClient()) {
     rawOut.add(this);
   }
@@ -221,6 +238,7 @@ function cutConnect(...args) {
     hangStart(name, Number(opts.port));
     this.once("close", () => hangEnd(name, Number(opts.port)));
     track(this, opts);
+    silenced.add(this);
     return connect.call(this, { port: blackHole, host: "127.0.0.1" });
   }
   const result = connect.apply(this, args);
@@ -250,7 +268,10 @@ net.Socket.prototype.connect = cutConnect;
 // Round 101: while everything hangs, nothing the counterparts send reaches the adapter on a connection opened before.
 const socketEmit = net.Socket.prototype.emit;
 function cutSocketEmit(event, ...args) {
-  if (event === "data" && open.has(this) && silent()) {
+  if (event === "data" && open.has(this)) {
+    silenceIfHung(this);
+  }
+  if (event === "data" && open.has(this) && (silent() || (silenced.has(this) && hangWord() !== ""))) {
     return false;
   }
   if (event === "data" && open.has(this)) {
@@ -267,6 +288,7 @@ const socketWrite = net.Socket.prototype.write;
 // write on such a connection is a call of kind `tcp-write` — a device protocol on one socket (YNCA, NUT, MQTT) sends its
 // commands there, and until now only the connections were counted, so no command limit was ever judged.
 function causeWrite(...args) {
+  silenceIfHung(this);
   const target = targets.get(this);
   if (target !== undefined && open.has(this) && rawOut.has(this)) {
     count("tcp-write", target.host, target.port);
@@ -274,6 +296,48 @@ function causeWrite(...args) {
   return socketWrite.apply(this, args);
 }
 net.Socket.prototype.write = causeWrite;
+// Round 107: TLS started on a connection that is already open (STARTTLS, `tls.connect({ socket })`) — the TLS socket
+// writes and reads through the native handle of the one below, so it takes over that one's record: its writes are
+// calls, its data is an answer, and it is cut, silenced and hung like it.
+// Round 107 (K18): a TLS connection TLS opens itself is recorded with the host the adapter asked for — a fixture hook
+// below that reroutes `tls.connect` to a local server would otherwise leave only its own address in the record, and a
+// declared counterpart (a broker whose host differs per account) could never be told from any other.
+const tlsConnect = tls.connect;
+let tlsAsked = null;
+let tlsDepth = 0;
+function trackTls(...args) {
+  const opts = args.find(a => a !== null && typeof a === "object" && !(a instanceof net.Socket)) ?? {};
+  if (tlsDepth === 0 && !(opts.socket instanceof net.Socket)) {
+    const port = Number(
+      opts.port ?? (typeof args[0] === "number" || typeof args[0] === "string" ? args[0] : undefined),
+    );
+    const host = opts.host ?? (typeof args[1] === "string" ? args[1] : undefined) ?? "localhost";
+    tlsAsked = { host, port };
+  }
+  tlsDepth++;
+  let socket;
+  try {
+    socket = tlsConnect.apply(this, args);
+  } finally {
+    tlsDepth--;
+    if (tlsDepth === 0) {
+      tlsAsked = null;
+    }
+  }
+  const inner = args.find(a => a !== null && typeof a === "object" && a.socket instanceof net.Socket)?.socket;
+  const target = inner === undefined ? undefined : targets.get(inner);
+  if (target !== undefined && socket !== inner) {
+    track(socket, target);
+    if (rawOut.has(inner)) {
+      rawOut.add(socket);
+    }
+    if (silenced.has(inner)) {
+      silenced.add(socket);
+    }
+  }
+  return socket;
+}
+tls.connect = trackTls;
 
 // HTTP requests: the real host before any fixture hook reroutes it (this hook loads last, the adapter captures these).
 for (const mod of [require("node:http"), require("node:https")]) {
@@ -473,6 +537,10 @@ function cutEmit(event, ...args) {
   if (event === "message" && (down() || silent())) {
     return false;
   }
+  // Round 107: a counterpart that hangs sends nothing either — also one that began to hang while the adapter ran
+  if (event === "message" && args[1] && typeof args[1].address === "string" && hung(args[1].address, args[1].port)) {
+    return false;
+  }
   if (event === "message" && args[1] && typeof args[1].address === "string") {
     let local = 0;
     try {
@@ -541,6 +609,7 @@ function replaced() {
   if (net.Socket.prototype.connect !== cutConnect) out.push("net.Socket.prototype.connect");
   if (net.Socket.prototype.emit !== cutSocketEmit) out.push("net.Socket.prototype.emit");
   if (net.Socket.prototype.write !== causeWrite) out.push("net.Socket.prototype.write");
+  if (tls.connect !== trackTls) out.push("tls.connect");
   if (EventEmitter.prototype.emit !== causeEmit) out.push("EventEmitter.prototype.emit");
   if (net.Server.prototype.listen !== recordListen) out.push("net.Server.prototype.listen");
   if (net.Server.prototype.emit !== cutServerEmit) out.push("net.Server.prototype.emit");
@@ -557,6 +626,11 @@ function replaced() {
 // The moment the switch goes on, open connections drop and the marker is written.
 let was = down();
 setInterval(() => {
+  if (hangWord() !== "") {
+    for (const socket of open) {
+      silenceIfHung(socket);
+    }
+  }
   const now = down();
   if (now && !was) {
     for (const socket of open) {
