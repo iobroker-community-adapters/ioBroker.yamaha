@@ -125,6 +125,17 @@ describe("PersonalValues", () => {
     expect(out).toContain("Movie Viewing");
   });
 
+  // A factory name says nothing personal even on another input — and "Dock" or "iPod (USB)" are not made of protocol
+  // words only, so the factory list is what keeps them readable (needle W31-11).
+  it("keeps a factory name readable on an input whose code it is not", () => {
+    const out = scrub({
+      ynca: { "SYS:INPNAMEHDMI1": "Dock", "SYS:INPNAMEHDMI2": "iPod (USB)", "SYS:INPNAMEHDMI3": "Apple TV" },
+    });
+    expect(out).toContain("Dock");
+    expect(out).toContain("iPod (USB)");
+    expect(out).not.toContain("Apple TV");
+  });
+
   it("finds a name that stands only in a raw YNCA line", () => {
     const out = scrub({ lines: ["@ZONE3:ZONENAME=Gaestezimmer", "@BT:DEVICENAME=Pixel von Max"] });
     expect(out).not.toContain("Gaestezimmer");
