@@ -1,9 +1,22 @@
 {
   "common": {
     "name": "yamaha",
-    "version": "3.2.0",
+    "version": "3.3.0",
     "nogit": true,
     "news": {
+      "3.3.0": {
+        "en": "New Expert tab with a diagnostics report for GitHub issues.\nYNCA, MusicCast and XML datapoints now share names, roles and value lists.\nThe YNCA input dropdown shows your input names; advanced.inputNames.* is removed.\nAdaptive DRC is a switch everywhere; on MusicCast-only devices sleep is a dropdown and bass and treble are in dB.\nThe Zone B name moves to multiroom.zoneB.zoneName.",
+        "de": "Neuer Reiter Experte mit Diagnosebericht für GitHub-Issues.\nDatenpunkte von YNCA, MusicCast und XML haben jetzt dieselben Namen, Rollen und Wertelisten.\nDas YNCA-Eingangs-Dropdown zeigt deine Eingangsnamen; advanced.inputNames.* entfällt.\nAdaptive DRC ist überall ein Schalter; auf reinen MusicCast-Geräten ist sleep ein Dropdown, Bass und Höhen stehen in dB.\nDer Name von Zone B zieht nach multiroom.zoneB.zoneName.",
+        "ru": "Новая вкладка «Эксперт» с диагностическим отчётом для issue на GitHub.\nТочки данных YNCA, MusicCast и XML теперь имеют одинаковые имена, роли и списки значений.\nСписок входов YNCA показывает ваши имена входов; advanced.inputNames.* удалены.\nAdaptive DRC везде переключатель; на устройствах только с MusicCast sleep — список, а низкие и высокие частоты в дБ.\nИмя зоны B переезжает в multiroom.zoneB.zoneName.",
+        "pt": "Novo separador Especialista com relatório de diagnóstico para issues no GitHub.\nOs pontos de dados de YNCA, MusicCast e XML têm agora os mesmos nomes, funções e listas de valores.\nA lista de entradas YNCA mostra os seus nomes de entrada; advanced.inputNames.* foi removido.\nAdaptive DRC é um interruptor em todo o lado; em dispositivos só MusicCast, sleep é uma lista e graves e agudos estão em dB.\nO nome da zona B passa para multiroom.zoneB.zoneName.",
+        "nl": "Nieuw tabblad Expert met een diagnoserapport voor GitHub-issues.\nDatapunten van YNCA, MusicCast en XML hebben nu dezelfde namen, rollen en waardelijsten.\nDe YNCA-ingangslijst toont je ingangsnamen; advanced.inputNames.* vervalt.\nAdaptive DRC is overal een schakelaar; op apparaten met alleen MusicCast is sleep een lijst en staan bas en treble in dB.\nDe naam van zone B verhuist naar multiroom.zoneB.zoneName.",
+        "fr": "Nouvel onglet Expert avec un rapport de diagnostic pour les tickets GitHub.\nLes points de données YNCA, MusicCast et XML partagent désormais noms, rôles et listes de valeurs.\nLa liste des entrées YNCA affiche tes noms d'entrée ; advanced.inputNames.* disparaît.\nAdaptive DRC est partout un interrupteur ; sur les appareils MusicCast seuls, sleep est une liste, graves et aigus sont en dB.\nLe nom de la zone B passe à multiroom.zoneB.zoneName.",
+        "it": "Nuova scheda Esperto con un rapporto di diagnostica per le issue GitHub.\nI punti dati di YNCA, MusicCast e XML hanno ora gli stessi nomi, ruoli e liste di valori.\nLa lista ingressi YNCA mostra i tuoi nomi degli ingressi; advanced.inputNames.* è rimosso.\nAdaptive DRC è ovunque un interruttore; sui dispositivi solo MusicCast sleep è una lista e bassi e alti sono in dB.\nIl nome della zona B passa a multiroom.zoneB.zoneName.",
+        "es": "Nueva pestaña Experto con un informe de diagnóstico para issues de GitHub.\nLos puntos de datos de YNCA, MusicCast y XML comparten ahora nombres, roles y listas de valores.\nLa lista de entradas YNCA muestra tus nombres de entrada; advanced.inputNames.* desaparece.\nAdaptive DRC es un interruptor en todas partes; en dispositivos solo MusicCast, sleep es una lista y graves y agudos van en dB.\nEl nombre de la zona B pasa a multiroom.zoneB.zoneName.",
+        "pl": "Nowa karta Ekspert z raportem diagnostycznym do zgłoszeń na GitHubie.\nPunkty danych YNCA, MusicCast i XML mają teraz te same nazwy, role i listy wartości.\nLista wejść YNCA pokazuje Twoje nazwy wejść; advanced.inputNames.* usunięto.\nAdaptive DRC to wszędzie przełącznik; w urządzeniach tylko z MusicCast sleep jest listą, a basy i soprany są w dB.\nNazwa strefy B przechodzi do multiroom.zoneB.zoneName.",
+        "uk": "Нова вкладка «Експерт» із діагностичним звітом для issue на GitHub.\nТочки даних YNCA, MusicCast і XML тепер мають однакові назви, ролі та списки значень.\nСписок входів YNCA показує ваші назви входів; advanced.inputNames.* вилучено.\nAdaptive DRC усюди перемикач; на пристроях лише з MusicCast sleep — список, а низькі й високі частоти в дБ.\nНазва зони B переходить до multiroom.zoneB.zoneName.",
+        "zh-cn": "新增“专家”标签页，提供用于 GitHub issue 的诊断报告。\nYNCA、MusicCast 和 XML 的数据点现在使用相同的名称、角色和取值列表。\nYNCA 输入下拉列表显示你设置的输入名称；advanced.inputNames.* 已移除。\nAdaptive DRC 在所有设备上都是开关；仅 MusicCast 设备上 sleep 为下拉列表，低音和高音以 dB 显示。\nB 区的名称移至 multiroom.zoneB.zoneName。"
+      },
       "3.2.0": {
         "en": "Dropdown lists no longer go empty when the receiver loses power. A receiver keeps its datapoints until an adapter or firmware update; refused commands try another protocol.",
         "de": "Auswahllisten werden nicht mehr leer, wenn der Receiver stromlos wird. Datenpunkte bleiben bis zu einem Adapter- oder Firmware-Update; abgelehnte Befehle gehen über ein anderes Protokoll.",
@@ -81,19 +94,6 @@
         "pl": "Komunikaty, które Admin pokazuje przed aktualizacją, są teraz krótkie: co się zmienia, przykład stare → nowe i link do szczegółów.",
         "uk": "Повідомлення, які Admin показує перед оновленням, тепер короткі: що змінюється, приклад старе → нове та посилання на подробиці.",
         "zh-cn": "Admin 在更新前显示的提示现在很简短：变更内容、一个新旧对照示例和详情链接。"
-      },
-      "3.0.0": {
-        "en": "Each device's object ID is now its model and the end of its serial number, e.g. wx-030-2b3c; two devices of one model both get a tree; scripts and VIS need the new IDs.",
-        "de": "Die Objekt-ID jedes Geräts ist jetzt sein Modell und das Ende der Seriennummer, z. B. wx-030-2b3c; zwei Geräte eines Modells haben je einen Baum; Skripte und VIS brauchen die neuen IDs.",
-        "ru": "ID объекта каждого устройства теперь — модель и конец серийного номера, напр. wx-030-2b3c; два устройства одной модели получают по дереву; скриптам и VIS нужны новые ID.",
-        "pt": "O ID de objeto de cada dispositivo é agora o modelo e o fim do número de série, ex. wx-030-2b3c; dois do mesmo modelo têm cada um árvore; scripts e VIS precisam dos novos IDs.",
-        "nl": "De object-ID van elk apparaat is nu het model plus het einde van het serienummer, bv. wx-030-2b3c; twee apparaten van één model krijgen elk een boom; scripts en VIS hebben de nieuwe ID's nodig.",
-        "fr": "L'ID d'objet de chaque appareil est son modèle et la fin du numéro de série, ex. wx-030-2b3c ; deux appareils d'un modèle ont chacun un arbre ; scripts et VIS ont besoin des nouveaux ID.",
-        "it": "L'ID oggetto di ogni dispositivo è ora il modello e la fine del numero di serie, es. wx-030-2b3c; due dispositivi dello stesso modello hanno un albero ciascuno; script e VIS servono i nuovi ID.",
-        "es": "El ID de objeto de cada dispositivo es su modelo y el final del número de serie, p. ej. wx-030-2b3c; dos del mismo modelo tienen cada uno su árbol; scripts y VIS necesitan los nuevos ID.",
-        "pl": "ID obiektu każdego urządzenia to teraz model i koniec numeru seryjnego, np. wx-030-2b3c; dwa urządzenia jednego modelu mają osobne drzewa; skrypty i VIS potrzebują nowych ID.",
-        "uk": "ID об'єкта кожного пристрою тепер — модель і кінець серійного номера, напр. wx-030-2b3c; два пристрої однієї моделі мають окремі дерева; скриптам і VIS потрібні нові ID.",
-        "zh-cn": "每台设备的对象 ID 现为型号加序列号末尾，例如 wx-030-2b3c；同型号的两台设备各有对象树；脚本和 VIS 需改用新 ID。"
       }
     },
     "titleLang": {
