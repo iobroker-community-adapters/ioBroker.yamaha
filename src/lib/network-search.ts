@@ -26,8 +26,11 @@ export interface SearchResponder {
 export interface NetworkSearchDeps {
   /** The configured network interface (empty: every interface). */
   networkInterface(): string | undefined;
-  /** The adapter's timer — it refuses new timers once the stop began. */
-  setTimeout(callback: () => void, ms: number): unknown;
+  /**
+   * The adapter's timer — it refuses new timers once the stop began. A property, not a method signature: the
+   * repochecker reads `setTimeout(` at the start of a line as a plain timer (S5005, Prüfbot 5.23.0).
+   */
+  setTimeout: (callback: () => void, ms: number) => unknown;
   /** Adapter log. */
   log: { info(message: string): void };
   /** A search problem, said once per key and then at debug. */
