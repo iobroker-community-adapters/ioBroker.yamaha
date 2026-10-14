@@ -72,6 +72,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
     Placeholder for the next version (at the beginning of the line):
     ### **WORK IN PROGRESS**
 -->
+
 ### 3.3.0 (2026-10-14)
 
 - (krobipd) New: Diagnostics report on the new Expert tab, with a "Report a device" issue form for it

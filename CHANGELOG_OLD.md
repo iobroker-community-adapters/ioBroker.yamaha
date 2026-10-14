@@ -1,4 +1,5 @@
 # Older changes
+
 ## 3.1.0 (2026-09-30)
 
 - (krobipd) Changed: player.playback follows the ioBroker standard now — 0 pause, 1 play, 2 stop; repeat and shuffle can be set directly where the device allows it
