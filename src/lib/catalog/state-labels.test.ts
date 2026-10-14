@@ -75,6 +75,15 @@ describe("withValueLabels (readable values, 2026-09-30)", () => {
     expect(withValueLabels("scene.recall", titled, "en")).toBe(titled);
   });
 
+  test("a scene recall without a value list is written as it is", () => {
+    const bare: ObjectDef = {
+      id: "scene.recall",
+      type: "state",
+      common: { name: "r", type: "number", role: "level", read: false, write: true },
+    };
+    expect(withValueLabels("scene.recall", bare, "en")).toBe(bare);
+  });
+
   test("an unknown system language reads English", () => {
     const def = list("tuner.band", { fm: "fm" });
     expect(withValueLabels("tuner.band", def, "xx").common.states).toEqual({ fm: "FM (VHF)" });
