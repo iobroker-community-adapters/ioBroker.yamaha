@@ -94,6 +94,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 - (krobipd) Fixed: Zones on Main Zone Sync show the main zone's playback; zones without a media input get no player datapoints
 - (krobipd) Fixed: MusicCast link groups, favourites and volume right after power-on on soundbars work reliably
 - (krobipd) Fixed: Receivers with a CD drive and MusicCast get their CD datapoints
+- (krobipd) Fixed: Scenes without a title show as "Scene 1", "Scene 2" … in the scene dropdown instead of a bare number
 - (krobipd) Fixed: Menu paths find entries on later pages, and XML menus are no longer hidden after a "not now" answer
 - (krobipd) Fixed: A powered-off XML receiver goes offline in seconds
 - (krobipd) Fixed: A MusicCast-only device that loses power goes offline within three minutes instead of fifteen
