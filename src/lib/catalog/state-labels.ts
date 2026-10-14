@@ -177,6 +177,30 @@ export const STATE_LABELS: Readonly<Record<string, Readonly<Record<string, Label
 };
 
 /**
+ * A scene-recall dropdown: the device's titles stay, a scene the device declares without one carries the adapter's
+ * word with its number. Its transport labels such a scene with the bare number (`sceneRecallStates`), and "3" only
+ * repeated its value — the RX-V6A and the RX-A2A zones stood with nothing else (Vorlauf 2026-10-14, D08).
+ *
+ * @param def the object definition to write
+ * @param states its value list
+ * @param language the system language
+ * @returns the definition with its labels, the same object when every scene has a title
+ */
+function withSceneNumbers(def: ObjectDef, states: unknown, language: string): ObjectDef {
+  if (!states || typeof states !== "object" || Array.isArray(states)) {
+    return def;
+  }
+  const entries = Object.entries(states as Record<string, string>);
+  if (!entries.some(([value, shown]) => shown === value)) {
+    return def;
+  }
+  const named: Record<string, string> = Object.fromEntries(
+    entries.map(([value, shown]) => [value, shown === value ? tIn(language, "labelSceneNumber", value) : shown]),
+  );
+  return { ...def, common: { ...def.common, states: named } };
+}
+
+/**
  * The datapoint's value list with the adapter's words in the system language.
  *
  * @param relativeId the id relative to the device
@@ -188,6 +212,9 @@ export function withValueLabels(relativeId: string, def: ObjectDef, language: st
   const states = def.type === "state" ? def.common.states : undefined;
   // A zone folder carries the main zone's datapoints (zones 2 to 4 and Zone B).
   const template = relativeId.replace(ZONE_PREFIX, "");
+  if (template === "scene.recall") {
+    return withSceneNumbers(def, states, language);
+  }
   const labels = Object.hasOwn(STATE_LABELS, template) ? STATE_LABELS[template] : undefined;
   if (!labels || !states || typeof states !== "object" || Array.isArray(states)) {
     return def;

@@ -60,6 +60,21 @@ describe("withValueLabels (readable values, 2026-09-30)", () => {
     expect(withValueLabels("constructor", odd, "en")).toBe(odd);
   });
 
+  // A scene without a title came labelled with its bare number — "3" only repeated its value (Vorlauf 2026-10-14, D08).
+  test("a scene without a title is called a scene with its number, a titled scene keeps the device's title", () => {
+    const def = list("multiroom.zone2.scene.recall", { 1: "Movie", 2: "2", 3: "3" });
+    expect(withValueLabels("multiroom.zone2.scene.recall", def, "en").common.states).toEqual({
+      1: "Movie",
+      2: "Scene 2",
+      3: "Scene 3",
+    });
+    expect(withValueLabels("scene.recall", list("scene.recall", { 4: "4" }), "de").common.states).toEqual({
+      4: "Szene 4",
+    });
+    const titled = list("scene.recall", { 1: "BD/DVD", 2: "TV" });
+    expect(withValueLabels("scene.recall", titled, "en")).toBe(titled);
+  });
+
   test("an unknown system language reads English", () => {
     const def = list("tuner.band", { fm: "fm" });
     expect(withValueLabels("tuner.band", def, "xx").common.states).toEqual({ fm: "FM (VHF)" });

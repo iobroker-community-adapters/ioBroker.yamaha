@@ -680,12 +680,28 @@ function cdObjects(capabilities: YxcCapabilities): ObjectDef[] {
   objects.push({
     id: "player.cd.totalTracks",
     type: "state",
-    common: { name: tName("totalTracks"), type: "number", role: "value", read: true, write: false },
+    common: {
+      name: tName("totalTracks"),
+      desc: tName("descTotalTracks"),
+      type: "number",
+      role: "value",
+      read: true,
+      write: false,
+    },
   });
   objects.push({
     id: "player.cd.discTime",
     type: "state",
-    common: { name: tName("discTime"), type: "number", unit: "s", role: "value", read: true, write: false },
+    // YXC Basic §8.1: disc_time is the CD's total playback time, not the elapsed time.
+    common: {
+      name: tName("discTime"),
+      desc: tName("descDiscTime"),
+      type: "number",
+      unit: "s",
+      role: "value",
+      read: true,
+      write: false,
+    },
   });
   objects.push({
     id: "player.cd.deviceStatus",

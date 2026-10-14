@@ -1836,6 +1836,19 @@
         "uk": "Час диска",
         "zh-cn": "碟片时间"
       },
+      "desc": {
+        "en": "The total playing time of the inserted disc, in seconds.",
+        "de": "Die gesamte Spieldauer der eingelegten Disc in Sekunden.",
+        "ru": "Общее время воспроизведения вставленного диска в секундах.",
+        "pt": "A duração total do disco inserido, em segundos.",
+        "nl": "De totale speelduur van de geplaatste schijf, in seconden.",
+        "fr": "La durée totale du disque inséré, en secondes.",
+        "it": "La durata totale del disco inserito, in secondi.",
+        "es": "La duración total del disco introducido, en segundos.",
+        "pl": "Łączny czas odtwarzania włożonej płyty w sekundach.",
+        "uk": "Загальна тривалість вставленого диска в секундах.",
+        "zh-cn": "插入碟片的总播放时长（秒）。"
+      },
       "type": "number",
       "unit": "s",
       "role": "value",
@@ -1860,6 +1873,19 @@
         "pl": "Liczba utworów",
         "uk": "Усього треків",
         "zh-cn": "曲目总数"
+      },
+      "desc": {
+        "en": "How many tracks the inserted disc holds.",
+        "de": "Wie viele Titel die eingelegte Disc enthält.",
+        "ru": "Сколько треков на вставленном диске.",
+        "pt": "Quantas faixas o disco inserido contém.",
+        "nl": "Hoeveel nummers de geplaatste schijf bevat.",
+        "fr": "Le nombre de pistes du disque inséré.",
+        "it": "Quante tracce contiene il disco inserito.",
+        "es": "Cuántas pistas contiene el disco introducido.",
+        "pl": "Ile utworów zawiera włożona płyta.",
+        "uk": "Скільки треків на вставленому диску.",
+        "zh-cn": "插入的碟片包含的曲目数。"
       },
       "type": "number",
       "role": "value",
@@ -8814,10 +8840,10 @@
       "max": 4,
       "step": 1,
       "states": {
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4"
+        "1": "Scene 1",
+        "2": "Scene 2",
+        "3": "Scene 3",
+        "4": "Scene 4"
       }
     },
     "native": {},
@@ -10194,10 +10220,10 @@
       "max": 4,
       "step": 1,
       "states": {
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4"
+        "1": "Scene 1",
+        "2": "Scene 2",
+        "3": "Scene 3",
+        "4": "Scene 4"
       }
     },
     "native": {},
@@ -10654,10 +10680,10 @@
       "max": 4,
       "step": 1,
       "states": {
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4"
+        "1": "Scene 1",
+        "2": "Scene 2",
+        "3": "Scene 3",
+        "4": "Scene 4"
       }
     },
     "native": {},
@@ -13700,18 +13726,18 @@
       "max": 12,
       "step": 1,
       "states": {
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4",
-        "5": "5",
-        "6": "6",
-        "7": "7",
-        "8": "8",
-        "9": "9",
-        "10": "10",
-        "11": "11",
-        "12": "12"
+        "1": "Scene 1",
+        "2": "Scene 2",
+        "3": "Scene 3",
+        "4": "Scene 4",
+        "5": "Scene 5",
+        "6": "Scene 6",
+        "7": "Scene 7",
+        "8": "Scene 8",
+        "9": "Scene 9",
+        "10": "Scene 10",
+        "11": "Scene 11",
+        "12": "Scene 12"
       }
     },
     "native": {},
@@ -21853,14 +21879,14 @@
       "max": 8,
       "step": 1,
       "states": {
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4",
-        "5": "5",
-        "6": "6",
-        "7": "7",
-        "8": "8"
+        "1": "Scene 1",
+        "2": "Scene 2",
+        "3": "Scene 3",
+        "4": "Scene 4",
+        "5": "Scene 5",
+        "6": "Scene 6",
+        "7": "Scene 7",
+        "8": "Scene 8"
       }
     },
     "native": {},
@@ -33587,14 +33613,14 @@
       "max": 8,
       "step": 1,
       "states": {
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4",
-        "5": "5",
-        "6": "6",
-        "7": "7",
-        "8": "8"
+        "1": "Scene 1",
+        "2": "Scene 2",
+        "3": "Scene 3",
+        "4": "Scene 4",
+        "5": "Scene 5",
+        "6": "Scene 6",
+        "7": "Scene 7",
+        "8": "Scene 8"
       }
     },
     "native": {},
