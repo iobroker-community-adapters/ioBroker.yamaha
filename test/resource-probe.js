@@ -71,6 +71,65 @@ if (dir) {
       },
     })
     .enable();
+  // Round 113: where every outgoing TCP connection really goes. The probe loads first, so its connect is the innermost
+  // one — it sees the address a fixture hook rerouted to, not the one the adapter asked for. A connection that leaves
+  // this machine reached the real world: a forgotten route to a cloud, a device on the LAN (yamaha lab run 2026-10-14:
+  // the router at 10.47.4.1 answered a discovery while the fixtures were missing).
+  const LOOPBACK = /^(?:127\.|::1$|::ffff:127\.|localhost$)/;
+  const leftMachine = args => {
+    const first = Array.isArray(args[0]) ? args[0][0] : args[0];
+    const o =
+      first && typeof first === "object"
+        ? first
+        : { port: first, host: typeof args[1] === "string" ? args[1] : undefined };
+    if (typeof o.path === "string" || o.port === undefined || o.port === null) {
+      return;
+    }
+    const host = String(o.host ?? "localhost");
+    if (!LOOPBACK.test(host)) {
+      land("tcp", host, Number(o.port));
+    }
+  };
+  const land = (kind, host, port) =>
+    fs.appendFileSync(
+      path.join(dir, `${process.pid}.lands`),
+      `${JSON.stringify({ t: Date.now(), kind, host, port })}\n`,
+    );
+  // a unicast datagram leaves this machine as well (a LAN protocol on UDP alone, govee's); a multicast or broadcast
+  // search does on purpose and is not judged
+  const broadcasts = new Set(["255.255.255.255"]);
+  for (const list of Object.values(require("node:os").networkInterfaces())) {
+    for (const a of list ?? []) {
+      if (a.family === "IPv4" && a.netmask) {
+        const n = s => s.split(".").reduce((v, b) => v * 256 + Number(b), 0);
+        const b = (n(a.address) | (~n(a.netmask) >>> 0)) >>> 0;
+        broadcasts.add([24, 16, 8, 0].map(s => (b >>> s) & 255).join("."));
+      }
+    }
+  }
+  const sendDatagram = dgram.Socket.prototype.send;
+  dgram.Socket.prototype.send = function (...args) {
+    // send(msg, port, address) or send(msg, offset, length, port, address); an unbound socket binds and sends again
+    const portAt = typeof args[1] === "number" && typeof args[2] === "number" ? 3 : 1;
+    const host =
+      typeof args[portAt] === "number" && typeof args[portAt + 1] === "string" ? args[portAt + 1] : undefined;
+    let bound = true;
+    try {
+      this.address();
+    } catch {
+      bound = false;
+    }
+    if (
+      bound &&
+      host !== undefined &&
+      !LOOPBACK.test(host) &&
+      !/^(?:22[4-9]|23\d)\.|^ff/i.test(host) &&
+      !broadcasts.has(host)
+    ) {
+      land("udp", host, args[portAt]);
+    }
+    return sendDatagram.apply(this, args);
+  };
   // a server or socket gets its handle in an internal nextTick — its owner is whoever calls listen/connect/bind
   const OWNER = Symbol("resourceProbeOwner");
   for (const [proto, method] of [
@@ -82,6 +141,9 @@ if (dir) {
     proto[method] = function (...args) {
       if (!this[OWNER]) {
         this[OWNER] = owner();
+      }
+      if (method === "connect") {
+        leftMachine(args);
       }
       return original.apply(this, args);
     };
