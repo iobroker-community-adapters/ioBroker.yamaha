@@ -29,5 +29,18 @@
       "role": "shared",
       "fixed": 1900
     }
-  ]
+  ],
+  "serverTest": {
+    "_why": "A release keeps every receiver found, its input read and its connection up, and still switches a real receiver on and off over the MusicCast or YXC path.",
+    "_note": "Ids are relative to the instance; `*` is the device object (model + last four characters of the serial). `*.power` is the main zone's power switch, a boolean the receiver confirms with ack; `online` limits the command to a reachable receiver. Ran green on krobi's server 2026-10-15 09:56-09:59 against 3.3.0 (Werkbank round 117).",
+    "observeSeconds": 60,
+    "connectSeconds": 60,
+    "startSpacingSeconds": 0,
+    "reads": [
+      { "id": "info.devicesTotal", "expect": "number" },
+      { "id": "*.input", "expect": "nonEmpty" },
+      { "id": "*.info.connection", "expect": "true" }
+    ],
+    "commands": [{ "id": "*.power", "online": "*.info.connection", "value": "toggle", "timeoutSeconds": 30 }]
+  }
 }
