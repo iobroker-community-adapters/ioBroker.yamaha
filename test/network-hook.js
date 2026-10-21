@@ -8,6 +8,10 @@
 //    of the process fails like an unplugged device — new TCP/TLS connections and `fetch` are refused, open connections
 //    drop, incoming connections are dropped, UDP datagrams neither leave nor arrive. Removing the file brings everything
 //    back. Each time it goes on it writes `<pid>.outage`, naming any of its patches a later hook replaced.
+// 7. It plays a counterpart that answers wrong — section 7 below (`fault`, round 124).
+// 8. It notes every address of this machine the adapter names to others — in a datagram, or in what a server of the
+//    adapter writes to a connection (SSDP location, an mDNS record, a description) — as an `advertise` line in <pid>.net
+//    (round 124, D17, krobi 2026-10-03 00:27: the advertised address is the chosen one).
 // The ioBroker databases (ports from the controller's own iobroker.json) are never cut nor recorded: they are the
 // platform, not the counterpart.
 // Fleet master (.consistency-master/test/network-hook.js) — never edit the copy in an adapter.
@@ -44,6 +48,10 @@ const log = path.join(dir, `${process.pid}.net`);
 // `hook` when a frame of a test folder is on the stack and no frame of the adapter's own code is — the adapter runs from
 // the test installation below the working directory. A request a hook only reroutes keeps the adapter's frame.
 const root = process.cwd();
+// The resource probe beside this file measures, it hooks nothing (round 132, govee 2026-10-20: since round 125 its
+// emit wrapper stands in the stack of the datagram an unbound socket sends again from `listening`, and the adapter's
+// socket counted as a hook's — never counted). Its frames are passed like node's own.
+const PROBE = path.join(__dirname, "resource-probe.js");
 const byHook = () => {
   const limit = Error.stackTraceLimit;
   Error.stackTraceLimit = 80;
@@ -52,7 +60,7 @@ const byHook = () => {
   let hook = false;
   for (const line of stack.split("\n").slice(2)) {
     const m = line.match(/\(?((?:file:\/\/)?\/[^():]+):\d+/);
-    if (!m || line.includes("node:") || line.includes(__filename)) {
+    if (!m || line.includes("node:") || line.includes(__filename) || line.includes(PROBE)) {
       continue;
     }
     const file = m[1].replace("file://", "");
@@ -72,6 +80,19 @@ const record = (entry, hook = byHook()) =>
 //    connection — one JSON line per call in RESOURCE_PROBE_DIR/<pid>.calls, against the limits the adapter declares in
 //    src/lib/api-limits.json (round 100, krobi 2026-10-07 10:14: API limits are defined in the adapter and checked).
 const calls = path.join(dir, `${process.pid}.calls`);
+// The process's pulse (round 124, red-proof run 2026-10-16): a process blocked on a call that never ends writes no
+// record after it, so whether it outlived a deadline is read from RESOURCE_PROBE_DIR/<pid>.alive, rewritten every 2 s.
+const alive = path.join(dir, `${process.pid}.alive`);
+const rawWrite = fs.writeFileSync;
+const pulse = () => {
+  try {
+    rawWrite(alive, String(Date.now()));
+  } catch {
+    // the probe folder is gone once the run ends
+  }
+};
+pulse();
+setInterval(pulse, 2000).unref();
 // 5. It names the command behind a call (round 101, krobi 2026-10-07 15:54, GV-13 as the fleet rule: never `ack: true`
 //    unless the device confirmed): a state change the adapter gets with `ack: false` runs its listeners inside an async
 //    context that carries the state's id, and every call made from there — awaited or not, through promises, timers and
@@ -152,7 +173,12 @@ let hangNext = false;
 // the listen record below is patched (no record), so the adapter's own timeouts — connect, TLS, request — run as with a
 // real device.
 let blackHole = 0;
-const hole = net.createServer(socket => socket.on("error", () => {}));
+// Round 133 (govee CI 39408072351, D21 "never ended"): the hole reads and drops what it gets — a socket it never read kept
+// the client's half-close unconsumed, so neither side ever closed and the adapter's own hung call never ended either.
+const hole = net.createServer(socket => {
+  socket.on("error", () => {});
+  socket.resume();
+});
 hole.listen(0, "127.0.0.1", () => {
   blackHole = hole.address().port;
 });
@@ -191,6 +217,82 @@ const silenceIfHung = socket => {
   hangStart(target.host, target.port);
   socket.once("close", () => hangEnd(target.host, target.port));
 };
+// 7. It plays a counterpart that answers wrong (round 124, plan P5 — D6: a 500 and an empty 200 delete nothing; D21: a
+//    series of 429 makes the adapter back off; C26b: drifted fields crash nothing): while the file `fault` in
+//    RESOURCE_PROBE_DIR holds `500`, `429`, `empty` or `drift`, HTTP answers the adapter gets (fetch and http/https) are
+//    replaced — that status with an empty body (429 with `retry-after: 60`), an empty 200, or the real answer with its
+//    JSON drifted: of every object's keys the first of each three is gone, the second null, the third of another type.
+//    A 429 and `500all` (round 125, D21: a series of errors) replace every answer. A 500, an empty 200 and drift replace the first answer to each request (method,
+//    host, port, path) of a process under that fault and let the repeat through: a wrong answer to every call stops a login-first adapter
+//    at its login, and it never asks for data (homeconnect retried its token for a minute, red-proof run 2026-10-16).
+//    Every request of the adapter is noted in RESOURCE_PROBE_DIR/<pid>.requests with the fault it met; the call itself
+//    is still counted (`<pid>.calls`); the databases are never touched.
+const faultFlag = path.join(dir, "fault");
+const faultWord = () => {
+  try {
+    return fs.readFileSync(faultFlag, "utf8").trim();
+  } catch {
+    return "";
+  }
+};
+const FAULTS = new Set(["500", "429", "empty", "drift", "500all"]);
+const requests = path.join(dir, `${process.pid}.requests`);
+const answeredWrong = new Set();
+// a long number in a path is a time or a counter, not another request
+const requestKey = (method, host, port, pathname) =>
+  `${String(method || "GET").toUpperCase()} ${host}:${port}${String(pathname || "/").split("?")[0]}`.replace(
+    /\d{6,}/g,
+    "#",
+  );
+// the fault this request meets ("" for none), noted with the request
+const faultFor = key => {
+  const mode = faultWord();
+  let met = "";
+  if (mode === "429" || mode === "500all") {
+    met = mode;
+  } else if (FAULTS.has(mode) && !answeredWrong.has(`${mode} ${key}`)) {
+    answeredWrong.add(`${mode} ${key}`);
+    met = mode;
+  }
+  fs.appendFileSync(requests, `${JSON.stringify({ t: Date.now(), key, fault: met })}\n`);
+  return met;
+};
+const drift = value => {
+  if (Array.isArray(value)) {
+    return value.map(drift);
+  }
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+  const out = {};
+  Object.keys(value).forEach((key, i) => {
+    const v = value[key];
+    if (i % 3 === 1) {
+      out[key] = null;
+    } else if (i % 3 === 2) {
+      out[key] =
+        typeof v === "number"
+          ? String(v)
+          : typeof v === "string"
+            ? 0
+            : typeof v === "boolean"
+              ? String(v)
+              : v === null
+                ? 0
+                : drift(v);
+    }
+  });
+  return out;
+};
+const driftText = text => {
+  try {
+    return JSON.stringify(drift(JSON.parse(text)));
+  } catch {
+    return text; // not JSON — it goes on as it came
+  }
+};
+const faultStatus = mode => (mode === "500" || mode === "500all" ? 500 : mode === "429" ? 429 : 200);
+const faultHeaders = mode => (mode === "429" ? { "retry-after": "60" } : {});
 const refused = () => Object.assign(new Error("connect ECONNREFUSED (outage switch)"), { code: "ECONNREFUSED" });
 const reset = () => Object.assign(new Error("read ECONNRESET (outage switch)"), { code: "ECONNRESET" });
 const optionsOf = args => {
@@ -348,18 +450,25 @@ for (const mod of [require("node:http"), require("node:https")]) {
       const first = args[0];
       let host;
       let port;
+      let method;
+      let pathname;
       if (typeof first === "string" || first instanceof URL) {
         const url = new URL(String(first));
         host = url.hostname;
         port = Number(url.port) || (secure ? 443 : 80);
+        pathname = url.pathname;
+        method = args[1] !== null && typeof args[1] === "object" ? args[1].method : undefined;
       } else if (first && typeof first === "object") {
         host = first.hostname ?? first.host ?? "localhost";
         port = Number(first.port) || (secure ? 443 : 80);
+        pathname = first.path ?? first.pathname;
+        method = first.method;
       }
       if (host !== undefined) {
         count("http", String(host).replace(/:\d+$/, ""), port);
       }
       // a fixture hook below that calls http.request again is the same call, not a second one
+      const outermost = nested === 0;
       nested++;
       if (host !== undefined && hung(String(host).replace(/:\d+$/, ""), port)) {
         hangNext = String(host).replace(/:\d+$/, "");
@@ -372,13 +481,58 @@ for (const mod of [require("node:http"), require("node:https")]) {
         }
       }
       try {
-        return original.apply(this, args);
+        const req = original.apply(this, args);
+        const mode =
+          outermost && host !== undefined && !keep.has(Number(port)) && !byHook()
+            ? faultFor(requestKey(method, String(host).replace(/:\d+$/, ""), port, pathname))
+            : "";
+        if (mode) {
+          const emit = req.emit;
+          req.emit = function faultEmit(event, ...rest) {
+            return event === "response"
+              ? emit.call(this, event, faultResponse(mode, rest[0]))
+              : emit.call(this, event, ...rest);
+          };
+        }
+        return req;
       } finally {
         nested--;
         hangNext = false;
       }
     };
   }
+}
+
+// Section 7 for http/https: the response the request emits, replaced — status and headers as the fault says, the body
+// empty or the real one drifted (a compressed body goes on as it came: the adapter decodes it itself).
+function faultResponse(mode, real) {
+  const { PassThrough } = require("node:stream");
+  const fake = new PassThrough();
+  const headers = { ...real.headers, ...faultHeaders(mode) };
+  delete headers["content-length"];
+  Object.assign(fake, {
+    statusCode: mode === "drift" ? real.statusCode : faultStatus(mode),
+    statusMessage: mode === "drift" ? real.statusMessage : "",
+    headers,
+    rawHeaders: Object.entries(headers).flat().map(String),
+    httpVersion: real.httpVersion,
+    socket: real.socket,
+    req: real.req,
+  });
+  if (mode !== "drift" || real.headers["content-encoding"]) {
+    if (mode !== "drift") {
+      real.resume();
+      fake.end("");
+    } else {
+      real.pipe(fake);
+    }
+    return fake;
+  }
+  const chunks = [];
+  real.on("data", chunk => chunks.push(Buffer.from(chunk)));
+  real.on("end", () => fake.end(driftText(Buffer.concat(chunks).toString("utf8"))));
+  real.on("error", err => fake.destroy(err));
+  return fake;
 }
 
 // Listening TCP servers (http, fastify): the address the server really holds, once it listens.
@@ -405,12 +559,21 @@ net.Server.prototype.listen = recordListen;
 // Incoming TCP: a counterpart that connects to a server of the adapter.
 const serverEmit = net.Server.prototype.emit;
 function cutServerEmit(event, ...args) {
-  if (event === "connection" && args[0] instanceof net.Socket) {
+  // round 133: the black hole's own side of a hung call is no connection of the adapter — tracked, `*` silenced it as a
+  // hang of the client's ephemeral port that never ended
+  if (event === "connection" && args[0] instanceof net.Socket && this !== hole) {
     if (down()) {
       args[0].destroy();
       return false;
     }
     track(args[0], { host: args[0].remoteAddress, port: args[0].remotePort });
+    // section 8: what a server of the adapter writes to this connection
+    const served = args[0];
+    const write = served.write;
+    served.write = function advertWrite(chunk, ...rest) {
+      noteAdvert("tcp", chunk);
+      return write.call(this, chunk, ...rest);
+    };
   }
   return serverEmit.call(this, event, ...args);
 }
@@ -427,10 +590,12 @@ const cutFetch = (...args) => {
   }
   let target;
   let targetPort;
+  let targetPath;
   try {
     const url = new URL(args[0] instanceof Request ? args[0].url : String(args[0]));
     target = url.hostname;
     targetPort = Number(url.port) || (url.protocol === "https:" ? 443 : 80);
+    targetPath = url.pathname;
   } catch {
     target = undefined;
   }
@@ -452,6 +617,34 @@ const cutFetch = (...args) => {
   }
   if (down()) {
     return Promise.reject(new TypeError("fetch failed", { cause: refused() }));
+  }
+  const mode =
+    target !== undefined && !keep.has(targetPort) && !byHook()
+      ? faultFor(
+          requestKey(
+            args[1]?.method ?? (args[0] instanceof Request ? args[0].method : "GET"),
+            target,
+            targetPort,
+            targetPath,
+          ),
+        )
+      : "";
+  if (mode) {
+    if (mode !== "drift") {
+      return Promise.resolve(
+        new Response(mode === "empty" ? "" : null, { status: faultStatus(mode), headers: faultHeaders(mode) }),
+      );
+    }
+    return current(...args).then(async response => {
+      const headers = new Headers(response.headers);
+      headers.delete("content-length");
+      headers.delete("content-encoding");
+      return new Response(driftText(await response.text()), {
+        status: response.status,
+        statusText: response.statusText,
+        headers,
+      });
+    });
   }
   return current(...args).then(response => {
     if (target !== undefined) {
@@ -496,6 +689,33 @@ function recordEgress(iface) {
   return setMulticastInterface.call(this, iface);
 }
 dgram.Socket.prototype.setMulticastInterface = recordEgress;
+// Section 8: the IPv4 literals of a payload that are an address of this machine, each recorded once per way.
+const ownAddresses = new Set(
+  Object.values(require("node:os").networkInterfaces())
+    .flat()
+    .filter(i => i && (i.family === "IPv4" || i.family === 4))
+    .map(i => i.address),
+);
+const advertised = new Set();
+const noteAdvert = (via, chunk) => {
+  let text;
+  if (typeof chunk === "string") {
+    text = chunk;
+  } else if (Buffer.isBuffer(chunk) || chunk instanceof Uint8Array) {
+    text = Buffer.from(chunk).subarray(0, 65536).toString("latin1");
+  } else if (Array.isArray(chunk)) {
+    text = chunk.map(c => (typeof c === "string" ? c : Buffer.from(c).toString("latin1"))).join("");
+  } else {
+    return;
+  }
+  for (const m of text.matchAll(/(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?![\d.])/g)) {
+    const key = `${via} ${m[1]}`;
+    if (ownAddresses.has(m[1]) && !advertised.has(key)) {
+      advertised.add(key);
+      record({ kind: "advertise", via, address: m[1] });
+    }
+  }
+};
 const sentTo = new Set();
 const hookSockets = new WeakMap();
 const send = dgram.Socket.prototype.send;
@@ -513,12 +733,15 @@ function cutSend(...args) {
   } catch {
     bound = false;
   }
+  // whose socket it is, is read at its first send: only there the caller stands in the stack — an unbound socket sends
+  // again from node's own queue in the `listening` emit, where any wrapper in between would decide (round 132)
+  if (at !== -1 && !hookSockets.has(this)) {
+    hookSockets.set(this, byHook());
+  }
   if (at !== -1 && bound) {
-    if (!hookSockets.has(this)) {
-      hookSockets.set(this, byHook());
-    }
     count("udp", target.host, target.port, hookSockets.get(this));
   }
+  noteAdvert("udp", args[0]);
   if (at !== -1 && !sentTo.has(key)) {
     sentTo.add(key);
     record({ kind: "send", id: idOf(this), host: target.host, port: target.port });

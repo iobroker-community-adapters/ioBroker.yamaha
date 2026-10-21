@@ -5,7 +5,7 @@ import type { HandleCapture, TransportCapture } from "./types";
 import type { LogLine } from "./log-ring";
 import { blankSecrets, PersonalValues, type PersonalKind } from "./personal-values";
 import { Placeholders } from "./placeholders";
-import type { ReportBody } from "./report-jobs";
+import type { ReportBody, ReportContent } from "./report-jobs";
 import type { HistoryEvent, TrafficSnapshot } from "./traffic-recorder";
 
 /** One instance of the musiccast adapter. */
@@ -279,7 +279,7 @@ export function buildReportBody(input: ReportInput): ReportBody {
     captures,
     profile: readableProfile(input.profile),
     objectTree: input.objectTree,
-    recentLogs: input.logs,
+    logs: input.logs,
   }) as Record<string, unknown>;
   const places = new Placeholders();
   const personal = new PersonalValues(places);
@@ -306,5 +306,5 @@ export function buildReportBody(input: ReportInput): ReportBody {
     personal.teach(idPart.kind, idPart.value);
   }
   personal.learn(body);
-  return { fileId: places.text(device.id), content: places.deep(body) as Record<string, unknown> };
+  return { fileId: places.text(device.id), content: places.deep(body) as ReportContent };
 }

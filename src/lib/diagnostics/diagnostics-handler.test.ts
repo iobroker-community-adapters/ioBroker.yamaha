@@ -183,7 +183,7 @@ describe("YamahaReportSource", () => {
     expect(report.captures.yxc.answers["system/getDeviceInfo"].model_name).toBe("RX-V6A");
     expect(report.objectTree).toEqual([expect.objectContaining({ id: "power", role: "switch.power", val: true })]);
     // This device's log lines, not the other device's.
-    expect(report.recentLogs.map((l: { msg: string }) => l.msg)).toEqual(["rx-v6a-2b3c: ready (YNCA, MusicCast)"]);
+    expect(report.logs.map((l: { msg: string }) => l.msg)).toEqual(["rx-v6a-2b3c: ready (YNCA, MusicCast)"]);
     for (const secret of ["192.168.178.40", "0A1B2B3C", "Wohnzimmer"]) {
       expect(content, secret).not.toContain(secret);
     }
