@@ -18,6 +18,35 @@ const http = require("node:http");
 
 const DIR = path.join(__dirname, "fixtures", "inventory");
 
+// Switches of the fleet suites (test/fleet-suites.js), set in THIS process between two starts — the fake devices read
+// them on every request. INVENTORY_RENAME=1 (D22): a device reports another name, as after a rename in its app.
+// INVENTORY_DROP_DEVICE=1 (D6): one device stays in the device table and answers nothing, the others run on.
+const RENAME_SWITCH = "INVENTORY_RENAME";
+const DROP_DEVICE_SWITCH = "INVENTORY_DROP_DEVICE";
+/** The fixture (devices.json `id`) that answers nothing while DROP_DEVICE_SWITCH is set. */
+const DROPPED_FIXTURE = "wx030";
+
+/**
+ * @param {unknown} fixture one device fixture
+ * @returns {boolean} true while this device is the one the fleet suite dropped
+ */
+function dropped(fixture) {
+  return process.env[DROP_DEVICE_SWITCH] === "1" && fixture.fixtureId === DROPPED_FIXTURE;
+}
+
+/**
+ * The MusicCast name answer as after a rename in the app: every zone carries a new name.
+ *
+ * @param {unknown} nameText the captured `system/getNameText` answer
+ * @returns {unknown} the answer with renamed zones
+ */
+function renamedNames(nameText) {
+  return {
+    ...nameText,
+    zone_list: (nameText.zone_list ?? []).map(zone => ({ ...zone, text: `${zone.text} renamed` })),
+  };
+}
+
 /** @returns {unknown[]} every device fixture, in the order devices.json lists them */
 function loadFixtures() {
   const manifest = JSON.parse(fs.readFileSync(path.join(DIR, "devices.json"), "utf8"));
@@ -25,6 +54,7 @@ function loadFixtures() {
   return manifest.map(entry => ({
     ...JSON.parse(fs.readFileSync(path.join(DIR, `${entry.id}.json`), "utf8")),
     deviceId: entry.deviceId,
+    fixtureId: entry.id,
   }));
 }
 
@@ -33,10 +63,15 @@ function loadFixtures() {
  * for everything else — the same rule the hardware-free test harness follows.
  *
  * @param {Record<string, string>} answers the capture's SUBUNIT:FUNC -> value table
+ * @param {unknown} fixture the device fixture
  * @returns {Promise<{port: number, close: () => Promise<void>}>} the listening server
  */
-function startYnca(answers) {
+function startYnca(answers, fixture) {
   const server = net.createServer(socket => {
+    if (dropped(fixture)) {
+      socket.destroy();
+      return;
+    }
     socket.setEncoding("utf8");
     let buffer = "";
     socket.on("data", chunk => {
@@ -123,16 +158,23 @@ function startHttp(fixture) {
   const yxc = fixture.yxc ? yxcAnswers(fixture.yxc) : undefined;
   const xml = fixture.xml;
   const server = http.createServer((req, res) => {
+    if (dropped(fixture)) {
+      req.socket.destroy();
+      return;
+    }
     const url = new URL(req.url, "http://device");
     if (yxc && url.pathname.startsWith("/YamahaExtendedControl/")) {
       const endpoint = url.pathname.replace(/^\/YamahaExtendedControl\/v\d+\//, "");
       // A setter the device declares is accepted; the inventory only needs the object to exist,
       // and a refusal here would be a device verdict the capture does not support.
-      const body =
+      let body =
         yxc[endpoint] ??
         (/^[a-z]+\/(set|toggle|recall|start|stop|manage|prepare)/.test(endpoint)
           ? { response_code: 0 }
           : YXC_UNSUPPORTED);
+      if (endpoint === "system/getNameText" && process.env[RENAME_SWITCH] === "1") {
+        body = renamedNames(body);
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(body));
       return;
@@ -307,7 +349,7 @@ async function startFixtureDevices() {
         answers["MAIN:PWR"] = "On";
       }
     }
-    const ynca = answers ? await startYnca(answers) : undefined;
+    const ynca = answers ? await startYnca(answers, fixture) : undefined;
     // One HTTP port per device serves BOTH HTTP protocols by path, like the real port 80; a
     // device that speaks neither still needs a listener that refuses, or an XML probe would hang.
     const httpServer =
@@ -358,4 +400,10 @@ async function startFixtureDevices() {
   };
 }
 
-module.exports = { startFixtureDevices, loadFixtures, declaredListsOf, declaredVolumeRangesOf };
+module.exports = {
+  startFixtureDevices,
+  loadFixtures,
+  declaredListsOf,
+  declaredVolumeRangesOf,
+  DROP_DEVICE_SWITCH,
+};

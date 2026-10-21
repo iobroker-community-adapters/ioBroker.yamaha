@@ -2637,7 +2637,7 @@ describe("Yamaha datapoint balance in the log", () => {
     await upsert("Living_room.main.power", { type: "state", common: { name: "p" } });
     await upsert("Living_room.volume", { type: "state", common: { name: "v" } });
     await settle(ctx);
-    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 2 datapoint(s)");
+    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 2 datapoint(s), removed 0 datapoint(s)");
   });
 
   it("stays silent on a restart that changed nothing", async () => {
@@ -2661,7 +2661,7 @@ describe("Yamaha datapoint balance in the log", () => {
     // Every state runs through extendObject again on a reconnect (the role/unit retrofit).
     await upsert("Living_room.main.power", { type: "state", common: { name: "p" } });
     await settle(ctx);
-    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 1 datapoint(s)");
+    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 1 datapoint(s), removed 0 datapoint(s)");
   });
 
   it("puts removals and additions into one line", async () => {
@@ -2687,7 +2687,7 @@ describe("Yamaha datapoint balance in the log", () => {
     await upsertOf(ctx)("Living_room.player", { type: "channel", common: { name: "c" } });
     await settle(ctx);
     // Three objects go and one arrives, but the user only ever counts datapoints.
-    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: removed 1 datapoint(s)");
+    expect(ctx.i.log.info).toHaveBeenCalledWith("Object tree updated: created 0 datapoint(s), removed 1 datapoint(s)");
   });
 
   it("at the completion of a read-in, a shrinking dropdown loses its stale entries (#619)", async () => {
@@ -4317,11 +4317,25 @@ describe("Yamaha diagnostics messages", () => {
     expect(m.warn).toHaveBeenCalledWith(expect.stringContaining("diagnostics message failed: device not running"));
   });
 
-  it("ignores any other command — the device manager's dm:* go to dm-utils", async () => {
+  it("leaves the device manager's dm:* to dm-utils", async () => {
     const m = messaging();
     await m.i.onMessage({ command: "dm:loadDevices", message: {}, from: "admin.0", callback: { id: 3 } });
     expect(m.handle).not.toHaveBeenCalled();
     expect(m.sendTo).not.toHaveBeenCalled();
+  });
+
+  it("answers an unknown command with an error instead of leaving the sender waiting (fleet suite D10)", async () => {
+    const m = messaging();
+    await m.i.onMessage({ command: "somethingElse", message: {}, from: "admin.0", callback: { id: 4 } });
+    expect(m.handle).not.toHaveBeenCalled();
+    expect(m.sendTo).toHaveBeenCalledWith(
+      "admin.0",
+      "somethingElse",
+      { error: "unknown command somethingElse" },
+      {
+        id: 4,
+      },
+    );
   });
 });
 

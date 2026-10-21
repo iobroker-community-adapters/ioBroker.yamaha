@@ -37,10 +37,51 @@
     "connectSeconds": 60,
     "startSpacingSeconds": 0,
     "reads": [
-      { "id": "info.devicesTotal", "expect": "number" },
-      { "id": "*.input", "expect": "nonEmpty" },
-      { "id": "*.info.connection", "expect": "true" }
+      {
+        "id": "info.devicesTotal",
+        "expect": "number"
+      },
+      {
+        "id": "*.input",
+        "expect": "nonEmpty"
+      },
+      {
+        "id": "*.info.connection",
+        "expect": "true"
+      }
     ],
-    "commands": [{ "id": "*.power", "online": "*.info.connection", "value": "toggle", "timeoutSeconds": 30 }]
+    "commands": [
+      {
+        "id": "*.power",
+        "online": "*.info.connection",
+        "value": "toggle",
+        "timeoutSeconds": 30
+      }
+    ]
+  },
+  "_pollIntervals": "The XML/YNC poll interval is entered in seconds (main.ts xmlPollIntervalMs converts it).",
+  "pollIntervals": {
+    "xmlPollInterval": "s"
+  },
+  "_suites": "The fleet suites (test/fleet-suites.js). The fake devices honour INVENTORY_RENAME=1 (every MusicCast zone reports a new name) and INVENTORY_DROP_DEVICE=1 (the WX-030 stays in the device table and answers nothing) - test/inventory-fixtures.cjs.",
+  "suites": {
+    "connectionTest": {
+      "none": "the settings page has no connection test; every device in the table is connected on its own and shows its state in info.connection"
+    },
+    "groupSwitches": [
+      "group_player",
+      "group_tuner",
+      "group_multiroom",
+      "group_hdmi",
+      "group_scene",
+      "group_sound",
+      "group_advanced",
+      "group_clock"
+    ],
+    "rename": true,
+    "rejectLogin": {
+      "none": "the receivers take no login - YNCA, MusicCast and XML are open on the local network, the adapter keeps no credentials"
+    },
+    "dropDevice": true
   }
 }

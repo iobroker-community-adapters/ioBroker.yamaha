@@ -439,17 +439,24 @@ export class Yamaha extends utils.Adapter {
    * @param obj the message
    */
   private async onMessage(obj: ioBroker.Message): Promise<void> {
-    if (obj?.command !== "diagnostics") {
+    // dm-utils answers its own `dm:*` messages.
+    if (typeof obj?.command !== "string" || obj.command.startsWith("dm:")) {
       return;
     }
     let answer: Record<string, unknown>;
-    try {
-      answer = (await this.diagnostics.handle(obj.message)) as Record<string, unknown>;
-    } catch (e) {
-      this.log.warn(`diagnostics message failed: ${errText(e)}`);
-      // Answered in every case: the Expert tab waits for this reply, and a report that failed must say so
-      // instead of leaving the card spinning (review 2026-10-05, B2).
-      answer = { error: errText(e) };
+    if (obj.command !== "diagnostics") {
+      // An unknown message is answered too — the sender would otherwise wait for its timeout (fleet suite D10).
+      this.log.debug(`unknown message ${obj.command}`);
+      answer = { error: `unknown command ${obj.command}` };
+    } else {
+      try {
+        answer = (await this.diagnostics.handle(obj.message)) as Record<string, unknown>;
+      } catch (e) {
+        this.log.warn(`diagnostics message failed: ${errText(e)}`);
+        // Answered in every case: the Expert tab waits for this reply, and a report that failed must say so
+        // instead of leaving the card spinning (review 2026-10-05, B2).
+        answer = { error: errText(e) };
+      }
     }
     if (obj.callback) {
       try {
@@ -2085,18 +2092,14 @@ export class Yamaha extends utils.Adapter {
     this.clearTimeout(this.balanceTimer);
     this.balanceTimer = this.setTimeout(() => {
       this.balanceTimer = undefined;
-      const parts: string[] = [];
-      if (this.createdDatapoints > 0) {
-        parts.push(`created ${this.createdDatapoints} datapoint(s)`);
-      }
-      if (this.removedDatapoints > 0) {
-        parts.push(`removed ${this.removedDatapoints} datapoint(s)`);
-      }
+      const created = this.createdDatapoints;
+      const removed = this.removedDatapoints;
       this.createdDatapoints = 0;
       this.removedDatapoints = 0;
-      // Silent when nothing changed: a plain restart must not write a line.
-      if (parts.length > 0) {
-        this.log.info(`Object tree updated: ${parts.join(", ")}`);
+      // Silent when nothing changed: a plain restart must not write a line. The line names both counts, a zero too —
+      // the fleet form every adapter writes (fleet suite D12).
+      if (created + removed > 0) {
+        this.log.info(`Object tree updated: created ${created} datapoint(s), removed ${removed} datapoint(s)`);
       }
     }, DATAPOINT_BALANCE_SETTLE_MS);
   }

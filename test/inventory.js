@@ -25,6 +25,7 @@ const {
   loadFixtures,
   declaredListsOf,
   declaredVolumeRangesOf,
+  DROP_DEVICE_SWITCH,
 } = require("./inventory-fixtures.cjs");
 
 const ADAPTER_DIR = path.join(__dirname, "..");
@@ -460,7 +461,8 @@ async function resetInstanceNative(harness, native) {
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness the harness
  */
 async function waitForAdapterWork(harness) {
-  const deviceCount = fixtures.devices.length;
+  // The fleet suite "one device gone while the channel lives" lets one fixture answer nothing — it never connects.
+  const deviceCount = fixtures.devices.length - (process.env[DROP_DEVICE_SWITCH] === "1" ? 1 : 0);
   const deadline = Date.now() + 300000;
   // Built and connected in the running process. The adapter's OWN `yamaha.0.info.*` branch sits at the same
   // depth as a device's header and must be excluded by its first segment; a device that has ONLY its header is
