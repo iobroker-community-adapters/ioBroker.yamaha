@@ -1,0 +1,32 @@
+{
+  "_comment": "Gate A15: the research sources whose Yamaha models the adapter's device classes must know. The pattern yields the model family (the letters before the number, RX-V from RX-V6A, HTR from HTR-4065); every family a source names stands in src/lib/device-classes.json or below `excluded` with its reason. Every source measured 2026-10-22.",
+  "catalog": "src/lib/device-classes.json",
+  "catalogKey": "families",
+  "pattern": "\\b([A-Z]{1,4}-[A-Z]{1,3}|[A-Z]{2,4}(?=-))-?\\d{1,4}[A-Z]{0,3}\\b",
+  "sources": [
+    {
+      "name": "ynca-python supported receivers",
+      "url": "https://raw.githubusercontent.com/mvdwetering/ynca/master/README.md"
+    },
+    {
+      "name": "openHAB Yamaha MusicCast binding",
+      "url": "https://raw.githubusercontent.com/openhab/openhab-addons/main/bundles/org.openhab.binding.yamahamusiccast/README.md"
+    },
+    {
+      "name": "openHAB Yamaha receiver binding",
+      "url": "https://raw.githubusercontent.com/openhab/openhab-addons/main/bundles/org.openhab.binding.yamahareceiver/README.md"
+    },
+    {
+      "name": "Home Assistant Yamaha integration",
+      "url": "https://raw.githubusercontent.com/home-assistant/home-assistant.io/current/source/_integrations/yamaha.markdown"
+    },
+    {
+      "name": "yamaha-yxc-nodejs",
+      "url": "https://raw.githubusercontent.com/foxthefox/yamaha-yxc-nodejs/master/README.md"
+    }
+  ],
+  "excluded": {
+    "FM": "no model: the openHAB receiver binding names its tuner presets FM-1 to FM-3 (measured 2026-10-22)",
+    "WCX": "no model family: the openHAB MusicCast binding writes WCX-50 for the WXC-50 streaming preamplifier, which ynca-python lists correctly; Yamaha has no WCX line (measured 2026-10-22)"
+  }
+}

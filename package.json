@@ -71,6 +71,7 @@
   "files": [
     "build/",
     "src/lib/api-limits.json",
+    "src/lib/device-classes.json",
     "admin/",
     "io-package.json",
     "LICENSE"

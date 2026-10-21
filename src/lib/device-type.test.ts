@@ -1,4 +1,5 @@
-import { DEVICE_TYPE_ICONS, detectDeviceType, iconForModel, volumeIndicatorIcon } from "./device-type";
+import deviceClasses from "./device-classes.json";
+import { DEVICE_TYPE_ICONS, TYPE_PREFIXES, detectDeviceType, iconForModel, volumeIndicatorIcon } from "./device-type";
 
 const URI_PREFIX = "data:image/svg+xml;base64,";
 const decode = (icon: string): string => Buffer.from(icon.slice(URI_PREFIX.length), "base64").toString("utf8");
@@ -32,6 +33,22 @@ describe("detectDeviceType", () => {
       expect(detectDeviceType(model)).toBe("speaker");
     }
     expect(detectDeviceType("WXA-50")).toBe("stereoReceiver");
+  });
+
+  test("the receivers of the 2008/2009 XML generation are AV receivers", () => {
+    for (const model of ["RX-Z7", "DSP-Z7", "RX-AS710D"]) {
+      expect(detectDeviceType(model)).toBe("avReceiver");
+    }
+  });
+
+  // device-classes.json is the one table (also the catalog of gate A15): an entry with a class the icons do not know
+  // would be dropped without a word, and every family must land in its own class, not in a shorter one's.
+  test("every family of device-classes.json lands in its own, known class", () => {
+    const families = Object.entries(deviceClasses.families);
+    expect(TYPE_PREFIXES).toHaveLength(families.length);
+    for (const [family, type] of families) {
+      expect(detectDeviceType(`${family}100`)).toBe(type);
+    }
   });
 
   test("cd systems and network cd players", () => {

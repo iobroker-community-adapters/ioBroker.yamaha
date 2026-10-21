@@ -9,28 +9,24 @@
  * serving files — and in the row's own colour, see {@link pictogram}.
  */
 
+import deviceClasses from "../../src/lib/device-classes.json";
+
 /** The five device classes the icons distinguish. */
 export type DeviceType = "avReceiver" | "stereoReceiver" | "speaker" | "soundbar" | "cdSystem";
 
+const DEVICE_TYPES: readonly DeviceType[] = ["avReceiver", "stereoReceiver", "speaker", "soundbar", "cdSystem"];
+
 /**
- * Model-name prefixes per device class, most-specific first — `WXA`/`WXC` (streaming
- * amplifiers) must win over `WX` (wireless speakers). Sources: Yamaha product lines —
- * AV receivers RX-V/RX-A/TSR/HTR/RX-S plus AV pre/power amps CX-A/MX-A; stereo network
- * receivers/amps R-N/WXA/WXC; soundbars YSP/YAS/ATS/SRT/SR-B/SR-C; wireless speakers
- * WX/NX/ISX/MusicCast xx; CD systems/players CRX/MCR/CD-N.
+ * Model-name prefixes and their device class, from `device-classes.json` — the table the catalog gate A15 also
+ * compares the research sources with (`device-sources.json`). Longest prefix first: `WXA`/`WXC` (streaming
+ * amplifiers) and the WXAD streaming adapter win over `WX` (wireless speakers); NP- network players, TT-N network
+ * turntables and XDA- streaming amplifiers are stereo network devices, none of them an AV receiver (audit 2026-09-24,
+ * D13). A prefix a shorter one already covers decides nothing and is not listed: `WXAD` (`WXA`), `CD-NT` (`CD-N`),
+ * `MUSICCAST 500` (`MUSICCAST 50`) (review 2026-10-05, G).
  */
-const TYPE_PREFIXES: ReadonlyArray<readonly [DeviceType, readonly string[]]> = [
-  // NP- network players, TT-N network turntables, XDA- streaming amplifiers and the WXAD streaming
-  // adapter: stereo network devices, none of them an AV receiver (audit 2026-09-24, D13). This list is
-  // checked before the speakers', so the WXAD — a `WXA` by its prefix — never reads as a WX speaker.
-  // A prefix that an earlier, shorter one already covers decides nothing and is not listed: `WXAD`
-  // (`WXA`), `CD-NT` (`CD-N`), `MUSICCAST 500` (`MUSICCAST 50`) (review 2026-10-05, G).
-  ["stereoReceiver", ["R-N", "RN-", "WXA", "WXC", "A-S", "R-S", "NP-", "TT-N", "XDA-"]],
-  ["soundbar", ["YSP", "YAS", "ATS", "SRT", "SR-B", "SR-C", "MUSICCAST BAR"]],
-  ["cdSystem", ["CRX", "MCR", "CD-N"]],
-  ["speaker", ["WX", "NX-", "ISX", "MUSICCAST 20", "MUSICCAST 50"]],
-  ["avReceiver", ["RX-V", "RX-A", "RX-S", "TSR", "HTR", "CX-A", "MX-A", "RX-D"]],
-];
+export const TYPE_PREFIXES: ReadonlyArray<readonly [string, DeviceType]> = Object.entries(deviceClasses.families)
+  .filter((entry): entry is [string, DeviceType] => DEVICE_TYPES.includes(entry[1] as DeviceType))
+  .sort(([a], [b]) => b.length - a.length);
 
 /**
  * Detect the device class from a reported model name.
@@ -42,8 +38,8 @@ export function detectDeviceType(model: string | undefined): DeviceType {
   // Some firmware spells the dash as an underscore ("RX_V781").
   const normalized = (model ?? "").trim().toUpperCase().replace(/_/g, "-");
   if (normalized.length > 0) {
-    for (const [type, prefixes] of TYPE_PREFIXES) {
-      if (prefixes.some(prefix => normalized.startsWith(prefix))) {
+    for (const [prefix, type] of TYPE_PREFIXES) {
+      if (normalized.startsWith(prefix)) {
         return type;
       }
     }
