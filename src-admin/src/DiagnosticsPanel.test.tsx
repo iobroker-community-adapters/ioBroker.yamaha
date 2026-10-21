@@ -7,7 +7,6 @@ vi.mock("@iobroker/gui-components", () => ({
   I18n: { t: (key: string, ...args: unknown[]) => [key, ...args].join(" "), extendTranslations: vi.fn() },
 }));
 
-import { I18n } from "@iobroker/gui-components";
 import { InstanceUnavailableError } from "./diagnosticsApi";
 import { DiagnosticsPanel, failureText, issueFormUrl } from "./DiagnosticsPanel";
 
@@ -220,8 +219,13 @@ describe("DiagnosticsPanel", () => {
   });
 
   it("registers its own words, the list of what the report contains and the privacy box", async () => {
+    // The words are registered once per page (module state), so an earlier test has already done it; vitest 5 also clears
+    // every mock's calls before each test (clearMocks). A fresh module graph makes this test see its own registration.
+    vi.resetModules();
+    const { I18n: freshI18n } = await import("@iobroker/gui-components");
+    const { DiagnosticsPanel: FreshPanel } = await import("./DiagnosticsPanel");
     render(
-      <DiagnosticsPanel
+      <FreshPanel
         socket={socket({ list: { devices: [{ value: "lamp-2b3c", label: "Lamp", connected: false }] } })}
         {...MOUNT}
       />,
@@ -229,7 +233,7 @@ describe("DiagnosticsPanel", () => {
     expect(await screen.findByTestId("diag-intro")).toHaveTextContent("diag_contains");
     expect(screen.getByTestId("diag-privacy")).toHaveTextContent("diag_privacyMarkers");
     expect(screen.getByTestId("diag-privacy")).toHaveTextContent("diag_privacyMemory");
-    expect(I18n.extendTranslations).toHaveBeenCalledWith(
+    expect(freshI18n.extendTranslations).toHaveBeenCalledWith(
       expect.objectContaining({ diag_export: expect.any(String) }),
       "de",
     );
