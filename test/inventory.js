@@ -73,16 +73,30 @@ const READ_ONLY = new Set();
 
 /**
  * The environment of every adapter start: the resource probe first, then the adapter's fixture hooks (FIXTURE_HOOKS,
- * round 113), then the fleet hooks of this start — NETWORK_HOOK always last.
+ * round 113), its pacing hooks (PACING_HOOKS, round 123) unless the installation is one the limit tests judge, then the
+ * fleet hooks of this start — NETWORK_HOOK always last. countThisInstallation (right after clearInstanceData in the three
+ * limit suites) marks such an installation: `<time>.counted` next to its `<time>.install`.
  *
  * @param {...string} hooks the fleet hooks of this start (none, or NETWORK_HOOK)
  */
+// Round 123: true while a suite runs whose installation the limit tests judge (`a restart right after the start`,
+// `one counterpart hangs`, `one counterpart hangs mid-run` — countThisInstallation, their after() ends it).
+let counting = false;
 function adapterEnv(...hooks) {
+  // round 123: a judged installation runs at the adapter's own pace (no PACING_HOOKS) and tells the fixture hooks so
+  // (INVENTORY_COUNTED, for the account LIMIT_ACCOUNT announces); every other suite keeps both
   return {
-    NODE_OPTIONS: [RESOURCE_PROBE, ...FIXTURE_HOOKS, ...hooks].map(file => `--require ${file}`).join(" "),
+    NODE_OPTIONS: [RESOURCE_PROBE, ...FIXTURE_HOOKS, ...(counting ? [] : PACING_HOOKS), ...hooks]
+      .map(file => `--require ${file}`)
+      .join(" "),
     RESOURCE_PROBE_DIR: RESOURCE_DIR,
     RESOURCE_PROBE_NS: NS,
+    ...(counting ? { INVENTORY_COUNTED: "1" } : {}),
   };
+}
+function countThisInstallation() {
+  counting = true;
+  fs.writeFileSync(path.join(RESOURCE_DIR, `${Date.now()}.counted`), "");
 }
 
 /**
@@ -93,6 +107,22 @@ function adapterEnv(...hooks) {
  * (`{ ...process.env, ...env }`), the restart the harness plays included. The adapter has no test seam.
  */
 const FIXTURE_HOOKS = [path.join(__dirname, "inventory-hook.cjs")];
+/**
+ * Round 123 (homeconnect 2026-10-15: the fetch hook widened the request budget in every start, so the limit suites judged
+ * a limiter that was switched off): adapter-specific — the `--require` hooks that change only the adapter's own pace (a
+ * budget widened so a thousand fixture calls take seconds, not twenty minutes), each `path.join(__dirname, "<file>")`.
+ * adapterEnv drops them from the installations the limit tests judge (countThisInstallation); the limit tests then judge
+ * only those. B02 holds a fixture hook that sets an environment variable `src/` reads: it belongs here.
+ */
+const PACING_HOOKS = [];
+/**
+ * Round 123: adapter-specific — true when the adapter's fixture hooks serve a smaller account in an installation the limit
+ * tests judge (`process.env.INVENTORY_COUNTED === "1"`), because its full fixture account does not fit a declared limit
+ * at its own pace; the inventory and every other suite keep the full account. The suite `one counterpart hangs` then
+ * demands that a judged installation pressed every limit below a day — a smaller account that never reaches a limit
+ * proves nothing.
+ */
+const LIMIT_ACCOUNT = false;
 
 // Round 87 (krobi 2026-10-02 23:26): the suite "counterpart gone and back" cuts every counterpart with
 // test/network-hook.js (fleet master), the LAST hook of its starts; the switch is on while OUTAGE_FLAG exists.
@@ -354,6 +384,13 @@ const YNCA_REFRESH_MS = 40000;
 
 let fixtures;
 
+/** Stop the fake devices of this suite; the next fixtureNative brings up new ones. */
+async function stopFixtures() {
+  const running = fixtures;
+  fixtures = undefined;
+  await running?.stop();
+}
+
 /**
  * Round 113: adapter-specific — the instance's native for one start. Brings up the fake devices, routes the adapter to
  * them, and builds the device table from them; a suite asks for its own settings and for three table forms in `extra`:
@@ -366,7 +403,10 @@ let fixtures;
  */
 async function fixtureNative(extra = {}) {
   const { legacyRows = false, typedRow = false, rows = [], ...settings } = extra;
-  fixtures = await startFixtureDevices();
+  // Round 124: the fleet suites ask for the native again while the adapter runs (a group switch flips one setting and
+  // restarts) and stop no fixtures of their own — the running fake devices stay, so a restart finds them at the same
+  // addresses; a suite's after() stops them (stopFixtures) and the next start brings up new ones.
+  fixtures ??= await startFixtureDevices();
   process.env.YAMAHA_FIXTURE_ROUTES = JSON.stringify(fixtures.routes);
   const devices = [
     ...(legacyRows ? fixtures.legacyDevices : fixtures.devices),
@@ -1257,9 +1297,64 @@ function fits(call, match) {
 }
 
 /**
+ * Round 123: the counted calls of the installations the limit tests judge, each with its installation number — every
+ * installation of the run where the adapter has no PACING_HOOKS (nothing changed its pace), otherwise only those
+ * countThisInstallation marked; the others ran with a widened budget, the log says how many were left out.
+ */
+function judgedCalls() {
+  const files = fs.readdirSync(RESOURCE_DIR);
+  const installs = files.filter(f => f.endsWith(".install")).map(f => Number(f.slice(0, -".install".length)));
+  const at = t => installs.filter(i => i <= t).length;
+  const counted = new Set(
+    files.filter(f => f.endsWith(".counted")).map(f => at(Number(f.slice(0, -".counted".length)))),
+  );
+  const judged = install => PACING_HOOKS.length === 0 || counted.has(install);
+  const installOf = new Map();
+  for (const c of readCalls().filter(c => !c.kind.startsWith("hang-"))) {
+    installOf.set(c.pid, installOf.get(c.pid) ?? at(c.t));
+  }
+  const left = new Set([...installOf.values()].filter(i => !judged(i)));
+  if (left.size > 0) {
+    console.log(`      ${left.size} installation(s) ran with PACING_HOOKS — not judged against the limits`);
+  }
+  return readCalls()
+    .filter(c => !c.kind.startsWith("hang-") && judged(installOf.get(c.pid)))
+    .map(c => ({ ...c, install: installOf.get(c.pid) }));
+}
+
+/**
+ * Round 123: the limits below a day that no judged installation pressed — with LIMIT_ACCOUNT the limiter is proven only
+ * where one installation called a counterpart more often than such a limit allows in its window, so it had to spread the
+ * calls. A day is no window of a run (the template's measured boundary).
+ *
+ * @param {{ install: number }[]} calls judgedCalls()
+ * @param {{ name: string, match: object, limits: { max: number, seconds: number }[] }[]} counterparts apiLimits()
+ */
+function limitSlack(calls, counterparts) {
+  const slack = [];
+  for (const d of counterparts) {
+    const per = new Map();
+    for (const c of calls.filter(c => fits(c, d.match))) {
+      per.set(c.install, (per.get(c.install) ?? 0) + 1);
+    }
+    const most = Math.max(0, ...per.values());
+    for (const limit of d.limits.filter(l => l.seconds < 86400)) {
+      if (most <= limit.max) {
+        slack.push(
+          `${d.name}: at most ${most} calls in one installation, never more than ${limit.max} in ${limit.seconds} s`,
+        );
+      }
+    }
+  }
+  return slack;
+}
+
+/**
  * Round 101 (krobi 2026-10-07 15:54): a value the adapter can be told for a writable state — another entry of `states`,
- * the other boolean (a button: a press), a number inside min/max other than now, another colour, the current text; null
- * where none exists (the state gets no command).
+ * the other boolean (a button: a press), a number inside min/max other than now, another colour, the current text.
+ * Round 133 (govee CI 39408072351): every writable state gets one — D10 demands that each reaches the adapter's stateChange,
+ * and null left 36 govee states without a command (an empty text, a list holding only the current key, min = max); then
+ * the same key or number again, a colour or "command" for an empty text, the current value or an empty JSON otherwise.
  *
  * @param {Record<string, any>} common the state's common
  * @param {any} now its value now
@@ -1267,11 +1362,10 @@ function fits(call, match) {
 function commandValue(common, now) {
   if (common.states && typeof common.states === "object") {
     const keys = Array.isArray(common.states) ? common.states.map(String) : Object.keys(common.states);
-    const next = keys.find(k => k !== String(now));
-    if (next === undefined) {
-      return null;
+    if (keys.length > 0) {
+      const next = keys.find(k => k !== String(now)) ?? keys[0];
+      return common.type === "number" ? Number(next) : common.type === "boolean" ? next === "true" : next;
     }
-    return common.type === "number" ? Number(next) : common.type === "boolean" ? next === "true" : next;
   }
   if (common.type === "boolean") {
     return String(common.role ?? "").startsWith("button") ? true : now !== true;
@@ -1280,13 +1374,21 @@ function commandValue(common, now) {
     const min = typeof common.min === "number" ? common.min : 0;
     const max = typeof common.max === "number" ? common.max : min + 100;
     const step = typeof common.step === "number" && common.step > 0 ? common.step : 1;
-    const pick = now === min ? Math.min(max, min + step) : min;
-    return pick === now ? null : pick;
+    return now === min ? Math.min(max, min + step) : min;
   }
-  if (common.type === "string" && typeof now === "string" && now !== "") {
-    return /^#[0-9a-f]{6}$/i.test(now) ? (now.toLowerCase() === "#123456" ? "#654321" : "#123456") : now;
+  if (common.type === "string") {
+    if (typeof now === "string" && /^#[0-9a-f]{6}$/i.test(now)) {
+      return now.toLowerCase() === "#123456" ? "#654321" : "#123456";
+    }
+    if (typeof now === "string" && now !== "") {
+      return now;
+    }
+    return String(common.role ?? "").includes("color") ? "#123456" : "command";
   }
-  return null;
+  if (now !== null && now !== undefined) {
+    return now;
+  }
+  return common.type === "array" ? "[]" : common.type === "json" || common.type === "object" ? "{}" : "command";
 }
 
 /**
@@ -1311,9 +1413,15 @@ async function playCommands(harness) {
   harness.on("stateChange", acknowledged);
   try {
     for (const obj of writable) {
-      const val = commandValue(obj.common, (await harness.states.getStateAsync(obj._id))?.val ?? null);
+      const now = (await harness.states.getStateAsync(obj._id))?.val ?? null;
+      const val = commandValue(obj.common, now);
       if (val !== null) {
-        run.writes.push({ id: obj._id, val, t: Date.now() });
+        // round 134: a list whose only entry is the current one offers no command; D10 still hands the
+        // write to stateChange, the confirmation leaves it out (until round 133 it got no write at all)
+        const list = obj.common.states;
+        const sole =
+          typeof list === "object" && list !== null && Object.keys(list).length > 0 && String(val) === String(now);
+        run.writes.push({ id: obj._id, val, t: Date.now(), sole });
         await harness.states.setStateAsync(obj._id, { val, ack: false });
       }
     }
@@ -1605,7 +1713,7 @@ tests.integration(ADAPTER_DIR, {
         // Order matters: a still-running adapter reconnects a dropped transport at once, so
         // closing the fixture servers first is a race against its own retry loop.
         await harness?.stopAdapter();
-        await fixtures?.stop();
+        await stopFixtures();
       });
       // Round 104 (krobi 2026-09-15 09:12: every listener, fixed ports included, F6): every port the adapter asks for
       // while it runs stands in fleet.json `listenPorts` — the package check reads the source, this the running process.
@@ -1891,7 +1999,7 @@ tests.integration(ADAPTER_DIR, {
       after(async function () {
         this.timeout(60000);
         await harness?.stopAdapter();
-        await fixtures?.stop();
+        await stopFixtures();
       });
 
       it("restarts at most once for its own instance object", function () {
@@ -1933,7 +2041,7 @@ tests.integration(ADAPTER_DIR, {
       after(async function () {
         this.timeout(60000);
         await harness?.stopAdapter();
-        await fixtures?.stop();
+        await stopFixtures();
       });
 
       it("restarts at most once for its own instance object", function () {
@@ -2030,7 +2138,7 @@ tests.integration(ADAPTER_DIR, {
       after(async function () {
         this.timeout(60000);
         await harness?.stopAdapter();
-        await fixtures?.stop();
+        await stopFixtures();
       });
 
       it("cuts every network path of the adapter", function () {
@@ -2133,6 +2241,7 @@ tests.integration(ADAPTER_DIR, {
         );
         harness = getHarness();
         clearInstanceData(harness);
+        countThisInstallation();
         watch = await watchObjectWrites(harness);
         await resetInstanceNative(harness, await fixtureNative());
         await setSystemLanguage(harness, FIRST_LANGUAGE);
@@ -2152,11 +2261,14 @@ tests.integration(ADAPTER_DIR, {
             .map(c => c.pid),
         );
       });
+      after(() => {
+        counting = false;
+      });
 
       after(async function () {
         this.timeout(60000);
         await harness?.stopAdapter();
-        await fixtures?.stop();
+        await stopFixtures();
       });
 
       it("comes up again in the same installation", function () {
@@ -2179,6 +2291,7 @@ tests.integration(ADAPTER_DIR, {
         this.timeout(HANG_DEADLINE_MS + STOP_DEADLINE_MS + RESTART_DELAY_MS + START_DEADLINE_MS + 120000);
         harness = getHarness();
         clearInstanceData(harness);
+        countThisInstallation();
         watch = await watchObjectWrites(harness);
         // The network search runs as in "counterpart gone and back", whose starts name the channels judged here: a hung
         // receiver must not hold the search back either.
@@ -2190,13 +2303,16 @@ tests.integration(ADAPTER_DIR, {
         await harness.startAdapterAndWait(false, adapterEnv(NETWORK_HOOK));
         hang = await playHang(harness, hang, restarts);
       });
+      after(() => {
+        counting = false;
+      });
       // Mocha may give up on before() while playHang still waits — the next suite must not start with a hung counterpart.
       after(() => fs.rmSync(HANG_FLAG, { force: true }));
 
       after(async function () {
         this.timeout(60000);
         await harness?.stopAdapter();
-        await fixtures?.stop();
+        await stopFixtures();
       });
 
       it("reaches every other counterpart before it gives up on a hung one", function () {
@@ -2251,23 +2367,16 @@ tests.integration(ADAPTER_DIR, {
       });
 
       it("stays within every limit it declares", function () {
-        const calls = readCalls().filter(c => !c.kind.startsWith("hang-"));
         // round 113 (govee inv4): each installation counts on its own — a suite begins one in clearInstanceData; a
-        // process belongs to the installation its first call falls in, with the restarts the host plays in it
-        const installs = fs
-          .readdirSync(RESOURCE_DIR)
-          .filter(f => f.endsWith(".install"))
-          .map(f => Number(f.slice(0, -".install".length)));
-        const installOf = new Map();
-        for (const c of calls) {
-          installOf.set(c.pid, installOf.get(c.pid) ?? installs.filter(t => t <= c.t).length);
-        }
+        // process belongs to the installation its first call falls in, with the restarts the host plays in it;
+        // round 123: only the installations judgedCalls() keeps
+        const calls = judgedCalls();
         const over = [];
         for (const d of apiLimits()) {
           for (const limit of d.limits) {
             const lanes = new Map();
             for (const c of calls.filter(c => fits(c, d.match))) {
-              const lane = `${limit.per === "host" ? c.host : "account"}, installation ${installOf.get(c.pid)}`;
+              const lane = `${limit.per === "host" ? c.host : "account"}, installation ${c.install}`;
               lanes.set(lane, [...(lanes.get(lane) ?? []), c.t]);
             }
             for (const [lane, times] of lanes) {
@@ -2287,6 +2396,20 @@ tests.integration(ADAPTER_DIR, {
         }
         assert.deepStrictEqual(over, [], `calls above a declared limit:\n${over.join("\n")}`);
       });
+
+      // Round 123 (homeconnect 2026-10-15): a smaller account for the counted starts proves the limit only when it
+      // pressed it
+      it("puts its limiter under pressure when the counted starts get a smaller account", function () {
+        if (!LIMIT_ACCOUNT) {
+          return;
+        }
+        const slack = limitSlack(judgedCalls(), apiLimits());
+        assert.deepStrictEqual(
+          slack,
+          [],
+          `the smaller account never put the limiter under pressure:\n${slack.join("\n")}`,
+        );
+      });
     });
 
     // Round 107 (W100-5): the same rule while the adapter already runs — a device that answered and then stops answering
@@ -2303,6 +2426,7 @@ tests.integration(ADAPTER_DIR, {
         );
         harness = getHarness();
         clearInstanceData(harness);
+        countThisInstallation();
         watch = await watchObjectWrites(harness);
         await resetInstanceNative(harness, await fixtureNative());
         showsEveryDevice();
@@ -2311,13 +2435,16 @@ tests.integration(ADAPTER_DIR, {
         await harness.startAdapterAndWait(false, adapterEnv(NETWORK_HOOK));
         hang = await playHangMidRun(harness, restarts);
       });
+      after(() => {
+        counting = false;
+      });
       // Mocha may give up on before() while playHangMidRun still waits — the next suite must not start with a hung counterpart.
       after(() => fs.rmSync(HANG_FLAG, { force: true }));
 
       after(async function () {
         this.timeout(60000);
         await harness?.stopAdapter();
-        await fixtures?.stop();
+        await stopFixtures();
       });
 
       it("keeps every other counterpart in its rhythm while one hangs mid-run", function () {
@@ -2417,6 +2544,7 @@ tests.integration(ADAPTER_DIR, {
             exit: harness.adapterExit,
             paths: [...open, ...via(readAnswers(since))],
             before: via(readAnswers(0, since)),
+            errors: harness.getLogs().filter(l => l.level === "error" && l.from === `${ADAPTER}.0`),
           };
         });
         after(() => Promise.all(held.map(h => new Promise(resolve => h.close(() => resolve())))));
@@ -2424,7 +2552,7 @@ tests.integration(ADAPTER_DIR, {
         after(async function () {
           this.timeout(60000);
           await harness?.stopAdapter();
-          await fixtures?.stop();
+          await stopFixtures();
         });
 
         it("stops with an error when it can talk to nothing, and runs on when it can", function () {
@@ -2434,6 +2562,10 @@ tests.integration(ADAPTER_DIR, {
               verdict.exit,
               0,
               `stopped with exit code 0 while ${ports} was taken — a port it cannot do without is a fatal error`,
+            );
+            assert.ok(
+              verdict.errors.length > 0,
+              `stopped while ${ports} was taken without an error line — the user reads the log, not the exit code`,
             );
             assert.deepStrictEqual(
               [...verdict.paths, ...verdict.before],
@@ -2481,17 +2613,19 @@ tests.integration(ADAPTER_DIR, {
       after(async function () {
         this.timeout(60000);
         await harness?.stopAdapter();
-        await fixtures?.stop();
+        await stopFixtures();
       });
 
       it("confirms no command no counterpart answered", function () {
         // round 104: every writable state is judged, not only the ones whose call carried the command as its cause
         // (a queue started before the command loses it — yamaha 11 of 436); nothing answers, so no `ack: true` but
         // for a state LOCAL_STATES names as the adapter's own setting, and (round 107) for a state SEND_CONFIRMED
-        // grants whose command went out without waiting for an answer
+        // grants whose command went out without waiting for an answer; (round 134) a write that offers no other
+        // entry of its list and reached no counterpart is no command
         const local = new Set(LOCAL_STATES.map(id => `${NS}${id}`));
+        const idle = w => w.sole && !command.calls.some(c => c.cause === w.id);
         const confirmed = command.writes
-          .filter(w => !local.has(w.id) && !sentWithoutAnswer(command, w.id))
+          .filter(w => !idle(w) && !local.has(w.id) && !sentWithoutAnswer(command, w.id))
           .filter(w => command.acks.some(([id, ts]) => id === w.id && ts >= w.t))
           .map(w => `${w.id} = ${JSON.stringify(w.val)}`);
         assert.deepStrictEqual(
@@ -2505,6 +2639,18 @@ tests.integration(ADAPTER_DIR, {
         assert.ok(
           command.writes.length === 0 || command.calls.length > 0,
           `none of ${command.writes.length} commands reached a counterpart in its own context — a queue that started before the command, or no device command at all: the suite judged nothing`,
+        );
+      });
+
+      // Round 138: a state LOCAL_STATES names as the adapter's own setting reaches no counterpart when written —
+      // otherwise it is a command and the list took it out of the verdict above
+      it("treats no local state as a command", function () {
+        const local = new Set(LOCAL_STATES.map(id => `${NS}${id}`));
+        const sent = [...new Set(command.calls.filter(c => local.has(c.cause)).map(c => c.cause))];
+        assert.deepStrictEqual(
+          sent,
+          [],
+          `LOCAL_STATES names states whose write reached a counterpart — commands, not the adapter's own settings:\n${sent.join("\n")}`,
         );
       });
 
@@ -2554,7 +2700,7 @@ tests.integration(ADAPTER_DIR, {
       after(async function () {
         this.timeout(60000);
         await harness?.stopAdapter();
-        await fixtures?.stop();
+        await stopFixtures();
       });
 
       it("keeps its own info channel", function () {
@@ -2602,7 +2748,7 @@ tests.integration(ADAPTER_DIR, {
         after(async function () {
           this.timeout(60000);
           await harness?.stopAdapter();
-          await fixtures?.stop();
+          await stopFixtures();
         });
 
         it("uses only the chosen address", function () {
@@ -2646,7 +2792,7 @@ tests.integration(ADAPTER_DIR, {
         after(async function () {
           this.timeout(60000);
           await harness?.stopAdapter();
-          await fixtures?.stop();
+          await stopFixtures();
         });
 
         it("falls back to every address and warns once", function () {
@@ -2697,7 +2843,7 @@ tests.integration(ADAPTER_DIR, {
         after(async function () {
           this.timeout(60000);
           await harness?.stopAdapter();
-          await fixtures?.stop();
+          await stopFixtures();
         });
 
         it("hands over a report for every device", function () {
@@ -2878,6 +3024,130 @@ tests.integration(ADAPTER_DIR, {
           );
         });
 
+        it("carries the object tree, the environment and log lines in every report", function () {
+          // DB-03 (krobi 2026-10-06 13:03): a report holds the object tree, the environment and log lines, also for
+          // a device that is not connected; the master's ReportContent names them the same in every adapter (round 129)
+          const filled = v =>
+            Array.isArray(v) ? v.length > 0 : v !== null && typeof v === "object" && Object.keys(v).length > 0;
+          const missing = [...reports.reports, ...reports.silent, ...reports.offline].flatMap(({ device, answer }) => {
+            const report = JSON.parse(answer?.content ?? "{}");
+            return ["environment", "objectTree", "logs"]
+              .filter(part => !filled(report[part]))
+              .map(part => `${device}: ${part}`);
+          });
+          assert.deepStrictEqual(
+            missing,
+            [],
+            `reports without their object tree, environment or log lines (DB-03):\n${missing.join("\n")}`,
+          );
+        });
+
+        it("holds every block once", function () {
+          // krobi 2026-10-20 00:46 for every adapter with a report, no content twice (DB-14): a block the file holds
+          // twice stands at its second place as a pointer to the first — the master's onceEach writes it
+          const twice = [...reports.reports, ...reports.silent, ...reports.offline].flatMap(({ device, answer }) => {
+            const seen = new Map();
+            const found = [];
+            const walk = (node, pointer) => {
+              if (node === null || typeof node !== "object") {
+                return;
+              }
+              // a pointer onceEach wrote is no block: a block the file repeats twice leaves two equal pointers
+              // to its first place (round 132, govee 2026-10-20)
+              const keys = Object.keys(node);
+              if (keys.length === 1 && keys[0] === "sameAs" && typeof node.sameAs === "string") {
+                return;
+              }
+              const text = JSON.stringify(node);
+              const first = seen.get(text);
+              if (first !== undefined && JSON.stringify({ sameAs: first }).length < text.length) {
+                found.push(`${device}: ${pointer} repeats ${first}`);
+                return;
+              }
+              if (first === undefined) {
+                seen.set(text, pointer);
+              }
+              Object.entries(node).forEach(([key, item]) =>
+                walk(item, `${pointer}/${key.replace(/~/g, "~0").replace(/\//g, "~1")}`),
+              );
+            };
+            walk(JSON.parse(answer?.content ?? "{}"), "");
+            return found;
+          });
+          assert.deepStrictEqual(twice, [], `blocks a report holds twice (DB-14):\n${twice.join("\n")}`);
+        });
+
+        it("carries no fixed text", function () {
+          // krobi 2026-10-20 00:29 "no dummy text", 00:46 for the fleet (DB-14): a sentence of four words or more that
+          // stands the same in the report of every device and holds a text of the adapter's own source says nothing
+          // about one device. A counterpart's answer or error text is no text of the source, so an account-wide block
+          // the same for every device stays out; so do the frame, the environment, the object tree and every log line
+          // (two real govee reports of 2026-10-18: exactly the five fixed sentences, no other hit)
+          const RECORDS = [
+            "readMe",
+            "adapter",
+            "version",
+            "exportedAt",
+            "runtime",
+            "connected",
+            "liveRead",
+            "environment",
+            "objectTree",
+            "logs",
+          ];
+          const words = text => text.trim().split(/\s+/).length;
+          const own = [];
+          const read = dir => {
+            for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+              const file = path.join(dir, entry.name);
+              if (entry.isDirectory()) {
+                read(file);
+              } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+                for (const m of fs
+                  .readFileSync(file, "utf8")
+                  .matchAll(
+                    /\x22((?:\\.|[^\x22\\\n])*)\x22|\x27((?:\\.|[^\x27\\\n])*)\x27|\x60((?:\\.|[^\x60\\])*)\x60/g,
+                  )) {
+                  own.push(
+                    ...(m[1] ?? m[2] ?? m[3])
+                      .split(/\$\x7b[^\x7d]*\x7d/)
+                      .map(part => part.replace(/\\(.)/g, "$1").trim())
+                      .filter(part => words(part) >= 4),
+                  );
+                }
+              }
+            }
+          };
+          read(path.join(ADAPTER_DIR, "src"));
+          const sentences = answer => {
+            const found = new Set();
+            const walk = node => {
+              if (typeof node === "string") {
+                if (words(node) >= 4 && own.some(text => node.includes(text))) {
+                  found.add(node);
+                }
+              } else if (node !== null && typeof node === "object" && !["ts", "level", "msg"].every(k => k in node)) {
+                Object.values(node).forEach(walk);
+              }
+            };
+            Object.entries(JSON.parse(answer?.content ?? "{}"))
+              .filter(([key]) => !RECORDS.includes(key))
+              .forEach(([, part]) => walk(part));
+            return found;
+          };
+          const fixed = [reports.reports, reports.offline]
+            .filter(group => new Set(group.map(({ device }) => device)).size > 1)
+            .flatMap(group => {
+              const each = group.map(({ answer }) => sentences(answer));
+              return [...each[0]].filter(s => each.every(set => set.has(s)));
+            });
+          assert.deepStrictEqual(
+            [...new Set(fixed)],
+            [],
+            `sentences of the adapter's own source that stand the same in the report of every device (DB-14):\n${[...new Set(fixed)].join("\n")}`,
+          );
+        });
+
         it("restarts at most once for its own instance object", function () {
           assert.deepStrictEqual(restarts.again, [], "the instance object changed again after the restart it caused");
         });
@@ -2916,6 +3186,7 @@ tests.integration(ADAPTER_DIR, {
         after(async function () {
           this.timeout(60000);
           await harness?.stopAdapter();
+          await stopFixtures();
         });
 
         it("a receiver read switched off keeps every object as it was, and every value fits its object", async function () {
@@ -3037,7 +3308,7 @@ tests.integration(ADAPTER_DIR, {
         after(async function () {
           this.timeout(60000);
           await harness?.stopAdapter();
-          await fixtures?.stop();
+          await stopFixtures();
         });
 
         it("every current object carries the current texts and roles", async function () {
@@ -3198,7 +3469,7 @@ tests.integration(ADAPTER_DIR, {
           for (const [origin, ids] of carriers) {
             if (ids.length > 1) {
               wrong.push(`${origin} → ${ids.join(", ")}: one recording on several datapoints`);
-            } else if (ids[0] !== origin && origin in live) {
+            } else if (ids[0] !== origin && live[origin]?.type === "state") {
               wrong.push(`${origin} → ${ids[0]}: copied while ${origin} lives on`);
             } else if (ids[0] !== origin && live[ids[0]].common?.type !== previous[origin]?.common?.type) {
               wrong.push(`${origin} → ${ids[0]}: another value type — a new datapoint, not the same one moved`);
@@ -3242,6 +3513,33 @@ tests.integration(ADAPTER_DIR, {
         });
       });
     }
+
+    // Round 124 (plan P5): the fleet suites — one master for every adapter, called with this copy's own helpers.
+    require("./fleet-suites.js")(suite, {
+      ADAPTER_DIR,
+      ADAPTER,
+      NS,
+      FIRST_LANGUAGE,
+      SECOND_LANGUAGE,
+      NETWORK_HOOK,
+      OUTAGE_FLAG,
+      RESOURCE_DIR,
+      HANG_DEADLINE_MS,
+      CHOSEN_ADDRESS,
+      clearInstanceData,
+      resetInstanceNative,
+      fixtureNative,
+      setSystemLanguage,
+      playControllerRestarts,
+      restartAsTheHost,
+      adapterEnv,
+      feedFixtures,
+      waitForAdapterWork,
+      dumpObjects,
+      dumpStates,
+      withinDeadline,
+      readCalls,
+    });
   },
 });
 
