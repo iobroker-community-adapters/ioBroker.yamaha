@@ -1,5 +1,5 @@
 {
-  "generatedBy": "Ressourcen/yamaha/device-data-2026-09-08/build-player-evidence.py",
+  "generatedBy": "build-player-evidence.py (research script, device data 2026-09-08)",
   "note": "Per player source subunit, every function any source evidences, and which sources: the official lists (declarations), ynca-python's subunit model, the device logs, the all-commands corpus. A function no source names is not asked.",
   "subunits": {
     "AIRPLAY": {

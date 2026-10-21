@@ -38,7 +38,7 @@ export const STATES_VOCABULARY: Readonly<Record<Transport, "classic" | "musiccas
 
 /**
  * Per-capability ownership preference that OVERRIDES pure modernity — from the capability
- * census (`Ressourcen/yamaha/capability-census-2026-08-11.md` §3). These are the shared keys
+ * census of 2026-08-11 (§3). These are the shared keys
  * where YXC is present but NOT equivalent: wrong scale, read-only, or a poorer type. Each list
  * is the preferred owner order for that key; the first present transport wins.
  *

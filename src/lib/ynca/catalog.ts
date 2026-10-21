@@ -284,8 +284,8 @@ const INPUT_STATES = deviceInputStates({ present: new Set(), probed: new Set() }
  * name and its scene names — no volume, no mute on any model, list or capture). Sources: the 21
  * official YNCA lists 2010–2015, 16 ynca-python protocol logs 2010–2020, the adapter's own device
  * captures and 27 MusicCast `getFeatures` declarations, generated into
- * `__fixtures__/zone-function-evidence.json` by `Ressourcen/yamaha/device-data-2026-09-08/
- * build-zone-evidence.py`; the catalog test holds this table to that file in both directions.
+ * `__fixtures__/zone-function-evidence.json` by the research script `build-zone-evidence.py`
+ * (device data 2026-09-08); the catalog test holds this table to that file in both directions.
  *
  * The table decides what is ASKED, never what is CREATED: a function that answers anyway (a
  * BASIC bundle, a push, a later sweep) becomes an object like any other. The blind sweep of a
@@ -1535,7 +1535,7 @@ const SYS_FUNCS: FuncDef[] = [
   // --- Setup surface of the 2010 generation and later (audit 2026-09-06). Measured against the
   // 15 bundled device protocols: these functions are ANSWERED by real receivers and had no
   // datapoint at all. Values come from the official command list
-  // (`Ressourcen/yamaha/ynca-command-list-rx-v671.txt`), never from a guess.
+  // (Yamaha's YNCA command list for the RX-V671), never from a guess.
   {
     func: "MEMGRD",
     state: "advanced.memoryGuard",

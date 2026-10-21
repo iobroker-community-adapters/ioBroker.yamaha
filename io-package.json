@@ -148,7 +148,7 @@
     "platform": "Javascript/Node.js",
     "mode": "daemon",
     "icon": "yamaha.svg",
-    "extIcon": "https://raw.githubusercontent.com/iobroker-community-adapters/ioBroker.yamaha/master/admin/yamaha.svg",
+    "extIcon": "https://cdn.jsdelivr.net/gh/iobroker-community-adapters/ioBroker.yamaha@master/admin/yamaha.svg",
     "readme": "https://github.com/iobroker-community-adapters/ioBroker.yamaha/blob/master/README.md",
     "loglevel": "info",
     "tier": 2,

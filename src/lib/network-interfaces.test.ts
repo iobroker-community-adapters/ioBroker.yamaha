@@ -15,21 +15,21 @@ const nif = (address: string, family: string, internal: boolean): NetworkInterfa
 describe("searchInterfaces", () => {
   const ifaces = {
     lo0: [nif("127.0.0.1", "IPv4", true), nif("::1", "IPv6", true)],
-    en0: [nif("10.47.88.2", "IPv4", false), nif("fe80::1", "IPv6", false)],
+    en0: [nif("192.0.2.2", "IPv4", false), nif("fe80::1", "IPv6", false)],
     en1: [nif("192.168.1.5", "IPv4", false)],
   };
 
   it("pins to the configured interface when one is set", () => {
-    expect(searchInterfaces("10.47.88.2", ifaces)).toEqual(["10.47.88.2"]);
+    expect(searchInterfaces("192.0.2.2", ifaces)).toEqual(["192.0.2.2"]);
   });
 
   it("returns every non-internal IPv4 interface when unset", () => {
-    expect(searchInterfaces("", ifaces)).toEqual(["10.47.88.2", "192.168.1.5"]);
-    expect(searchInterfaces(undefined, ifaces)).toEqual(["10.47.88.2", "192.168.1.5"]);
+    expect(searchInterfaces("", ifaces)).toEqual(["192.0.2.2", "192.168.1.5"]);
+    expect(searchInterfaces(undefined, ifaces)).toEqual(["192.0.2.2", "192.168.1.5"]);
   });
 
   it("treats the 0.0.0.0 wildcard as unset", () => {
-    expect(searchInterfaces("0.0.0.0", ifaces)).toEqual(["10.47.88.2", "192.168.1.5"]);
+    expect(searchInterfaces("0.0.0.0", ifaces)).toEqual(["192.0.2.2", "192.168.1.5"]);
   });
 
   it("skips loopback and IPv6 addresses", () => {

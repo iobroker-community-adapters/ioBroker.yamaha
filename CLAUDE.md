@@ -88,7 +88,7 @@ Y-04-Rückfall, ein XML-Steuerkreuz, das die Gerätebeschreibung deklariert und 
 **Grundsatz:** Ein Receiver ändert im Produktleben nicht, was er kann (höchstens per Firmware). Wer welchen Datenpunkt
 bedient, wird EINMAL bestimmt und im Fähigkeitsprofil gespeichert (`lib/lifecycle/learned-tree.ts`: `shared` nur für
 Datenpunkte mit mehr als einem Protokoll, Owner zuerst; `transports`, `settledVersion`, `firmware`). Der laufende Code
-löscht und leert nichts. Belege und Befund: `.claude/dev-history.md` 2026-10-02, `Ressourcen/yamaha/audit-2026-10-02-einlesen-zustaendigkeit.md`.
+löscht und leert nichts. Belege und Befund: `.claude/dev-history.md` 2026-10-02 (Audit „Einlesen und Zuständigkeit“ vom selben Tag).
 
 - **Eingelesen (Normalbetrieb):** `upsertObject` ist additiv (`main.ts` `writeLearned`) — ein neues Objekt wird angelegt,
   ein bestehendes bekommt nur fehlende Listeneinträge und fehlende Grenzen; Typ, Einheit, Schreibrecht und Namen bleiben.
@@ -233,8 +233,8 @@ Owner-Override `tuner.dab.preset` ist weg — `tuner.preset` ist auf beiden Tran
 **Menü-Browsing (#613, `lib/browse/`):** transport-neutrale `BrowseEngine` (besitzt die
 `player.browse.*`-States: 8 Zeilen-Fenster mit 📁/♪-Präfix, selectLine=OK, page/back/home,
 `path`-Auto-Lauf mit Seiten-Suche + Timeout, `rows`-JSON, busy) + drei Treiber:
-YNCA `LISTINFO/LISTSEL/LISTPAGE/LISTCURSOR` (Quelle: offizielle Befehlsliste
-`Ressourcen/yamaha/ynca-command-list-rx-v671.txt` — ynca-python implementiert die
+YNCA `LISTINFO/LISTSEL/LISTPAGE/LISTCURSOR` (Quelle: offizielle YNCA-Befehlsliste
+des RX-V671 — ynca-python implementiert die
 List-Funktionen NICHT; Fenster kommt als Zeilen-Burst + Auto-Feedback über die stehende
 Verbindung, Burst-Debounce im Treiber; open() schaltet den MAIN-Eingang um wie die
 Fernbedienung), YXC `netusb/getListInfo+setListControl` (Pull, absoluter Index,
@@ -700,10 +700,6 @@ in ein öffentliches Repo.
   unter `src/` außer `*.test.ts`, npm liefert es aus (`src/lib/build-scope.test.ts` wird rot). JSON-Fixtures
   dürfen in `src/` liegen, solange keine Produktivdatei sie importiert.
 
-## Befehle
-
-- `npm run build` · `npm test` · `npm run lint` · `npm run check` · `npm run format:check` (muss 0 melden) · `npm run release`.
-
 ## Doku-Flächen (seit 2026-09-11)
 
 Drei Flächen, jede Aussage lebt an genau EINER Stelle:
@@ -722,8 +718,3 @@ Datenpunkte, Verhalten oder die Admin-Oberfläche ändert, gehören die betroffe
 besonders `Datapoints`/`Datenpunkte` und `Upgrade`/`Umstieg`.
 Die Wiki-Seite `Setup`/`Einrichtung` erklärt nur, was darunter passiert; die Einrichtung selbst steht in `docs/`
 und stünde sonst doppelt.
-
-## Versionshistorie
-
-Changelog im README (`## Changelog`) + `CHANGELOG_OLD.md` + `io-package.json` `news`, nicht hier dupliziert.
-Die Vorgänger-Historie (soef 2015 → Community-Wartung bis 0.5.4) bleibt erhalten — s. README `## History`.

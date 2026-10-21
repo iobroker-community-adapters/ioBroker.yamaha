@@ -86,7 +86,7 @@ describe("parseSsdpNotify", () => {
     "NOTIFY * HTTP/1.1",
     "HOST: 239.255.255.250:1900",
     "CACHE-CONTROL: max-age=1800",
-    "LOCATION: http://10.47.88.7:49154/desc.xml",
+    "LOCATION: http://192.0.2.7:49154/desc.xml",
     "NT: upnp:rootdevice",
     "NTS: ssdp:alive",
     "USN: uuid:00000000-0000-1000-8000-00a0de0a1b2c::upnp:rootdevice",
@@ -97,7 +97,7 @@ describe("parseSsdpNotify", () => {
   test("reads an alive notify", () => {
     expect(parseSsdpNotify(alive)).toEqual({
       nts: "alive",
-      location: "http://10.47.88.7:49154/desc.xml",
+      location: "http://192.0.2.7:49154/desc.xml",
       nt: "upnp:rootdevice",
       usn: "uuid:00000000-0000-1000-8000-00a0de0a1b2c::upnp:rootdevice",
     });
