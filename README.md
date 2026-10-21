@@ -73,6 +73,11 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
     ### **WORK IN PROGRESS**
 -->
 
+### **WORK IN PROGRESS**
+
+- (krobipd) Fixed: The "Object tree updated" log line always names both counts, created and removed
+- (krobipd) Fixed: A message the adapter does not know gets an error answer instead of none
+
 ### 3.3.0 (2026-10-14)
 
 - (krobipd) New: Diagnostics report on the new Expert tab, with a "Report a device" issue form for it

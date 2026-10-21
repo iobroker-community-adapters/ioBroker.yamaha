@@ -1,0 +1,6 @@
+{
+  "_comment": "Gate A12: the YNCA protocol reference the adapter's own TypeScript client follows (ynca-python by mvdwetering: subunits, functions, value formats, number_to_string_with_stepsize). v6.2.1 checked 2026-10-22 against v6.2.0: type hints in enums.py and debug-server changes only, no protocol change.",
+  "source": "github:mvdwetering/ynca",
+  "verified": "v6.2.1",
+  "watch": ["src/ynca/"]
+}
