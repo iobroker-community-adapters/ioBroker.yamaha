@@ -66,6 +66,12 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 | 50000 | TCP | outgoing | YNCA control of the receivers |
 | 80 and the port a device announces | TCP | outgoing | MusicCast and XML control, the device description |
 
+## Troubleshooting
+
+The wiki page **[Troubleshooting](https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Troubleshooting)**
+([Fehlersuche](https://github.com/iobroker-community-adapters/ioBroker.yamaha/wiki/Fehlersuche)) is sorted by symptom. For
+an issue, attach the diagnostics report from the **Expert** tab of the instance settings.
+
 ## Changelog
 
 <!--
