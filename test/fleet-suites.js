@@ -30,7 +30,8 @@
 //                                       the minute is up · D21 under a series of errors (a 500 to every answer) the calls
 //                                       to a host get fewer from minute to minute
 //   "one device gone while the channel lives" D6 one device stays in the account's list and stops answering: only
-//                                       that one goes unreachable (a marker already down before counts not)
+//                                       that one goes unreachable (a marker already down before counts not; counted by
+//                                       device, a device may carry several markers)
 //   "every call to a hung counterpart ends" D21 a start with every counterpart hung, held past the deadline: every
 //                                       call that hung — there and in the hang suites of the template — ended within
 //                                       the deadline while its process lived
@@ -136,6 +137,22 @@ function upBefore(markers, before) {
   return markers
     .filter(([id, off]) => before[id]?.val !== undefined && before[id]?.val !== null && before[id]?.val !== off)
     .map(([id]) => id);
+}
+// D6 (round 141, yamaha 2026-10-22: every receiver carries info.connection and one reachable flag per transport, 32
+// markers on 8 devices, and one dropped receiver turned 2 to 4 of them false): the suite counts DEVICES, not markers. A
+// marker belongs to the nearest object above it whose type is "device", else to the first id segment under the namespace.
+function devicesOf(ids, objects) {
+  const owner = id => {
+    const parts = id.split(".");
+    for (let n = parts.length - 1; n >= 3; n--) {
+      const candidate = parts.slice(0, n).join(".");
+      if (objects[candidate]?.type === "device") {
+        return candidate;
+      }
+    }
+    return parts.slice(0, 3).join(".");
+  };
+  return [...new Set(ids.map(owner))].sort();
 }
 // D11 (round 133, govee CI 39408072351): when each state was last written — the template's dumpStates carries val and ack
 // only, so D11 read no time, counted no data and was red for every adapter whose data kept arriving.
@@ -929,9 +946,9 @@ module.exports = function fleetSuites(suite, ctx) {
       }
       const states = await dumpStates(harness);
       const live = await dumpObjects(harness);
-      const down = newlyDown(markers, before, states);
+      const down = devicesOf(newlyDown(markers, before, states), objects);
       verdict = {
-        reachable: upBefore(markers, before).length,
+        reachable: devicesOf(upBefore(markers, before), objects).length,
         down,
         deleted: Object.keys(objects).filter(id => !(id in live)),
         connection: states[`${NS}info.connection`]?.val,
@@ -1072,4 +1089,5 @@ module.exports.workshopMutexProblem = workshopMutexProblem;
 module.exports.spacingOf = spacingOf;
 module.exports.newlyDown = newlyDown;
 module.exports.upBefore = upBefore;
+module.exports.devicesOf = devicesOf;
 module.exports.stampsOf = stampsOf;
