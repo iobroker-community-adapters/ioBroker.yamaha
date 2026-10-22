@@ -5,7 +5,8 @@ import { readTransport, startFixtures, type FixtureDevice } from "../../test/hel
 /**
  * Fleet suite D9 in seconds (2026-10-22): the suite presses every button of every device at once and wants each back to
  * false within 15 s — the handle sets a button back once the device answered its press (sent or refused), so every
- * press has to have its verdict inside the window. Every inventory fixture is pressed the suite's way, protocol by
+ * press has to have its verdict inside the window. A press the adapter drops itself reaches nothing and stays as written;
+ * the suite tells it apart by pressing it alone (round 142). Every inventory fixture is pressed the suite's way, protocol by
  * protocol, through the real client and controller, and the time runs until each verdict, a menu step's after it ran.
  *
  * GV-13 in seconds (inventory run 2026-10-22: 74 buttons acked while nothing answered): with every answer held back no
