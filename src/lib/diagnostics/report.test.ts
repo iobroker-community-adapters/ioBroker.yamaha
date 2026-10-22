@@ -368,12 +368,12 @@ describe("the diagnostics trail in the report", () => {
       { transport: "yxc", outcome: "unavailable" },
       { transport: "ynca", outcome: "sent", because: "yxc could not send it" },
     ]);
-    rec.connection("transport dropped", { transport: "yxc", reason: "3 polls failed" });
-    rec.connection("transport dropped", { transport: "ynca", reason: "read ECONNRESET" });
+    rec.connection("transportDropped", { transport: "yxc", reason: "3 polls failed" });
+    rec.connection("transportDropped", { transport: "ynca", reason: "read ECONNRESET" });
     rec.connection("disconnected");
-    rec.connection("no reachable transport", { transports: { ynca: "connect ETIMEDOUT", yxc: "connect ETIMEDOUT" } });
+    rec.connection("noReachableTransport", { transports: { ynca: "connect ETIMEDOUT", yxc: "connect ETIMEDOUT" } });
     // XML drops last — its reason is the drop, not the attempt before.
-    rec.connection("transport dropped", { transport: "xml", reason: "3 polls failed" });
+    rec.connection("transportDropped", { transport: "xml", reason: "3 polls failed" });
     return rec;
   }
 
@@ -390,7 +390,7 @@ describe("the diagnostics trail in the report", () => {
     expect(report.trail.lastReasonPerTransport).toMatchObject({
       ynca: { reason: "connect ETIMEDOUT" },
       yxc: { reason: "connect ETIMEDOUT" },
-      xml: { reason: "transport dropped: 3 polls failed" },
+      xml: { reason: "transportDropped: 3 polls failed" },
     });
     expect(report.connection.ownersAtLastConnection.owners).toEqual({ input: "ynca", volume: "yxc" });
     expect(report.trail.commandResults[1].attempts[1].because).toBe("yxc could not send it");

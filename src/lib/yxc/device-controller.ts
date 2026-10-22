@@ -54,6 +54,7 @@ import { answeredByDevice, YxcTransportError } from "./http-client";
 import { splitZone, zonePrefix } from "../catalog/zones";
 import { declaredBy, disableBitOf, YXC_AMP_CATALOG } from "./catalog";
 import { presentSystemEntries, systemWrite, YXC_SYSTEM_CATALOG, type YxcSystemEntry } from "./system-catalog";
+import { reported } from "./values";
 import { keyedCommon, parentChannels } from "../catalog/types";
 import { knownScenes, resolveSceneNumber, sceneListSurface, sceneRecallStates } from "../catalog/scene-titles";
 import type { WriteOutcome } from "../lifecycle/multi-transport-handle";
@@ -611,7 +612,7 @@ export class YxcDeviceController {
       ]);
     }
     // The WHOLE player block of every zone NOT playing a media source gets its cleared shape.
-    this.routing.clearIdle();
+    this.routing.clearIdle(answered);
     await this.refreshLists();
     this.hasDistribution = capabilities.hasDistribution ?? false;
     if (this.hasDistribution) {
@@ -719,8 +720,9 @@ export class YxcDeviceController {
     }
     const fields = status as Record<string, unknown>;
     for (const entry of this.systemEntries) {
-      if (entry.field in fields) {
-        this.emit(entry.state, entry.fromStatus(fields[entry.field]));
+      const value = reported(fields[entry.field], entry.fromStatus);
+      if (value !== undefined) {
+        this.emit(entry.state, value);
       }
     }
   }

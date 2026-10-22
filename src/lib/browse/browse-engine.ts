@@ -87,8 +87,13 @@ export class BrowseEngine {
   private window: BrowseWindow | undefined;
   /** Bumped on every window report — the path walk waits on it. */
   private windowVersion = 0;
-  /** Serializes operations: a write while an operation runs is dropped with a log line. */
-  private running = false;
+  /**
+   * Serializes operations: a write while one runs waits its turn. Dropped, a press made with others at once never ran
+   * and its button never fell back (fleet suite D9: 130 of 130 buttons stuck, 2026-10-22).
+   */
+  private queue: Promise<unknown> = Promise.resolve();
+  /** Operations started and not yet ended — `busy` is true while there is one. */
+  private pending = 0;
   private closed = false;
 
   /**
@@ -217,10 +222,10 @@ export class BrowseEngine {
    *
    * @param stateId the state id relative to the device (`player.browse.…`)
    * @param value the written value
-   * @returns `sent` when the operation started, `unavailable` for a value the menu cannot take, `unclear` while
-   *   another menu operation runs (see {@link start})
+   * @returns `sent` once the device took the operation, `unavailable` for a value the menu cannot take, `unclear` when
+   *   it failed (see {@link start})
    */
-  public handleWrite(stateId: string, value: unknown): WriteOutcome {
+  public handleWrite(stateId: string, value: unknown): WriteOutcome | Promise<WriteOutcome> {
     if (this.closed) {
       return this.dropped(stateId, "the connection is closing");
     }
@@ -289,39 +294,43 @@ export class BrowseEngine {
   }
 
   /**
-   * Start one menu operation, serialized: while one runs, a further write is dropped (the busy state shows why) — and
-   * reported `unclear`, so the handle does not hand it to another protocol: that protocol's menu is not the one on
-   * screen, and the press would act there unseen.
+   * Queue one menu operation behind the ones still running (the busy state shows that some run). Its outcome is known
+   * only once it ran: `sent` when the device took every step, `unclear` when one failed — never handed to another
+   * protocol: that protocol's menu is not the one on screen, and the press would act there unseen.
    *
    * @param what the operation, for the log lines
    * @param op the operation
-   * @returns `sent` when it started, `unclear` when another one still runs
+   * @returns what became of it, once it ran
    */
-  private start(what: string, op: () => Promise<void> | void): WriteOutcome {
-    if (this.running) {
-      this.deps.log.debug(`browse: "${what}" dropped — another browse operation is still running`);
-      return "unclear";
-    }
-    this.running = true;
+  private start(what: string, op: () => Promise<void> | void): Promise<WriteOutcome> {
+    this.pending++;
     this.deps.emit("player.browse.busy", true);
-    void this.run(what, op);
-    return "sent";
+    const outcome = this.queue.then(() => this.run(what, op));
+    this.queue = outcome;
+    return outcome;
   }
 
   /**
-   * Run a started operation to its end. Failures land in the log as warnings — a user action failing must be visible.
+   * Run a queued operation to its end. Failures land in the log as warnings — a user action failing must be visible.
    *
    * @param what the operation, for the log line
    * @param op the operation to run
+   * @returns `sent` when it ran through, `unavailable` after a close, `unclear` when it failed
    */
-  private async run(what: string, op: () => Promise<void> | void): Promise<void> {
+  private async run(what: string, op: () => Promise<void> | void): Promise<WriteOutcome> {
     try {
+      if (this.closed) {
+        return this.dropped(`browse: ${what}`, "the connection is closing");
+      }
       await op();
+      await this.driver.settled?.();
+      return "sent";
     } catch (e) {
       this.deps.log.warn(`browse: ${what} failed: ${errText(e)}`);
+      return "unclear";
     } finally {
-      this.running = false;
-      if (!this.closed) {
+      this.pending--;
+      if (!this.closed && this.pending === 0) {
         this.deps.emit("player.browse.busy", false);
       }
     }

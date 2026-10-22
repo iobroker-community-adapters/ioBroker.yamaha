@@ -622,6 +622,23 @@ krobi's decisions for this adapter. The register with his verbatim words lives i
 
 <!-- core-decisions:end -->
 
+## Was die Flotten-Suiten erzwingen (Inventarlauf 2026-10-22)
+
+Die Suiten kamen mit dem Vorlage-Merge; der erste Lauf fand sechs Adapterfehler. Belege in `.claude/dev-history.md` 2026-10-22.
+
+- **D12:** die Bilanzzeile nennt immer beide Zahlen, angelegt und entfernt.
+- **D10:** eine Nachricht, die der Adapter nicht kennt, bekommt eine Fehlerantwort.
+- **DB-14:** ohne Live-Lesung nennt der Bericht den Grund als Schlüssel (`liveError`: `noAnswer`/`connectionLost`), und die
+  Verlaufsereignisse sind Schlüssel (`transportDropped`, `transportBack` …), nie englische Sätze.
+- **D9:** Menüschritte reihen sich ein (`BrowseEngine`) und liefern ihr Ergebnis erst nach dem Lauf; YNCA-Schritte holen das
+  Urteil des Receivers über `settled()`, und eine Taste fällt nach `sent` auf false zurück (`confirmPress`).
+- **D6/C26b (Y-01):** eine falsche MusicCast-Antwort schreibt nichts — ein fehlendes, `null`- oder falsch typisiertes Feld
+  bleibt stehen (`yxc/values.ts` `reported`, `null` nur für das ausdrücklich leere Wort), und `clearIdle` leert den
+  Wiedergabe-Block nur, wenn jede Medienquelle geantwortet hat und der Zoneneingang bekannt ist (`yxc/wrong-answers.test.ts`).
+- **D21:** jeder HTTP-Aufruf (MusicCast, XML, Beschreibungsabruf der Suche) läuft durch `HOST_HOLD` (`lib/host-hold.ts`,
+  prozessweit je Host wie `GateRegistry`): eine 429 hält den Host für ihr `Retry-After`, ab drei Serverfehlern in Folge
+  wachsend 5 s → 60 s mit einem Aufruf zur Zeit; ein gehaltener Aufruf antwortet als `HttpStatusError` wie der Host.
+
 ## Objekt-Inventar aus Fixtures (`npm run test:inventory`)
 
 Der Nachweis, dass ein Update JEDEN Datenpunkt einer bestehenden Installation erreicht — ohne

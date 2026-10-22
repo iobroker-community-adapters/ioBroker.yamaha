@@ -6,6 +6,21 @@ import { searchInterfaces } from "./network-interfaces";
 import { localAddressOption } from "./source-address";
 import { ssdpHeader } from "./ssdp-header";
 import { readDeviceResponse } from "./util";
+import { HOST_HOLD } from "./host-hold";
+
+/**
+ * The host of a URL as the clients name it — an IPv6 address without its brackets.
+ *
+ * @param url the URL
+ * @returns the host, or the URL itself when it does not parse
+ */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^\[|\]$/g, "");
+  } catch {
+    return url;
+  }
+}
 
 /** Abort a discovery description fetch after this long, so a dead device cannot hang it. */
 const FETCH_TIMEOUT_MS = 4000;
@@ -173,6 +188,17 @@ export class NetworkSearch {
     if (this.deps.stopping()) {
       return Promise.reject(new Error(`not fetched, the adapter is stopping: ${url}`));
     }
+    // The device's own host: a description fetch to a receiver that answered 429 waits like its control calls (D21).
+    return HOST_HOLD.run(hostOf(url), url, () => this.fetchOnce(url));
+  }
+
+  /**
+   * Fetch a URL once (see {@link fetch}) — past the host's hold.
+   *
+   * @param url the URL to fetch
+   * @returns the response body
+   */
+  private fetchOnce(url: string): Promise<string> {
     return new Promise((resolve, reject) => {
       const req = httpGet(url, localAddressOption(), res => {
         // Bytes decoded once (a friendlyName "Küche" split inside a character became "K��che" — and a

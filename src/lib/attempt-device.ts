@@ -236,7 +236,7 @@ async function connectBuilt(
     }),
   );
   const live = results.filter((conn): conn is ConnectableTransport => conn !== null);
-  deps.recorder?.connection(live.length > 0 ? "attempt" : "no reachable transport", { transports: outcomes });
+  deps.recorder?.connection(live.length > 0 ? "attempt" : "noReachableTransport", { transports: outcomes });
   if (signal?.aborted) {
     for (const conn of live) {
       conn.close();
@@ -284,7 +284,7 @@ async function connectBuilt(
     // line for a device that is off (audit 2026-09-24, A21).
     handle.close();
     deps.log.debug(`${deviceId}: every transport dropped while connecting`);
-    deps.recorder?.connection("every transport dropped while connecting");
+    deps.recorder?.connection("droppedWhileConnecting");
     return null;
   }
   // One summary line instead of three per-transport "ready" lines; each controller logs its

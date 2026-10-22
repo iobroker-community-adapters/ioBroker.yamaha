@@ -1,6 +1,7 @@
 import type { StateValue } from "../types";
 import { ZONE_KEYS, zonePrefix, type ZoneKey } from "../catalog/zones";
 import { YXC_AMP_CATALOG } from "./catalog";
+import { reported } from "./values";
 
 /**
  * A zone's own answers: its getStatus (the amplifier states of the zone catalog) and its getSignalInfo (what the zone
@@ -63,9 +64,9 @@ export function parseYxcStatus(zoneStatus: unknown, zone: string): StateValue[] 
     if (zone !== "main" && entry.state.startsWith("multiroom.")) {
       continue;
     }
-    const raw = readStatusField(status, entry.read);
-    if (raw !== undefined) {
-      updates.push({ id: `${prefix}${entry.state}`, value: entry.fromStatus(raw) });
+    const value = reported(readStatusField(status, entry.read), entry.fromStatus);
+    if (value !== undefined) {
+      updates.push({ id: `${prefix}${entry.state}`, value });
     }
   }
   return updates;

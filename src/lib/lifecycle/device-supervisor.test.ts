@@ -463,6 +463,6 @@ describe("DeviceSupervisor — the diagnostics trail", () => {
     });
     supervisor.handleStateChange("living.volume", false, -40);
     supervisor.handleStateChange("living.power", true, false);
-    expect(commands).toEqual([{ id: "volume", value: -40, note: "the device is offline — dropped" }]);
+    expect(commands).toEqual([{ id: "volume", value: -40, note: "droppedOffline" }]);
   });
 });

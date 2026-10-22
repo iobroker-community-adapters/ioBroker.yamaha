@@ -4,11 +4,13 @@ import { vi } from "vitest";
 const net = vi.hoisted(() => ({
   status: 200,
   body: "",
+  gets: 0,
   sockets: [] as Array<{ handlers: Record<string, (...a: unknown[]) => void>; closed: boolean }>,
 }));
 vi.mock("node:http", () => ({
   // http.get(url, options, cb) — the options carry the source address where one is picked.
   get: (_url: string, _options: unknown, cb: (res: unknown) => void) => {
+    net.gets++;
     const req = { on: () => req, setTimeout: () => req, destroy: () => undefined };
     queueMicrotask(() => {
       const handlers: Record<string, (...a: unknown[]) => void> = {};
@@ -90,6 +92,16 @@ describe("NetworkSearch.fetch — the description of a device", () => {
       "192.168.1.20",
     );
     expect(found).toBeUndefined(); // undefined = could not be read → the 5-second retry; null would be final
+  });
+
+  // Fleet suite D21 (2026-10-22): the search fetches from the same host as the control calls — it waits out a 429 too.
+  test("a host that answered 429 gets no further fetch before its retry-after", async () => {
+    net.status = 429;
+    const { network } = search();
+    const before = net.gets;
+    await expect(network.fetch("http://192.168.1.99/desc.xml")).rejects.toMatchObject({ statusCode: 429 });
+    await expect(network.fetch("http://192.168.1.99/other.xml")).rejects.toMatchObject({ statusCode: 429 });
+    expect(net.gets - before).toBe(1);
   });
 
   test("a 200 description of a Yamaha is a device", async () => {

@@ -602,7 +602,7 @@ describe("connectTransports — the diagnostics trail", () => {
     await connectTransports("living", [{ transport: "ynca", build: () => failing("ynca") }], { ...deps(), recorder });
     expect(recorder.snapshot().connectionHistory.map(({ at: _at, ...event }) => event)).toEqual([
       { event: "attempt", transports: { ynca: "connect ETIMEDOUT", yxc: "connected", xml: "did not answer" } },
-      { event: "no reachable transport", transports: { ynca: "connect ETIMEDOUT" } },
+      { event: "noReachableTransport", transports: { ynca: "connect ETIMEDOUT" } },
     ]);
   });
 });

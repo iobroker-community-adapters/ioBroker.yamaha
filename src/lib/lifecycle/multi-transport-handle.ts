@@ -111,6 +111,11 @@ export interface DeviceTreeDeps {
   settleTree?(built: ReadonlySet<string>): Promise<void>;
   /** The device's diagnostics trail — commands, connection history, owners and raw traffic, in memory only. */
   recorder?: TrafficRecorder;
+  /**
+   * A button press the device took: the button falls back to `false`, confirmed (fleet suite D9). Never for a press
+   * the device refused, did not answer or never got — that one stays as written (only the device confirms).
+   */
+  confirmPress?(id: string): void;
 }
 
 /** The adapter callbacks the multi-transport handle drives: the tree's, and its per-transport reconnect. */
@@ -493,7 +498,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     }
     this.live.splice(index, 1);
     connection.close();
-    this.deps.recorder?.connection("transport dropped", {
+    this.deps.recorder?.connection("transportDropped", {
       transport: connection.transport,
       ...(reason ? { reason: errText(reason) } : {}),
     });
@@ -512,14 +517,14 @@ export class MultiTransportHandle implements ConnectionHandle {
     // The first drop is the question to the others: a device that lost power has every
     // transport dead, but a polled one notices only at its own cadence. Asked now, it reports
     // its drop through the same path and the device is judged gone within seconds.
-    this.deps.recorder?.connection("liveness check", {
+    this.deps.recorder?.connection("livenessCheck", {
       after: connection.transport,
       asked: this.live.map(other => other.transport),
     });
     for (const other of [...this.live]) {
       other.verifyAlive?.().catch((e: unknown) => {
         this.deps.log.debug(`${this.deviceId}/${other.transport}: liveness check failed (${errText(e)})`);
-        this.deps.recorder?.connection("liveness check failed", { transport: other.transport, reason: errText(e) });
+        this.deps.recorder?.connection("livenessCheckFailed", { transport: other.transport, reason: errText(e) });
       });
     }
     this.scheduleTransportRetry(connection.transport);
@@ -572,7 +577,7 @@ export class MultiTransportHandle implements ConnectionHandle {
       connected = await connection.connect();
     } catch (e) {
       this.deps.log.debug(`${this.deviceId}/${transport}: reconnect attempt failed (${errText(e)})`);
-      this.deps.recorder?.connection("transport reconnect failed", { transport, reason: errText(e) });
+      this.deps.recorder?.connection("transportReconnectFailed", { transport, reason: errText(e) });
     }
     if (!this.connecting.delete(connection)) {
       return; // close() took it and closed it
@@ -608,7 +613,7 @@ export class MultiTransportHandle implements ConnectionHandle {
     this.retries.get(transport)?.succeeded();
     this.reportTransports();
     this.deps.log.debug(`${this.deviceId}/${transport}: transport reconnected`);
-    this.deps.recorder?.connection("transport back", { transport });
+    this.deps.recorder?.connection("transportBack", { transport });
   }
 
   /** Cancel every per-transport reconnect loop. */
@@ -691,6 +696,9 @@ export class MultiTransportHandle implements ConnectionHandle {
         }
         const outcome = await connection.handleWrite(canonicalId, value);
         attempts.push({ transport, outcome, ...(transport !== owner ? { because: `${owner} ${reason}` } : {}) });
+        if (outcome === "sent" && String(ownerForm?.common.role ?? "").startsWith("button")) {
+          this.deps.confirmPress?.(canonicalId);
+        }
         if (outcome !== "refused" && outcome !== "unavailable") {
           return;
         }

@@ -3592,6 +3592,17 @@ describe("Yamaha transport plumbing", () => {
     expect(mocks.pushReceivers[0].registered).toEqual(["192.168.1.10"]);
   });
 
+  // Fleet suite D9 (2026-10-22): 130 of 130 buttons stayed true — a press the device took falls back to false, ack.
+  it("sets a pressed button back to false once the handle reports the press taken", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const { device, deps } = ctx.calls[0];
+    (deps.confirmPress as (id: string) => void)("player.browse.back");
+    await flush();
+    expect(ctx.i.states.get(`${device.id}.player.browse.back`)).toEqual({ val: false, ack: true });
+  });
+
   it("hands the attempt MANAGED timers, and a keepalive that can be cancelled", async () => {
     const ctx = setup();
     await ctx.i.onReady();
@@ -5661,7 +5672,7 @@ describe("the diagnostics trail of a device", () => {
     await off.i.onReady();
     await flush();
     expect(trailOf(off)?.connectionHistory).toEqual([
-      expect.objectContaining({ event: "no connection", failedInARow: 1 }),
+      expect.objectContaining({ event: "noConnection", failedInARow: 1 }),
     ]);
   });
 
@@ -5671,7 +5682,7 @@ describe("the diagnostics trail of a device", () => {
     await ctx.i.onReady();
     await flush();
     expect(trailOf(ctx)?.connectionHistory).toEqual([
-      expect.objectContaining({ event: "attempt failed", error: "object creation failed", failedInARow: 1 }),
+      expect.objectContaining({ event: "attemptFailed", error: "object creation failed", failedInARow: 1 }),
     ]);
   });
 });

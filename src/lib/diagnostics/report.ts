@@ -112,8 +112,8 @@ export interface ReportInput {
   profile?: Record<string, unknown>;
   /** What the running connection read, or undefined when the device is not connected. */
   connection?: HandleCapture;
-  /** Why there is no connection read. */
-  connectionNote?: string;
+  /** Why the live read of a connected device failed (a key or the error's own text); the frame's `liveRead` says whether it ran. */
+  liveError?: string;
   /** The device's datapoints. */
   objectTree: ObjectTreeEntry[];
   /** The adapter's recent log lines about the device. */
@@ -158,7 +158,7 @@ function disconnectedSince(
 function lastReasonPerTransport(history: readonly HistoryEvent[]): Record<string, { at: string; reason: string }> {
   const reasons: Record<string, { at: string; reason: string }> = {};
   for (const event of history) {
-    if (typeof event.transport === "string" && event.event !== "transport back") {
+    if (typeof event.transport === "string" && event.event !== "transportBack") {
       reasons[event.transport] = {
         at: event.at,
         reason: typeof event.reason === "string" ? `${event.event}: ${event.reason}` : event.event,
@@ -265,7 +265,8 @@ export function buildReportBody(input: ReportInput): ReportBody {
     connection: connection
       ? { live: connection.live, missing: connection.missing, owners: connection.owners, learnedTree: connection.tree }
       : {
-          note: input.connectionNote ?? "not connected — no live read",
+          // No sentence of our own here (DB-14): the frame's `liveRead` says not connected or failed, this the error.
+          liveError: input.liveError ?? null,
           // Who served which datapoint, as at the last connection (plan „Diagnosebericht“, Y4).
           ownersAtLastConnection: input.trail?.lastOwners ?? null,
         },

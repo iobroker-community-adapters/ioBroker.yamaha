@@ -121,9 +121,10 @@ export class YamahaReportSource implements ReportSource<HandleCapture | undefine
     this.trails.set(id, device.trail?.());
     this.host.log.info(`${id}: reading the device for a diagnostics report — this takes up to a minute`);
     const live = await device.capture();
-    // A read nobody answered is a failed read, never `read` (round 104, DB-02): no transport got a single answer.
+    // A read nobody answered is a failed read, never `read` (round 104, DB-02): no transport got a single answer. The
+    // reason is a key, never a sentence — a report carries no text that stands the same for every device (DB-14).
     if (!live?.captures.some(answeredSomething)) {
-      throw new Error(live ? "the device answered nothing" : "the connection was lost during the read");
+      throw new Error(live ? "noAnswer" : "connectionLost");
     }
     return live;
   }
@@ -164,7 +165,7 @@ export class YamahaReportSource implements ReportSource<HandleCapture | undefine
       },
       profile: (deviceObject?.native as Record<string, unknown> | undefined) ?? undefined,
       connection: live,
-      connectionNote: liveError !== undefined ? `live read failed: ${liveError}` : undefined,
+      liveError,
       trail,
       offlineSince,
       objectTree,

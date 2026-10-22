@@ -244,15 +244,19 @@ export class YxcPlayerRouting {
   /**
    * Give every zone that plays no media source its cleared block — the routing only writes to listening zones,
    * so on a device that starts on HDMI the block would sit valueless until the first media playback (live 2.0.0
-   * deployment check).
+   * deployment check). Only where that is known: a zone whose status did not answer, or any zone while a media
+   * source's play info did not answer (which input that source plays is unknown then), keeps its block — a 500 to
+   * the first play info emptied the now-playing block of a playing zone (fleet suite D6, 2026-10-22; Y-01).
+   *
+   * @param answered the media sources whose play info answered on this connection
    */
-  public clearIdle(): void {
-    const media = this.deps.media();
-    if (!media.includes("netusb") && !media.includes("cd")) {
+  public clearIdle(answered: ReadonlySet<string>): void {
+    const media = this.deps.media().filter(block => block === "netusb" || block === "cd");
+    if (media.length === 0 || media.some(block => !answered.has(block))) {
       return;
     }
     for (const zone of this.deps.zones()) {
-      if (!this.zoneBlock.has(zone)) {
+      if (!this.zoneBlock.has(zone) && this.zoneInput.has(zone)) {
         this.emitBlock(zone, CLEAR);
       }
     }

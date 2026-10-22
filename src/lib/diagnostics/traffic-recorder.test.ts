@@ -119,13 +119,13 @@ describe("TrafficRecorder — commands, connection history, last owners", () => 
       { transport: "yxc", outcome: "refused" },
       { transport: "ynca", outcome: "sent", because: "yxc refused it" },
     ]);
-    rec.command("volume", -40, [], "the device is offline — dropped");
+    rec.command("volume", -40, [], "droppedOffline");
     expect(rec.snapshot().commands).toEqual([
       expect.objectContaining({
         id: "power",
         attempts: [expect.anything(), expect.objectContaining({ because: "yxc refused it" })],
       }),
-      expect.objectContaining({ id: "volume", attempts: [], note: "the device is offline — dropped" }),
+      expect.objectContaining({ id: "volume", attempts: [], note: "droppedOffline" }),
     ]);
   });
 

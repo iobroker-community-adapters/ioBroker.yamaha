@@ -13,6 +13,7 @@ import {
 import type { BrowseEngine } from "./browse-engine";
 import { SOURCE_INPUTS, YNCA_PLAYER_SOURCES, type YncaGenerationEvidence } from "../ynca/catalog";
 import { errText } from "../err-text";
+import type { YncaSendVerdict } from "../ynca/client-like";
 
 /** Collect a burst of list lines for this long before rendering the window. */
 const BURST_SETTLE_MS = 200;
@@ -32,8 +33,11 @@ export const YNCA_BROWSE_SOURCES: ReadonlyArray<{ subunit: string; key: string; 
 
 /** The client surface the driver needs (a slice of the YNCA client). */
 export interface YncaBrowseClient {
-  /** Send a PUT command. */
-  send(subunit: string, func: string, value: string): void;
+  /**
+   * Send a PUT command. The real client answers with a promise of the receiver's verdict (`YncaSendVerdict`); anything
+   * else (a test double's return) carries no verdict.
+   */
+  send(subunit: string, func: string, value: string): unknown;
   /** Send a GET request. */
   get(subunit: string, func: string): void;
 }
@@ -90,6 +94,8 @@ export type YncaPadDialect = "list" | "zone" | "none";
  */
 export class YncaBrowseDriver implements BrowseDriver {
   private active: { subunit: string; key: string; input: string } | undefined;
+  /** The verdicts of the steps sent since the last {@link settled} — an error for a step the receiver did not take. */
+  private verdicts: Array<Promise<Error | undefined>> = [];
   private engine: BrowseEngine | undefined;
   /** The window assembly the bursts fill. */
   private menuName = "";
@@ -204,7 +210,7 @@ export class YncaBrowseDriver implements BrowseDriver {
     }
     this.active = entry;
     this.resetAssembly();
-    this.client.send("MAIN", "INP", entry.input);
+    this.put("MAIN", "INP", entry.input);
     this.refresh();
   }
 
@@ -255,12 +261,28 @@ export class YncaBrowseDriver implements BrowseDriver {
     }
     const back = wireFor(this.listCursorWire, "return") ?? "Back";
     for (let level = this.layer; level > 2; level--) {
-      this.client.send(this.active.subunit, "LISTCURSOR", back);
+      this.put(this.active.subunit, "LISTCURSOR", back);
     }
     if (this.layer > 1) {
       this.command("LISTCURSOR", back);
     } else {
       this.refresh();
+    }
+  }
+
+  /**
+   * The receiver's verdict on every menu step sent since the last call: rejects with the first step it did not take
+   * (a refusal, no answer inside the bracket, a line that never went out) — the engine then leaves its button
+   * unconfirmed (fleet suite D9 and the confirmation rule: only the device confirms).
+   *
+   * @returns once every step is judged
+   */
+  public async settled(): Promise<void> {
+    const verdicts = this.verdicts;
+    this.verdicts = [];
+    const refused = (await Promise.all(verdicts)).find(error => error !== undefined);
+    if (refused) {
+      throw refused;
     }
   }
 
@@ -387,8 +409,28 @@ export class YncaBrowseDriver implements BrowseDriver {
     if (!this.active) {
       return;
     }
-    this.client.send(this.active.subunit, func, value);
+    this.put(this.active.subunit, func, value);
     this.refresh();
+  }
+
+  /**
+   * Send a PUT and keep the receiver's verdict for {@link settled} — never as a rejecting promise of its own, which
+   * would go unhandled where nobody asks. A client that says nothing (a test double) leaves no verdict.
+   *
+   * @param subunit the subunit
+   * @param func the function
+   * @param value the value
+   */
+  private put(subunit: string, func: string, value: string): void {
+    const verdict = this.client.send(subunit, func, value);
+    if (verdict instanceof Promise) {
+      this.verdicts.push(
+        (verdict as Promise<YncaSendVerdict>).then(
+          said => (said === "ok" ? undefined : new Error(`@${subunit}:${func}=${value} not taken (${said})`)),
+          (e: unknown) => (e instanceof Error ? e : new Error(errText(e))),
+        ),
+      );
+    }
   }
 
   /** Clear the window assembly — on a source switch, and when a freshly asked window starts arriving. */

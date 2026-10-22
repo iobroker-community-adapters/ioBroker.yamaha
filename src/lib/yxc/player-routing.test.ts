@@ -91,13 +91,29 @@ describe("YxcPlayerRouting", () => {
   test("the idle zones get the cleared block — only on a device with a media player", () => {
     const { routing: r, writes } = routing();
     r.noteInput("main", "cd");
+    r.noteInput("zone2", "hdmi1");
     r.route("cd", []);
-    r.clearIdle();
+    r.clearIdle(new Set(["netusb", "cd"]));
     expect(writes.some(write => write.id.startsWith("player."))).toBe(false);
     expect(writes).toContainEqual({ id: "multiroom.zone2.player.source", value: "" });
     const tunerOnly = routing(["main"], ["tuner"]);
-    tunerOnly.routing.clearIdle();
+    tunerOnly.routing.clearIdle(new Set(["tuner"]));
     expect(tunerOnly.writes).toEqual([]);
+  });
+
+  // Fleet suite D6 (2026-10-22, Y-01): a 500 to the first play info emptied the now-playing block of a playing zone —
+  // with the play info missing, which zone plays the network source is unknown, and an unknown is no "idle".
+  test("no block is cleared while a media source did not answer, nor a zone whose input is unknown", () => {
+    const { routing: r, writes } = routing();
+    r.noteInput("main", "net_radio");
+    r.noteInput("zone2", "hdmi1");
+    r.clearIdle(new Set(["cd"]));
+    expect(writes).toEqual([]);
+    const unknown = routing();
+    unknown.routing.noteInput("main", "hdmi1");
+    unknown.routing.clearIdle(new Set(["netusb", "cd"]));
+    expect(unknown.writes.some(write => write.id.startsWith("multiroom.zone2."))).toBe(false);
+    expect(unknown.writes).toContainEqual({ id: "player.source", value: "" });
   });
 
   test("a recall goes to the zone listening to its source, main first, main as the fallback", () => {

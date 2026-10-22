@@ -150,6 +150,29 @@ describe("YamahaYxcClient real transport", () => {
     }
   });
 
+  // Fleet suite D21 (2026-10-22): calls 2.6 s after a 429 with retry-after 60 — the host is held, nothing goes out.
+  test("a host that answered 429 gets no further call before its retry-after", async () => {
+    let calls = 0;
+    const server = createServer((_req, res) => {
+      calls++;
+      res.statusCode = 429;
+      res.setHeader("Retry-After", "60");
+      res.end();
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const { port } = server.address() as AddressInfo;
+    try {
+      const client = new YamahaYxcClient(`127.0.0.1:${port}`);
+      await expect(client.getStatus("main")).rejects.toMatchObject({ statusCode: 429, retryAfter: "60" });
+      await expect(client.getStatus("main")).rejects.toMatchObject({ statusCode: 429 });
+      await expect(client.setAutoPowerStandby(true)).rejects.toMatchObject({ statusCode: 429 });
+    } finally {
+      server.close();
+    }
+    expect(calls).toBe(1);
+  });
+
   // A chunk that ends inside "Ä" turned "Die Ärzte" into "Die ��rzte" (audit 2026-09-24, C5).
   test("a multi-byte character split across two TCP chunks arrives intact", async () => {
     const body = Buffer.from(JSON.stringify({ response_code: 0, artist: "Die Ärzte – Schrei nach Liebe ♪" }), "utf8");

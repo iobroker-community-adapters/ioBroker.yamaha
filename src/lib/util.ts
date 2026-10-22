@@ -90,10 +90,12 @@ export class HttpStatusError extends Error {
   /**
    * @param message the error message
    * @param statusCode the HTTP status the device answered with
+   * @param retryAfter the answer's `Retry-After` — how long a 429 asks the caller to wait
    */
   public constructor(
     message: string,
     public readonly statusCode: number,
+    public readonly retryAfter?: string,
   ) {
     super(message);
     this.name = "HttpStatusError";
@@ -126,7 +128,14 @@ export function readDeviceResponse(res: IncomingMessage, what: string): Promise<
     res.on("end", () => {
       const status = res.statusCode;
       if (status !== undefined && (status < 200 || status >= 300)) {
-        reject(new HttpStatusError(`device refused ${what} (HTTP ${status})`, status));
+        const retryAfter = res.headers?.["retry-after"];
+        reject(
+          new HttpStatusError(
+            `device refused ${what} (HTTP ${status})`,
+            status,
+            typeof retryAfter === "string" ? retryAfter : undefined,
+          ),
+        );
         return;
       }
       resolve(body.text());

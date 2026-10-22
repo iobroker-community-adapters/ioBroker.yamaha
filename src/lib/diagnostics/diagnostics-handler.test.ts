@@ -240,10 +240,9 @@ describe("YamahaReportSource", () => {
   it("says when the device is not connected instead of failing", async () => {
     const host = makeHost({ devices: [device({ connected: false, capture: () => Promise.resolve(undefined) })] });
     const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
-    expect(JSON.parse(answer.content).connection).toEqual({
-      note: "not connected — no live read",
-      ownersAtLastConnection: null,
-    });
+    const report = JSON.parse(answer.content) as { liveRead: string; connection: unknown };
+    expect(report.liveRead).toBe("not connected");
+    expect(report.connection).toEqual({ liveError: null, ownersAtLastConnection: null });
   });
 
   // Server test 2026-10-06: a receiver without power since the evening before, the adapter restarted in the morning —
@@ -357,9 +356,9 @@ describe("YamahaReportSource", () => {
       });
     const host = makeHost({ devices: [device({ capture })] });
     const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
-    const report = JSON.parse(answer.content) as { liveRead: string; connection: { note: string } };
+    const report = JSON.parse(answer.content) as { liveRead: string; connection: { liveError: string } };
     expect(report.liveRead).toBe("failed");
-    expect(report.connection.note).toBe("live read failed: the device answered nothing");
+    expect(report.connection.liveError).toBe("noAnswer");
   });
 
   it("counts a refusal, a line or a description as an answer, a transport failure not", () => {
@@ -374,7 +373,7 @@ describe("YamahaReportSource", () => {
   it("says why the live read failed, and still hands back the report", async () => {
     const host = makeHost({ devices: [device({ capture: () => Promise.reject(new Error("socket hang up")) })] });
     const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
-    expect(JSON.parse(answer.content).connection.note).toBe("live read failed: socket hang up");
+    expect(JSON.parse(answer.content).connection.liveError).toBe("socket hang up");
   });
 });
 

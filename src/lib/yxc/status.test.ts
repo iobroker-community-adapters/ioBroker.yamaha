@@ -104,6 +104,16 @@ describe("parseYxcStatus", () => {
   });
 });
 
+describe("parseYxcStatus on a drifted answer (fleet suite D6/C26b, Y-01)", () => {
+  test("a field gone, null or of another type writes nothing; an empty word stays the device's nothing", () => {
+    const u = parseYxcStatus({ power: null, input: 0, mute: "maybe", volume: "35", sound_program: "" }, "zone2");
+    expect(u.map(update => update.id)).not.toContain("multiroom.zone2.power");
+    expect(u.map(update => update.id)).not.toContain("multiroom.zone2.input");
+    expect(u.map(update => update.id)).not.toContain("multiroom.zone2.mute");
+    expect(u.every(update => update.value !== null || update.id.endsWith("soundProgram"))).toBe(true);
+  });
+});
+
 describe("parseYxcSignalInfo (capture-verified shape)", () => {
   test("parseYxcSignalInfo maps the audio block onto the zone's sound states", () => {
     // The captured RX-V6A getSignalInfo shape.

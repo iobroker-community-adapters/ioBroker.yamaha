@@ -82,7 +82,7 @@ describe("every XML write says what became of it (review 2026-10-05, A3)", () =>
       "<Menu_Name>NET RADIO</Menu_Name><Current_List><Line_1><Txt>Bookmarks</Txt><Attribute>Container</Attribute></Line_1>" +
       "</Current_List><Cursor_Position><Current_Line>1</Current_Line><Max_Line>1</Max_Line></Cursor_Position></List_Info></NET_RADIO></YAMAHA_AV>";
     await h.controller.start();
-    expect(h.controller.handleWrite("player.browse.source", "netRadio")).toBe("sent");
+    expect(await h.controller.handleWrite("player.browse.source", "netRadio")).toBe("sent");
     expect(h.controller.handleWrite("player.browse.source", "bluetooth")).toBe("unavailable");
     expect(h.controller.handleWrite("remote.cursor", "up")).toBe("sent");
     expect(h.controller.handleWrite("remote.cursor", "sideways")).toBe("unavailable");

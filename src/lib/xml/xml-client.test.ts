@@ -187,6 +187,16 @@ describe("XmlClient default HTTP poster", () => {
     httpMock.status = 200;
   });
 
+  // Fleet suite D21 (2026-10-22): a 429 holds the host for every XML call, the POST and the description GET alike.
+  test("a host that answered 429 gets no further call before its retry-after", async () => {
+    httpMock.status = 429;
+    const client = new XmlClient("192.0.2.99");
+    await expect(client.getDescriptor()).rejects.toMatchObject({ statusCode: 429 });
+    await expect(client.getStatus("Main_Zone")).rejects.toMatchObject({ statusCode: 429 });
+    await expect(client.getDescriptor()).rejects.toMatchObject({ statusCode: 429 });
+    expect(httpMock.requests).toHaveLength(1);
+  });
+
   test("POSTs the body to the receiver's control endpoint on port 80", async () => {
     httpMock.body = "<Model_Name>RX-V771</Model_Name>";
     await expect(new XmlClient("192.168.1.10").getSystemConfig()).resolves.toEqual({ model: "RX-V771" });

@@ -412,6 +412,20 @@ describe("YxcDeviceController", () => {
     expect(again.objects).toContain("living.advanced.autoPowerStandby");
   });
 
+  // Fleet suite D6/C26b (2026-10-22, Y-01): a drifted getFuncStatus emptied advanced.autoPowerStandby.
+  test("a device-wide setting the answer sends as null or of another type keeps its value", async () => {
+    const s = setup(wx10, ysp);
+    s.client.funcStatus = { auto_power_standby: true };
+    await s.controller.start();
+    expect(s.acks).toContainEqual({ id: "living.advanced.autoPowerStandby", value: true });
+    for (const drifted of [null, "maybe", {}]) {
+      const again = setup(wx10, ysp);
+      again.client.funcStatus = { auto_power_standby: drifted };
+      await again.controller.start();
+      expect(again.acks.filter(ack => ack.id === "living.advanced.autoPowerStandby")).toEqual([]);
+    }
+  });
+
   test("a write says what the device made of it — taken, refused, or not sendable", async () => {
     const s = setup(wx10, ysp);
     await s.controller.start();

@@ -74,6 +74,11 @@ export interface BrowseDriver {
   /** Go one menu level back. */
   back(): Promise<void> | void;
   /**
+   * The device's verdict on every step sent since the last call, for a driver whose steps go out without waiting for it
+   * (YNCA): rejects when the device did not take one. A driver whose steps settle with their verdict has none.
+   */
+  settled?(): Promise<void>;
+  /**
    * Play a folder line as a whole instead of opening it — only where the protocol can
    * (MusicCast); its presence creates `player.browse.playLine`.
    */

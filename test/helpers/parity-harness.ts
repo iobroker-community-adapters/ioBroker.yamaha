@@ -8,7 +8,7 @@ import { TransportConnectionAdapter } from "../../src/lib/lifecycle/transport-co
 import { defaultFactory, YncaClient } from "../../src/lib/ynca/ynca-client";
 import { createSubunitCache } from "../../src/lib/ynca/subunit-cache";
 import { YncaDeviceController } from "../../src/lib/device-controller";
-import { defaultSend, YamahaYxcClient } from "../../src/lib/yxc/http-client";
+import { defaultSend, YamahaYxcClient, type YxcSend } from "../../src/lib/yxc/http-client";
 import { YxcDeviceController } from "../../src/lib/yxc/device-controller";
 import { PushLiveness } from "../../src/lib/yxc/push-liveness";
 import { defaultGetter, defaultPoster, XmlClient } from "../../src/lib/xml/xml-client";
@@ -39,6 +39,8 @@ export interface TransportTree {
   objects: Map<string, ObjectDef>;
   /** The last value the controller reported per canonical id. */
   values: Map<string, unknown>;
+  /** Whether the protocol connected (false only where a failed connect may return, `answers.mayFail`). */
+  connected: boolean;
 }
 
 /**
@@ -86,12 +88,17 @@ export async function startFixtures(): Promise<{ devices: FixtureDevice[]; stop:
  * @param device the fixture device
  * @param transport the protocol
  * @param recorder a diagnostics trail listening at the protocol's wire seam, as the adapter wires it
+ * @param answers how the MusicCast answers reach the client (a wrong answer played in), and whether a protocol that
+ *   does not connect then still returns what it reported
+ * @param answers.send wraps the MusicCast send
+ * @param answers.mayFail a connect that fails returns what was reported instead of throwing
  * @returns the canonical objects and values
  */
 export async function readTransport(
   device: FixtureDevice,
   transport: Transport,
   recorder?: TrafficRecorder,
+  answers: { send?: (send: YxcSend) => YxcSend; mayFail?: boolean } = {},
 ): Promise<TransportTree> {
   const values = new Map<string, unknown>();
   const adapter = new TransportConnectionAdapter(transport, device.id, (id, value) =>
@@ -121,7 +128,11 @@ export async function readTransport(
         ...common,
         client: new YamahaYxcClient(
           device.ip,
-          recorder ? recordedYxcSend(defaultSend(device.ip), recorder) : undefined,
+          recorder
+            ? recordedYxcSend(defaultSend(device.ip), recorder)
+            : answers.send
+              ? answers.send(defaultSend(device.ip))
+              : undefined,
           gate,
         ),
         gate,
@@ -157,7 +168,8 @@ export async function readTransport(
     );
   }
   try {
-    if (!(await adapter.connect())) {
+    const connected = answers.mayFail ? await adapter.connect().catch(() => false) : await adapter.connect();
+    if (!connected && !answers.mayFail) {
       throw new Error(`${device.id}/${transport} did not connect`);
     }
     const objects = new Map(adapter.buildObjects().map(def => [def.id, def] as const));
@@ -166,7 +178,7 @@ export async function readTransport(
     for (const [id, value] of reported) {
       values.set(id, value);
     }
-    return { objects, values };
+    return { objects, values, connected };
   } finally {
     adapter.close();
   }

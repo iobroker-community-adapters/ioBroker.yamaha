@@ -126,12 +126,7 @@ export class DeviceSupervisor {
       // used to get here — the handle logs the same way when only ITS transport is down.
       if (!ack) {
         this.deps.log.debug(`${fullStateId}: write dropped — the device is offline`);
-        this.deps.recorder?.command(
-          fullStateId.slice(fullStateId.indexOf(".") + 1),
-          value,
-          [],
-          "the device is offline — dropped",
-        );
+        this.deps.recorder?.command(fullStateId.slice(fullStateId.indexOf(".") + 1), value, [], "droppedOffline");
       }
       return;
     }

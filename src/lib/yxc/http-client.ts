@@ -3,6 +3,7 @@ import type { CommandGate, CommandPriority } from "../lifecycle/command-gate";
 import { HttpStatusError, readDeviceResponse } from "../util";
 import { errText } from "../err-text";
 import { localAddressOption } from "../source-address";
+import { HOST_HOLD } from "../host-hold";
 
 /**
  * Whether a command path changes something on the device (as opposed to reading). The MusicCast API
@@ -193,45 +194,56 @@ export interface YxcClientInfo {
  * @returns a send function bound to that device
  */
 export function defaultSend(ip: string): YxcSend {
-  return (command, body) =>
-    new Promise((resolve, reject) => {
-      const url = `http://${ip}${API_BASE}${command}`;
-      const transportFailure = (e: Error): void => reject(new YxcTransportError(command, e));
-      const onResponse = (res: IncomingMessage): void => {
-        // Bytes decoded once ("Die Ärzte" arrived as "Die ��rzte", audit 2026-09-24 C5), capped, and the
-        // status judged: an error page is the device's (or its booting web server's) answer, never JSON
-        // to parse — it travels as `HttpStatusError`, which is no lost connection.
-        readDeviceResponse(res, command).then(
-          text => {
-            try {
-              resolve(assertOk(JSON.parse(text), command));
-            } catch (e) {
-              reject(e instanceof Error ? e : new Error(errText(e)));
-            }
-          },
-          (e: Error) => (e instanceof HttpStatusError ? reject(e) : transportFailure(e)),
-        );
-      };
-      const req =
-        body === undefined
-          ? httpGet(url, { headers: { ...YXC_SUBSCRIPTION_HEADERS }, ...localAddressOption() }, onResponse)
-          : httpRequest(
-              url,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json", ...YXC_SUBSCRIPTION_HEADERS },
-                ...localAddressOption(),
-              },
-              onResponse,
-            );
-      // Refused, reset, unreachable — and the timeout below, which destroys the request with
-      // its own error and lands here too. All of them: no device answered.
-      req.on("error", transportFailure);
-      req.setTimeout(requestTimeoutFor(command), () => req.destroy(new Error(`YXC request timed out: ${command}`)));
-      if (body !== undefined) {
-        req.end(body);
-      }
-    });
+  return (command, body) => HOST_HOLD.run(ip, command, () => sendOnce(ip, command, body));
+}
+
+/**
+ * Send one command over node:http (see {@link defaultSend}) — past the host's hold.
+ *
+ * @param ip the device IP or hostname
+ * @param command the command path
+ * @param body the JSON body of a POST
+ * @returns the parsed answer
+ */
+function sendOnce(ip: string, command: string, body?: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const url = `http://${ip}${API_BASE}${command}`;
+    const transportFailure = (e: Error): void => reject(new YxcTransportError(command, e));
+    const onResponse = (res: IncomingMessage): void => {
+      // Bytes decoded once ("Die Ärzte" arrived as "Die ��rzte", audit 2026-09-24 C5), capped, and the
+      // status judged: an error page is the device's (or its booting web server's) answer, never JSON
+      // to parse — it travels as `HttpStatusError`, which is no lost connection.
+      readDeviceResponse(res, command).then(
+        text => {
+          try {
+            resolve(assertOk(JSON.parse(text), command));
+          } catch (e) {
+            reject(e instanceof Error ? e : new Error(errText(e)));
+          }
+        },
+        (e: Error) => (e instanceof HttpStatusError ? reject(e) : transportFailure(e)),
+      );
+    };
+    const req =
+      body === undefined
+        ? httpGet(url, { headers: { ...YXC_SUBSCRIPTION_HEADERS }, ...localAddressOption() }, onResponse)
+        : httpRequest(
+            url,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...YXC_SUBSCRIPTION_HEADERS },
+              ...localAddressOption(),
+            },
+            onResponse,
+          );
+    // Refused, reset, unreachable — and the timeout below, which destroys the request with
+    // its own error and lands here too. All of them: no device answered.
+    req.on("error", transportFailure);
+    req.setTimeout(requestTimeoutFor(command), () => req.destroy(new Error(`YXC request timed out: ${command}`)));
+    if (body !== undefined) {
+      req.end(body);
+    }
+  });
 }
 
 /**

@@ -342,3 +342,42 @@ describe("the 2015 generation's zone-wide pad (@MAIN:CURSOR / @MAIN:MENU, RX-A85
     expect(debugLines.filter(line => line.includes("rendering the window failed"))).toHaveLength(2);
   });
 });
+
+// Fleet suite D9 (2026-10-22): a menu step counts as done only once the receiver took it — the engine confirms the
+// button on that, never on a line the receiver refused or left unanswered.
+describe("a menu step settles on the receiver's verdict", () => {
+  function verdictSetup(verdict: "ok" | "restricted" | "unclear" | "skipped"): YncaBrowseDriver {
+    return new YncaBrowseDriver(
+      { send: () => Promise.resolve(verdict), get: (): void => {} },
+      new Set(["NETRADIO"]),
+      instantDelay,
+    );
+  }
+
+  test("steps the receiver took settle", async () => {
+    const driver = verdictSetup("ok");
+    driver.open("netRadio");
+    driver.pageDown();
+    driver.back();
+    await expect(driver.settled()).resolves.toBeUndefined();
+  });
+
+  test.each(["restricted", "unclear", "skipped"] as const)("a step that ended %s is no taken step", async verdict => {
+    const driver = verdictSetup(verdict);
+    driver.open("netRadio");
+    await expect(driver.settled()).rejects.toThrow(`@MAIN:INP=NET RADIO not taken (${verdict})`);
+    driver.pageUp();
+    await expect(driver.settled()).rejects.toThrow(`@NETRADIO:LISTPAGE=Up not taken (${verdict})`);
+    await expect(driver.settled()).resolves.toBeUndefined();
+  });
+
+  test("a client whose send rejects leaves an error, never an unhandled rejection", async () => {
+    const driver = new YncaBrowseDriver(
+      { send: () => Promise.reject(new Error("socket closed")), get: (): void => {} },
+      new Set(["NETRADIO"]),
+      instantDelay,
+    );
+    driver.open("netRadio");
+    await expect(driver.settled()).rejects.toThrow("socket closed");
+  });
+});

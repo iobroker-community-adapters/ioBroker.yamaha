@@ -817,12 +817,12 @@ export class Yamaha extends utils.Adapter {
           pushLiveness,
           signal,
         ).catch((e: unknown) => {
-          recorder.connection("attempt failed", { error: errText(e), failedInARow: failedInARow + 1 });
+          recorder.connection("attemptFailed", { error: errText(e), failedInARow: failedInARow + 1 });
           throw e;
         });
         failedInARow = handle ? 0 : failedInARow + 1;
         if (!handle) {
-          recorder.connection("no connection", { failedInARow });
+          recorder.connection("noConnection", { failedInARow });
         }
         return handle;
       },
@@ -2938,6 +2938,11 @@ export class Yamaha extends utils.Adapter {
         registerPush: (ip, onPush, deviceId) =>
           pushReceiver.register(ip, onPush, deviceId, packet => this.recorders.get(device.id)?.event(packet)),
         recorder: this.recorders.get(device.id),
+        confirmPress: id => {
+          if (alive()) {
+            void this.writeStateNow(`${device.id}.${id}`, false);
+          }
+        },
         pushActive: () => pushReceiver.isListening(),
         pushLiveness,
         firstReady: () => {

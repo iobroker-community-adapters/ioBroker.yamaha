@@ -46,6 +46,27 @@ export function readWord(raw: unknown): string | null {
 }
 
 /**
+ * What an answer reports for a catalog field: the read value; `null` only for the device's explicit "nothing" (an empty
+ * word); `undefined` — nothing is written — for a field the answer leaves out, sends as `null` or in a form the reader
+ * does not take. A drifted answer emptied power, inputs and settings that held a value (fleet suite D6/C26b,
+ * 2026-10-22; Y-01) — a broken answer is no news about the receiver.
+ *
+ * @param raw the field as the answer carries it
+ * @param read the field's reader
+ * @returns the value to write, or undefined to write nothing
+ */
+export function reported<T>(raw: unknown, read: (raw: unknown) => T | null): T | null | undefined {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  const value = read(raw);
+  if (value !== null) {
+    return value;
+  }
+  return typeof raw === "string" && raw.trim() === "" ? null : undefined;
+}
+
+/**
  * The one gate of a value written to a datapoint, by the datapoint's type: a switch takes the words and numbers
  * a script writes for what they mean (`coerceBool`), a number takes the strict number rule and the grid the device
  * declares (`snapToGrid` — outside the declared range nothing is sent), a word is trimmed text (a number written

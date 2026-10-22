@@ -1662,10 +1662,49 @@ describe("MultiTransportHandle — the diagnostics trail", () => {
     const events = recorder.snapshot().connectionHistory.map(({ at: _at, ...event }) => event);
     expect(events).toEqual(
       expect.arrayContaining([
-        { event: "transport dropped", transport: "xml", reason: "3 polls failed" },
-        { event: "liveness check", after: "xml", asked: ["ynca"] },
-        { event: "transport back", transport: "xml" },
+        { event: "transportDropped", transport: "xml", reason: "3 polls failed" },
+        { event: "livenessCheck", after: "xml", asked: ["ynca"] },
+        { event: "transportBack", transport: "xml" },
       ]),
     );
+  });
+});
+
+// Fleet suite D9 (2026-10-22: 130 of 130 buttons stuck at true): a pressed button falls back to false, confirmed — but
+// only once the device took the press. A refusal, no answer or a press that never went out leaves it as written.
+describe("a pressed button falls back once the device took it (D9)", () => {
+  function pressSetup(outcome: WriteOutcome): { confirmed: string[]; press: () => Promise<void> } {
+    const ynca = fakeConn("ynca", [
+      state("player.next", "Next", { type: "boolean", role: "button.next", read: false }),
+      state("volume", "Volume"),
+    ]);
+    ynca.outcome = outcome;
+    const confirmed: string[] = [];
+    const handle = new MultiTransportHandle("living", [ynca], {
+      upsertObject: () => Promise.resolve(),
+      log: silentLog,
+      confirmPress: id => confirmed.push(id),
+    });
+    return {
+      confirmed,
+      press: async () => {
+        await handle.start();
+        handle.handleStateChange("living.player.next", false, true);
+        handle.handleStateChange("living.volume", false, -30);
+        await new Promise(resolve => setImmediate(resolve));
+      },
+    };
+  }
+
+  test("a press the device took is confirmed; a write to a value datapoint is not a press", async () => {
+    const { confirmed, press } = pressSetup("sent");
+    await press();
+    expect(confirmed).toEqual(["player.next"]);
+  });
+
+  test.each(["refused", "unavailable", "unclear"] as const)("a press that ended %s stays as written", async outcome => {
+    const { confirmed, press } = pressSetup(outcome);
+    await press();
+    expect(confirmed).toEqual([]);
   });
 });

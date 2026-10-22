@@ -11,6 +11,7 @@ import {
 import type { CommandGate, CommandPriority } from "../lifecycle/command-gate";
 import { readDeviceResponse } from "../util";
 import { localAddressOption } from "../source-address";
+import { HOST_HOLD } from "../host-hold";
 
 /** The receiver's XML control endpoint. */
 const CONTROL_PATH = "/YamahaRemoteControl/ctrl";
@@ -49,6 +50,17 @@ function readResponse(res: IncomingMessage, resolve: (body: string) => void, rej
  * @returns the response body
  */
 export function defaultPoster(ip: string, payload: string): Promise<string> {
+  return HOST_HOLD.run(ip, CONTROL_PATH, () => postOnce(ip, payload));
+}
+
+/**
+ * POST one XML body over node:http (see {@link defaultPoster}) — past the host's hold.
+ *
+ * @param ip the device IP
+ * @param payload the XML request body
+ * @returns the response body
+ */
+function postOnce(ip: string, payload: string): Promise<string> {
   return new Promise((resolve, reject) => {
     // Content-Length, not chunked: without a length header node streams the body with
     // `Transfer-Encoding: chunked`, and the 2000s-era firmware this transport exists for
@@ -82,6 +94,17 @@ export function defaultPoster(ip: string, payload: string): Promise<string> {
  * @returns the response body
  */
 export function defaultGetter(ip: string, path: string): Promise<string> {
+  return HOST_HOLD.run(ip, path, () => getOnce(ip, path));
+}
+
+/**
+ * GET one file over node:http (see {@link defaultGetter}) — past the host's hold.
+ *
+ * @param ip the device IP
+ * @param path the path to fetch
+ * @returns the response body
+ */
+function getOnce(ip: string, path: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = request(
       { host: ip, port: 80, ...localAddressOption(), path, method: "GET", timeout: REQUEST_TIMEOUT_MS },
