@@ -633,7 +633,9 @@ Die Suiten kamen mit dem Vorlage-Merge; der erste Lauf fand sechs Adapterfehler.
 - **D9 mit GV-13:** eine Taste fällt auf false/ack zurück, sobald das Gerät ihren Druck beantwortet hat — genommen
   (`sent`) oder abgelehnt (`refused`); ein unbeantworteter (`unclear`) oder nie gesendeter Druck (`unavailable`) bleibt wie
   geschrieben, denn nur das Gerät bestätigt (`routeWrite` → `confirmPress`; die Suite drückt alle auf einmal, Frist 15 s;
-  `press-all-buttons.test.ts` misst beides). Menüschritte reihen sich ein statt verworfen zu werden; die `BrowseEngine`
+  `press-all-buttons.test.ts` misst beides). Seit Werkbank-Runde 142 drückt D9 jede danach noch unbestätigte Taste einzeln
+  nach und lässt sie true/ack:false stehen, wenn nur der Druck sie schrieb, kein Aufruf in ihrem Kontext lief und ein
+  Fenster von 1 s ohne jeden Aufruf blieb (vom Adapter selbst verworfen, GV-13) — D9 dauert dadurch rund 110 s. Menüschritte reihen sich ein statt verworfen zu werden; die `BrowseEngine`
   antwortet erst nach dem Lauf (`sent`, `unclear` bei einem Fehler), YNCA-Schritte holen das Urteil über `settled()`, und
   ein Schritt ohne offenes Menü (`isOpen()` des Treibers) ist `unavailable` — jeder Treiber sendet dann nichts.
 - **D6/C26b (Y-01):** eine falsche MusicCast-Antwort schreibt nichts — ein fehlendes, `null`- oder falsch typisiertes Feld
