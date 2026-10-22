@@ -239,7 +239,7 @@ describe("YxcBrowseDriver", () => {
     expect(calls.filter(call => call[0] === "getListInfo").pop()?.[1][1]).toBe(0);
 
     calls.length = 0;
-    void engine.handleWrite("player.browse.path", "Entry 1>Radio Paradise");
+    engine.handleWrite("player.browse.path", "Entry 1>Radio Paradise");
     await vi.waitFor(() => expect(calls).toContainEqual(["setListControl", ["play", 0]]));
     expect(warns).toEqual([]);
     expect(calls).toContainEqual(["setListControl", ["select", 0]]);

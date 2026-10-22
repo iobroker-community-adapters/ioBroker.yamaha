@@ -748,22 +748,38 @@ export class YncaDeviceController {
     // values the sweep routed before the block stood went nowhere.
     const asked = new Set<string>();
     for (const zone of zones) {
-      const source = this.players.source(zone.key);
-      const sourceId = `${zone.prefix}player.source`;
-      if (!this.seeded.has(sourceId)) {
-        this.seeded.add(sourceId);
-        this.deps.setStateAck(
-          `${this.deviceId}.${sourceId}`,
-          source !== undefined ? (this.players.heard(zone.key) ?? "") : "",
-        );
-      }
-      if (source === undefined) {
-        this.clearBlock(zone.prefix, id => !this.seeded.has(id));
-      } else if (askNew && fresh.includes(zone)) {
+      const source = this.seedZone(zone);
+      if (source !== undefined && askNew && fresh.includes(zone)) {
         asked.add(source);
       }
     }
     asked.forEach(source => this.askSource(source));
+  }
+
+  /**
+   * Seed a zone's block once — its source display, and the cleared block of a zone that plays no media source — but
+   * only once its input is known: an input not known yet is no "plays nothing", and seeded empty, a zone whose input
+   * read failed lost what it showed (Y-01; the same rule as MusicCast's `clearIdle`, fleet suite D6/C26b 2026-10-22).
+   * A zone whose input comes later is seeded when it comes ({@link handleInputSwitch}).
+   *
+   * @param zone the zone
+   * @returns the player subunit the zone plays, if it plays one
+   */
+  private seedZone(zone: (typeof YNCA_ZONES)[number]): string | undefined {
+    const heard = this.players.heard(zone.key);
+    if (heard === undefined) {
+      return undefined;
+    }
+    const source = this.players.source(zone.key);
+    const sourceId = `${zone.prefix}player.source`;
+    if (!this.seeded.has(sourceId)) {
+      this.seeded.add(sourceId);
+      this.deps.setStateAck(`${this.deviceId}.${sourceId}`, source !== undefined ? heard : "");
+    }
+    if (source === undefined) {
+      this.clearBlock(zone.prefix, id => !this.seeded.has(id));
+    }
+    return source;
   }
 
   /**
@@ -855,12 +871,23 @@ export class YncaDeviceController {
       }
       this.clearBlock(zone.prefix);
       const source = this.players.source(key);
+      this.seeded.add(`${zone.prefix}player.source`);
       this.deps.setStateAck(
         `${this.deviceId}.${zone.prefix}player.source`,
         source === undefined ? "" : (this.players.heard(key) ?? ""),
       );
       if (source !== undefined) {
         asked.add(source);
+      }
+    }
+    // A zone whose input was not known when its block was put up is seeded now that it is (see seedZone).
+    for (const key of this.players.blockZones) {
+      const zone = YNCA_ZONES.find(z => z.key === key);
+      if (zone && !this.seeded.has(`${zone.prefix}player.source`)) {
+        const source = this.seedZone(zone);
+        if (source !== undefined) {
+          asked.add(source);
+        }
       }
     }
     asked.forEach(source => this.askSource(source));

@@ -160,41 +160,41 @@ describe("BrowseEngine", () => {
 
   it("routes the writes to the driver and validates the inputs", async () => {
     const { engine, driver } = setup();
-    void engine.handleWrite("player.browse.source", "netRadio");
-    void engine.handleWrite("player.browse.source", "spotify"); // not offered → ignored
+    engine.handleWrite("player.browse.source", "netRadio");
+    engine.handleWrite("player.browse.source", "spotify"); // not offered → ignored
     await flush();
-    void engine.handleWrite("player.browse.selectLine", 3);
+    engine.handleWrite("player.browse.selectLine", 3);
     await flush();
-    void engine.handleWrite("player.browse.selectLine", 9); // out of window → ignored
+    engine.handleWrite("player.browse.selectLine", 9); // out of window → ignored
     // A switch widget's `true` and a hex string are no line numbers (the one number gate; audit 2026-09-29, D14).
-    void engine.handleWrite("player.browse.selectLine", true);
-    void engine.handleWrite("player.browse.selectLine", "0x1");
-    void engine.handleWrite("player.browse.pageDown", true);
+    engine.handleWrite("player.browse.selectLine", true);
+    engine.handleWrite("player.browse.selectLine", "0x1");
+    engine.handleWrite("player.browse.pageDown", true);
     await flush();
-    void engine.handleWrite("player.browse.back", true);
+    engine.handleWrite("player.browse.back", true);
     await flush();
-    void engine.handleWrite("player.browse.home", true);
+    engine.handleWrite("player.browse.home", true);
     await flush();
     expect(driver.calls).toEqual(["open:netRadio", "select:3", "pageDown", "back", "home"]);
   });
 
   it("a playLine write plays the folder on that line — only where the driver can", async () => {
     const { engine, driver } = setup();
-    void engine.handleWrite("player.browse.playLine", 2); // this driver cannot → nothing
+    engine.handleWrite("player.browse.playLine", 2); // this driver cannot → nothing
     await flush();
     expect(driver.calls).toEqual([]);
     const played: number[] = [];
     Object.assign(driver, { playContainer: (line: number): void => void played.push(line) });
-    void engine.handleWrite("player.browse.playLine", 2);
+    engine.handleWrite("player.browse.playLine", 2);
     await flush();
-    void engine.handleWrite("player.browse.playLine", 9); // out of window → ignored
+    engine.handleWrite("player.browse.playLine", 9); // out of window → ignored
     await flush();
     expect(played).toEqual([2]);
   });
 
   it("acknowledges the source state after a successful open", async () => {
     const { engine, emitted } = setup();
-    void engine.handleWrite("player.browse.source", "usb");
+    engine.handleWrite("player.browse.source", "usb");
     await flush();
     expect(emitted).toContainEqual({ id: "player.browse.source", value: "usb" });
   });
@@ -214,7 +214,7 @@ describe("BrowseEngine", () => {
       totalItems: 1,
       rows: [{ line: 1, text: "Radio Paradise", kind: "item" }],
     });
-    void engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
+    engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
     await flush();
     // After selecting "Bookmarks" the select-window becomes the level-2 menu, whose
     // line 1 is the final segment.
@@ -237,7 +237,7 @@ describe("BrowseEngine", () => {
     driver.engine = engine;
     driver.onOp.home = window({ layer: 1, totalItems: 1, rows: [{ line: 1, text: "Bookmarks", kind: "folder" }] });
     driver.onOp.select = window({ layer: 2, totalItems: 1, rows: [{ line: 1, text: "Radio Paradise", kind: "item" }] });
-    void engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
+    engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
     await flush();
     expect(driver.calls).toEqual(["home", "select:1", "select:1"]);
     expect(waited.reduce((sum, ms) => sum + ms, 0)).toBe(0);
@@ -268,7 +268,7 @@ describe("BrowseEngine", () => {
         pending = level2;
       }
     };
-    void engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
+    engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
     await flush();
     expect(driver.calls).toEqual(["home", "select:1", "select:1"]);
     expect(waited).toEqual([250]);
@@ -289,7 +289,7 @@ describe("BrowseEngine", () => {
       currentLine: 9,
       rows: [{ line: 1, text: "Target", kind: "item" }],
     });
-    void engine.handleWrite("player.browse.path", "Target");
+    engine.handleWrite("player.browse.path", "Target");
     await flush();
     expect(driver.calls).toEqual(["home", "pageDown", "select:1"]);
   });
@@ -304,53 +304,53 @@ describe("BrowseEngine", () => {
     });
     driver.engine = engine;
     driver.onOp.home = window({ layer: 1, totalItems: 1, rows: [{ line: 1, text: "Other", kind: "folder" }] });
-    void engine.handleWrite("player.browse.path", "Missing");
+    engine.handleWrite("player.browse.path", "Missing");
     await flush();
     expect(driver.calls).toEqual(["home"]);
     expect(warned.some(message => message.includes('"Missing" not found'))).toBe(true);
   });
 
-  // Fleet suite D9 (2026-10-22): every button pressed at once — a press dropped behind another operation never ran,
-  // and its button never fell back. A write while another operation runs now waits its turn.
-  it("queues a write while another operation runs, and answers each once it ran", async () => {
+  // Fleet suite D9 (2026-10-22): every button pressed at once — a press dropped behind another operation never ran.
+  // A write while another operation runs now waits its turn.
+  it("queues a write while another operation runs, and runs it after", async () => {
     const { engine, driver } = setup();
     let release: () => void = () => {};
     driver.open = () =>
       new Promise<void>(resolve => {
         release = resolve;
       });
-    const opened = engine.handleWrite("player.browse.source", "netRadio");
-    const back = engine.handleWrite("player.browse.back", true);
+    expect(engine.handleWrite("player.browse.source", "netRadio")).toBe("sent");
+    expect(engine.handleWrite("player.browse.back", true)).toBe("sent");
     await flush();
     expect(driver.calls).toEqual([]);
     release();
-    expect(await opened).toBe("sent");
-    expect(await back).toBe("sent");
+    await flush();
     expect(driver.calls).toEqual(["back"]);
   });
 
-  // `unclear`, not `unavailable`: the handle would hand it to the next protocol, whose menu is not on screen.
-  it("answers a step the device did not take as unclear, so no other protocol gets it", async () => {
+  // `sent`, never `unavailable`: the handle would hand it to the next protocol, whose menu is not on screen.
+  it("keeps a step the device did not take on this protocol and warns", async () => {
     const { engine, driver, warned } = setup();
     driver.back = () => Promise.reject(new Error("@NETRADIO:LISTCURSOR=Back not taken (restricted)"));
-    expect(await engine.handleWrite("player.browse.back", true)).toBe("unclear");
+    expect(engine.handleWrite("player.browse.back", true)).toBe("sent");
+    await flush();
     expect(warned.some(line => line.includes("back failed"))).toBe(true);
   });
 
-  // YNCA sends a step without waiting for the receiver; its verdict comes through `settled` — a press the receiver did
-  // not take must not be confirmed (fleet suite D9 and the confirmation rule: only the device confirms).
-  it("asks a driver whose steps go out unjudged for their verdict before it answers sent", async () => {
-    const { engine, driver } = setup();
+  // YNCA sends a step without waiting for the receiver; its verdict comes through `settled` — a step it did not take
+  // must not pass unseen.
+  it("asks a driver whose steps go out unjudged for their verdict and warns on a refusal", async () => {
+    const { engine, driver, warned } = setup();
     (driver as { settled?: () => Promise<void> }).settled = () =>
       Promise.reject(new Error("@NETRADIO:LISTCURSOR=Back not taken (restricted)"));
-    expect(await engine.handleWrite("player.browse.back", true)).toBe("unclear");
-    (driver as { settled?: () => Promise<void> }).settled = () => Promise.resolve();
-    expect(await engine.handleWrite("player.browse.back", true)).toBe("sent");
+    engine.handleWrite("player.browse.back", true);
+    await flush();
+    expect(warned.some(line => line.includes("not taken (restricted)"))).toBe(true);
   });
 
   it("flags busy around an operation", async () => {
     const { engine, emitted } = setup();
-    void engine.handleWrite("player.browse.back", true);
+    engine.handleWrite("player.browse.back", true);
     await flush();
     const busyValues = emitted.filter(e => e.id === "player.browse.busy").map(e => e.value);
     expect(busyValues).toEqual([true, false]);
@@ -372,7 +372,7 @@ describe("BrowseEngine path search — counted pages from the first", () => {
         { line: 2, text: "Target", kind: "item" },
       ],
     });
-    void engine.handleWrite("player.browse.path", "Target");
+    engine.handleWrite("player.browse.path", "Target");
     await flush();
     expect(driver.calls).toEqual(["home", "pageDown", "select:2"]);
     expect(warned).toEqual([]);
@@ -391,7 +391,7 @@ describe("BrowseEngine path search — counted pages from the first", () => {
       currentLine: 1,
       rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H"),
     });
-    void engine.handleWrite("player.browse.path", "B");
+    engine.handleWrite("player.browse.path", "B");
     await flush();
     expect(driver.calls).toEqual(["home", "pageUp", "select:2"]);
     expect(warned).toEqual([]);
@@ -403,7 +403,7 @@ describe("BrowseEngine path search — counted pages from the first", () => {
     const second = window({ totalItems: 16, currentLine: 11, rows: rowsOf("I", "J", "K", "L", "M", "N", "O", "P") });
     driver.onOp.home = second;
     driver.onOp.pageUp = second;
-    void engine.handleWrite("player.browse.path", "Missing");
+    engine.handleWrite("player.browse.path", "Missing");
     await flush();
     // One Page Up, and page 2 of 2 is the last one: no Page Down into nothing.
     expect(driver.calls).toEqual(["home", "pageUp"]);
@@ -418,7 +418,7 @@ describe("BrowseEngine path search — counted pages from the first", () => {
       currentLine: 9,
       rows: rowsOf("I", "J", "K", "L", "M", "N", "O", "P"),
     });
-    void engine.handleWrite("player.browse.path", "Missing");
+    engine.handleWrite("player.browse.path", "Missing");
     await flush();
     expect(driver.calls).toEqual(["home", "pageDown"]);
     expect(warned.some(message => message.includes('"Missing" not found'))).toBe(true);
@@ -428,7 +428,7 @@ describe("BrowseEngine path search — counted pages from the first", () => {
     const { engine, driver } = setup();
     driver.onOp.home = window({ totalItems: 40, currentLine: 1, rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H") });
     driver.onOp.pageDown = window({ totalItems: 40, currentLine: 9, rows: rowsOf("I", "J") });
-    void engine.handleWrite("player.browse.path", "Missing");
+    engine.handleWrite("player.browse.path", "Missing");
     await flush();
     expect(driver.calls).toEqual(["home", "pageDown"]);
   });
@@ -443,7 +443,7 @@ describe("BrowseEngine path search — counted pages from the first", () => {
       ],
     });
     // select produces NO window (a slow catalog service) — the wait for the next level times out.
-    void engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
+    engine.handleWrite("player.browse.path", "Bookmarks>Radio Paradise");
     for (let i = 0; i < 200; i++) {
       await flush();
     }
@@ -455,7 +455,7 @@ describe("BrowseEngine path search — counted pages from the first", () => {
   it("aborts when a page does not load while searching", async () => {
     const { engine, driver, warned } = setup();
     driver.onOp.home = window({ totalItems: 20, currentLine: 1, rows: rowsOf("A", "B", "C", "D", "E", "F", "G", "H") });
-    void engine.handleWrite("player.browse.path", "Z");
+    engine.handleWrite("player.browse.path", "Z");
     for (let i = 0; i < 200; i++) {
       await flush();
     }
@@ -512,7 +512,8 @@ describe("BrowseEngine — every write has an outcome, a dropped one a trace", (
     expect(engine.handleWrite("player.browse.selectLine", 2.5)).toBe("unavailable");
     expect(engine.handleWrite("player.browse.selectLine", 0)).toBe("unavailable");
     expect(engine.handleWrite("player.browse.selectLine", true)).toBe("unavailable");
-    expect(await engine.handleWrite("player.browse.selectLine", " 3 ")).toBe("sent");
+    expect(engine.handleWrite("player.browse.selectLine", " 3 ")).toBe("sent");
+    await flush();
     expect(driver.calls).toEqual(["select:3"]);
   });
 

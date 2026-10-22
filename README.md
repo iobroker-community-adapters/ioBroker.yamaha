@@ -83,7 +83,7 @@ an issue, attach the diagnostics report from the **Expert** tab of the instance 
 
 - (krobipd) Fixed: The "Object tree updated" log line always names both counts, created and removed
 - (krobipd) Fixed: A message the adapter does not know gets an error answer instead of none
-- (krobipd) Fixed: Remote and menu buttons fall back to false once the receiver took the press; presses made at once all run
+- (krobipd) Fixed: Buttons fall back to false after every press, and menu presses made at once all run
 - (krobipd) Fixed: A broken MusicCast answer no longer empties datapoints
 - (krobipd) Fixed: A receiver that answers 429 or keeps answering server errors is asked less often until it recovers
 - (krobipd) Fixed: The diagnostics report names why a receiver could not be read live

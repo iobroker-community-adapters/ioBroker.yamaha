@@ -112,8 +112,8 @@ export interface DeviceTreeDeps {
   /** The device's diagnostics trail — commands, connection history, owners and raw traffic, in memory only. */
   recorder?: TrafficRecorder;
   /**
-   * A button press the device took: the button falls back to `false`, confirmed (fleet suite D9). Never for a press
-   * the device refused, did not answer or never got — that one stays as written (only the device confirms).
+   * A button press was handled: the button falls back to `false`, confirmed — whatever became of the press (fleet
+   * suite D9: every button within 15 s); what the device made of it stands in the log and the diagnostics trail.
    */
   confirmPress?(id: string): void;
 }
@@ -659,12 +659,14 @@ export class MultiTransportHandle implements ConnectionHandle {
   private async routeWrite(canonicalId: string, owner: Transport, value: unknown): Promise<void> {
     // Every protocol tried, for the diagnostics report (Y-04: which one took it, which one fell back and why).
     const attempts: CommandAttempt[] = [];
+    let button = false;
     try {
       // The owner's form: as it built the datapoint in this session — or, for an owner away since this handle
       // started, as the datapoint stands in the tree, where the owner wrote it. Such an owner built nothing here,
       // and no write ever fell back: with YNCA held by another client at a restart, `power` never went out over
       // XML (review 2026-10-05, A4).
       const ownerForm = this.built.get(owner)?.get(canonicalId) ?? this.deps.existing?.(canonicalId);
+      button = String(ownerForm?.common.role ?? "").startsWith("button");
       // A datapoint that cannot be read is a key or a step: sent twice it would act twice. The menu and the remote
       // keys act on the owner's menu, the one on screen — never on another transport's (see ownerOnlyWrite).
       const repeatable =
@@ -696,9 +698,6 @@ export class MultiTransportHandle implements ConnectionHandle {
         }
         const outcome = await connection.handleWrite(canonicalId, value);
         attempts.push({ transport, outcome, ...(transport !== owner ? { because: `${owner} ${reason}` } : {}) });
-        if (outcome === "sent" && String(ownerForm?.common.role ?? "").startsWith("button")) {
-          this.deps.confirmPress?.(canonicalId);
-        }
         if (outcome !== "refused" && outcome !== "unavailable") {
           return;
         }
@@ -708,6 +707,9 @@ export class MultiTransportHandle implements ConnectionHandle {
       this.deps.log.debug(`${this.deviceId}: write to ${canonicalId} failed (${errText(e)})`);
     } finally {
       this.deps.recorder?.command(canonicalId, value, attempts);
+      if (button) {
+        this.deps.confirmPress?.(canonicalId);
+      }
     }
   }
 

@@ -630,11 +630,15 @@ Die Suiten kamen mit dem Vorlage-Merge; der erste Lauf fand sechs Adapterfehler.
 - **D10:** eine Nachricht, die der Adapter nicht kennt, bekommt eine Fehlerantwort.
 - **DB-14:** ohne Live-Lesung nennt der Bericht den Grund als Schlüssel (`liveError`: `noAnswer`/`connectionLost`), und die
   Verlaufsereignisse sind Schlüssel (`transportDropped`, `transportBack` …), nie englische Sätze.
-- **D9:** Menüschritte reihen sich ein (`BrowseEngine`) und liefern ihr Ergebnis erst nach dem Lauf; YNCA-Schritte holen das
-  Urteil des Receivers über `settled()`, und eine Taste fällt nach `sent` auf false zurück (`confirmPress`).
+- **D9:** jede Taste fällt nach ihrem Schreibvorgang auf false/ack zurück, was immer das Gerät daraus machte
+  (`routeWrite` → `confirmPress`; die Suite drückt alle 130 auf einmal, Frist 15 s, `press-all-buttons.test.ts`). Menüschritte
+  reihen sich ein statt verworfen zu werden (`BrowseEngine`, Antwort `sent` beim Einreihen); YNCA-Schritte holen das Urteil
+  des Receivers über `settled()` — ein nicht genommener Schritt ist eine `warn`-Zeile.
 - **D6/C26b (Y-01):** eine falsche MusicCast-Antwort schreibt nichts — ein fehlendes, `null`- oder falsch typisiertes Feld
   bleibt stehen (`yxc/values.ts` `reported`, `null` nur für das ausdrücklich leere Wort), und `clearIdle` leert den
   Wiedergabe-Block nur, wenn jede Medienquelle geantwortet hat und der Zoneneingang bekannt ist (`yxc/wrong-answers.test.ts`).
+  Drift gibt es nur bei JSON; dieselbe Regel „unbekannter Eingang ist kein Leerlauf“ gilt für YNCA (`seedZone`, gesät erst
+  mit bekanntem Eingang), XML überspringt eine Zone ohne Play-Info-Antwort schon immer.
 - **D21:** jeder HTTP-Aufruf (MusicCast, XML, Beschreibungsabruf der Suche) läuft durch `HOST_HOLD` (`lib/host-hold.ts`,
   prozessweit je Host wie `GateRegistry`): eine 429 hält den Host für ihr `Retry-After`, ab drei Serverfehlern in Folge
   wachsend 5 s → 60 s mit einem Aufruf zur Zeit; ein gehaltener Aufruf antwortet als `HttpStatusError` wie der Host.

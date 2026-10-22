@@ -1226,6 +1226,19 @@ describe("YncaDeviceController player review fixes (2.0.0 pre-release audit)", (
     expect(s.acked).toContainEqual({ id: "living.player.bluetooth.deviceName", value: "Pixel" });
   });
 
+  // Y-01, the rule of MusicCast's clearIdle (fleet suite D6/C26b, 2026-10-22): an input not known is no "plays nothing".
+  test("a zone whose input did not answer keeps its block until the input comes, then it is seeded", async () => {
+    const s = await auditSetup({
+      MAIN: { PWR: "On", INP: "NET RADIO" },
+      ZONE2: { PWR: "On" },
+      NETRADIO: { PLAYBACKINFO: "Play" },
+    });
+    expect(s.acked.some(ack => ack.id.startsWith("living.multiroom.zone2.player."))).toBe(false);
+    s.client.emit({ subunit: "ZONE2", func: "INP", value: "HDMI1" });
+    expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.source", value: "" });
+    expect(s.acked).toContainEqual({ id: "living.multiroom.zone2.player.playback", value: 2 });
+  });
+
   test("the source display is seeded at start — a device already playing must not show it empty", async () => {
     const s = await auditSetup({
       MAIN: { PWR: "On", INP: "NET RADIO" },

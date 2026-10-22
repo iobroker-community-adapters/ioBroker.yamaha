@@ -92,13 +92,18 @@ export async function startFixtures(): Promise<{ devices: FixtureDevice[]; stop:
  *   does not connect then still returns what it reported
  * @param answers.send wraps the MusicCast send
  * @param answers.mayFail a connect that fails returns what was reported instead of throwing
+ * @param answers.act acts on the connected protocol with the objects it built, before it closes
  * @returns the canonical objects and values
  */
 export async function readTransport(
   device: FixtureDevice,
   transport: Transport,
   recorder?: TrafficRecorder,
-  answers: { send?: (send: YxcSend) => YxcSend; mayFail?: boolean } = {},
+  answers: {
+    send?: (send: YxcSend) => YxcSend;
+    mayFail?: boolean;
+    act?: (adapter: TransportConnectionAdapter, objects: ReadonlyMap<string, ObjectDef>) => Promise<void>;
+  } = {},
 ): Promise<TransportTree> {
   const values = new Map<string, unknown>();
   const adapter = new TransportConnectionAdapter(transport, device.id, (id, value) =>
@@ -173,6 +178,9 @@ export async function readTransport(
       throw new Error(`${device.id}/${transport} did not connect`);
     }
     const objects = new Map(adapter.buildObjects().map(def => [def.id, def] as const));
+    if (connected) {
+      await answers.act?.(adapter, objects);
+    }
     // What the controller reported, owned or not — the adapter keeps the last value of every id (C21).
     const reported = (adapter as unknown as { latest: Map<string, unknown> }).latest;
     for (const [id, value] of reported) {
