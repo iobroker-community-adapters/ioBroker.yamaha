@@ -207,6 +207,16 @@ describe("YncaBrowseDriver remote pad (#613)", () => {
     driver.cursor("up");
     expect(sent).toEqual([]);
   });
+
+  // The engine judges a menu step by isOpen(): a step without an open menu is no press (D9 with GV-13).
+  it("says no menu is open until a reported source opened one", () => {
+    const { driver } = setup(["NETRADIO"]);
+    expect(driver.isOpen()).toBe(false);
+    driver.open("usb");
+    expect(driver.isOpen()).toBe(false);
+    driver.open("netRadio");
+    expect(driver.isOpen()).toBe(true);
+  });
 });
 
 describe("the 2015 generation's zone-wide pad (@MAIN:CURSOR / @MAIN:MENU, RX-A850 list)", () => {

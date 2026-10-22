@@ -399,6 +399,16 @@ describe("XmlBrowseDriver paging and its guards", () => {
     expect(windows).toEqual([]);
   });
 
+  // The engine judges a menu step by isOpen(): a step without an open menu is no press (D9 with GV-13).
+  it("says no menu is open until a probed source opened one", async () => {
+    const { driver } = setup([twentyItems]);
+    expect(driver.isOpen()).toBe(false);
+    await driver.open("bluetooth");
+    expect(driver.isOpen()).toBe(false);
+    await driver.open("netRadio");
+    expect(driver.isOpen()).toBe(true);
+  });
+
   // 20 × 1 s, as rxv waits — 10 × 0.5 s gave up while a catalog level was still coming, in silence (D11).
   it("gives up after 20 busy polls a second apart, says so, and renders no half-built window", async () => {
     const calls: Array<{ method: string; element: string; inner: string }> = [];
