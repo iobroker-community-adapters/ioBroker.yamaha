@@ -8,7 +8,9 @@
 //
 // Suites (plan specs/2026-10-15-runde-124-plan.html, P5):
 //   "a quiet run and a clean stop"      D7 nothing above debug once the start is done · D10 an unknown message gets an
-//                                       error · D9 a button falls back to false, confirmed · D4 the stop leaves every
+//                                       error · D9 a button falls back to false, confirmed — a press the adapter drops
+//                                       itself stays unconfirmed (GV-13), proven by a press alone that reaches nothing ·
+//                                       D4 the stop leaves every
 //                                       marker offline, every reason text `Unknown`, the sums at 0/false, and nothing is
 //                                       written after the unload callback (resource probe) · D17 no datagram to
 //                                       255.255.255.255, and every own address it names to others is the chosen one
@@ -46,6 +48,12 @@ const assert = require("node:assert");
 const QUIET_WINDOW_MS = 60000;
 // D9: how long a pressed button may take to fall back.
 const PRESS_WINDOW_MS = 15000;
+// D9 (round 142, yamaha 2026-10-22): a button still unconfirmed after the window is pressed alone, one window at a time,
+// up to PRESS_TRIES times. The window outlasts the longest path from a press to its first call measured (yamaha: 100 ms
+// line spacing plus one queued line, 200 ms), the tries outlast the background calls of the fixtures (yamaha: about one
+// every 3.5 s across eight devices — a 1 s window is quiet three times in four).
+const PRESS_ALONE_MS = 1000;
+const PRESS_TRIES = 8;
 // D10/D3/D14: how long a message may take to be answered.
 const ANSWER_MS = 30000;
 const STOP_MS = 30000;
@@ -153,6 +161,34 @@ function devicesOf(ids, objects) {
     return parts.slice(0, 3).join(".");
   };
   return [...new Set(ids.map(owner))].sort();
+}
+// D9 (round 142, yamaha 2026-10-22): a press the adapter drops itself — a player key while the zone plays no player
+// source, a menu step with no menu open — reaches no counterpart and stays `true` with `ack: false`: GV-13 (krobi
+// 2026-09-25 23:48, the sealed register's text) keeps a command that did not arrive unconfirmed and never writes the old
+// value back blindly. The fleet's button standard (2026-06-11) resets after a success and allows none after an error.
+// A button counts as dropped only while nothing but the press wrote it, no call ran in its own context since the first
+// press, and a press of it alone meets a window without any call at all. The cause only makes a button red: a queue may
+// lose it (round 104, yamaha 11 of 436), so a call without it or with another one is ambiguous and the press is repeated.
+async function droppedPress(harness, id, opts) {
+  const { adapter, readCalls, since, windowMs = PRESS_ALONE_MS, tries = PRESS_TRIES, wait = sleep } = opts;
+  const untouched = s => s?.val === true && s?.ack === false && s?.from !== `system.adapter.${adapter}.0`;
+  const ownCall = from => readCalls().some(c => c.cause === id && c.t >= from);
+  if (!untouched(await harness.states.getStateAsync(id)) || ownCall(since)) {
+    return false;
+  }
+  for (let i = 0; i < tries; i++) {
+    const t = Date.now();
+    await harness.states.setStateAsync(id, { val: true, ack: false });
+    await wait(windowMs);
+    const calls = readCalls().filter(c => c.t >= t);
+    if (!untouched(await harness.states.getStateAsync(id)) || calls.some(c => c.cause === id)) {
+      return false;
+    }
+    if (calls.length === 0) {
+      return true;
+    }
+  }
+  return false;
 }
 // D11 (round 133, govee CI 39408072351): when each state was last written — the template's dumpStates carries val and ack
 // only, so D11 read no time, counted no data and was red for every adapter whose data kept arriving.
@@ -362,6 +398,7 @@ module.exports = function fleetSuites(suite, ctx) {
         )
         .map(([id]) => id);
       this.timeout(PRESS_WINDOW_MS + buttons.length * 500 + 10000);
+      const since = Date.now();
       // every button at once, one window for all — pressed one by one, 72 buttons took 18 minutes (homeconnect lab copy)
       for (const id of buttons) {
         await harness.states.setStateAsync(id, { val: true, ack: false });
@@ -373,6 +410,34 @@ module.exports = function fleetSuites(suite, ctx) {
         const states = await harness.states.getStates(stuck);
         stuck = stuck.filter((id, i) => !(states[i]?.val === false && states[i]?.ack === true));
       }
+      // round 142: only a button that is red so far is pressed again alone — a press that falls back stays judged as
+      // before; once more a full window after the last press, so a call a slow queue sent late still marks it sent
+      this.timeout(stuck.length * PRESS_TRIES * (PRESS_ALONE_MS + 1000) + PRESS_WINDOW_MS + 10000);
+      const dropped = [];
+      let told = Date.now();
+      for (const [i, id] of stuck.entries()) {
+        if (await droppedPress(harness, id, { adapter: ADAPTER, readCalls, since })) {
+          dropped.push(id);
+        }
+        // a line now and then: the harness watchdog ends a run that stays silent for 20 minutes
+        if (Date.now() - told >= 30000) {
+          console.log(`      D9: ${i + 1} of ${stuck.length} pressed alone`);
+          told = Date.now();
+        }
+      }
+      if (dropped.length > 0) {
+        await sleep(PRESS_WINDOW_MS);
+        const after = await harness.states.getStates(dropped);
+        const late = dropped.filter(
+          (id, i) =>
+            !(after[i]?.val === true && after[i]?.ack === false && after[i]?.from !== `system.adapter.${ADAPTER}.0`) ||
+            readCalls().some(c => c.cause === id && c.t >= since),
+        );
+        stuck = stuck.filter(id => !dropped.includes(id) || late.includes(id));
+        console.log(
+          `      ${dropped.length - late.length} press(es) the adapter dropped itself stay unconfirmed (GV-13)`,
+        );
+      }
       const shown = [];
       for (const id of stuck) {
         const s = await harness.states.getStateAsync(id);
@@ -381,7 +446,7 @@ module.exports = function fleetSuites(suite, ctx) {
       assert.deepStrictEqual(
         shown,
         [],
-        `buttons that did not fall back to false with ack within ${PRESS_WINDOW_MS} ms:\n${shown.join("\n")}`,
+        `buttons that did not fall back to false with ack within ${PRESS_WINDOW_MS} ms — and reached a counterpart or were written by the adapter, so no dropped press:\n${shown.join("\n")}`,
       );
     });
 
@@ -1091,3 +1156,4 @@ module.exports.newlyDown = newlyDown;
 module.exports.upBefore = upBefore;
 module.exports.devicesOf = devicesOf;
 module.exports.stampsOf = stampsOf;
+module.exports.droppedPress = droppedPress;
