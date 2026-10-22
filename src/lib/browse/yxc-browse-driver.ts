@@ -144,6 +144,11 @@ export class YxcBrowseDriver implements BrowseDriver {
     await this.fetch();
   }
 
+  /** @returns whether a source's menu is open — every step before {@link open} sends nothing */
+  public isOpen(): boolean {
+    return this.active !== undefined;
+  }
+
   /** Show the previous 8 lines. */
   public async pageUp(): Promise<void> {
     this.index = Math.max(0, this.index - PAGE_SIZE);

@@ -1670,9 +1670,10 @@ describe("MultiTransportHandle — the diagnostics trail", () => {
   });
 });
 
-// Fleet suite D9 (2026-10-22: 130 of 130 buttons stuck at true): a pressed button falls back to false, confirmed — but
-// only once the device took the press. A refusal, no answer or a press that never went out leaves it as written.
-describe("a pressed button falls back to false, whatever became of the press (fleet suite D9)", () => {
+// Fleet suite D9 (2026-10-22: 130 of 130 buttons stuck at true): a pressed button falls back to false, confirmed — once
+// the device answered the press, taken or refused. GV-13 (inventory run 2026-10-22: 74 buttons acked while nothing
+// answered): a press nobody answered, or one that never went out, stays as written — only the device confirms.
+describe("a pressed button falls back to false once the device answered it (fleet suite D9, GV-13)", () => {
   function pressSetup(outcome: WriteOutcome): { confirmed: string[]; press: () => Promise<void> } {
     const ynca = fakeConn("ynca", [
       state("player.next", "Next", { type: "boolean", role: "button.next", read: false }),
@@ -1696,14 +1697,18 @@ describe("a pressed button falls back to false, whatever became of the press (fl
     };
   }
 
-  // The suite presses every button at once and wants each back to false within 15 s: a button holds no value, what the
-  // device made of the press stands in the log and the diagnostics trail.
-  test.each(["sent", "refused", "unavailable", "unclear"] as const)(
-    "a press that ended %s falls back; a write to a value datapoint is no press",
+  test.each(["sent", "refused"] as const)(
+    "a press the device answered (%s) falls back; a write to a value datapoint is no press",
     async outcome => {
       const { confirmed, press } = pressSetup(outcome);
       await press();
       expect(confirmed).toEqual(["player.next"]);
     },
   );
+
+  test.each(["unavailable", "unclear"] as const)("a press that ended %s stays as written", async outcome => {
+    const { confirmed, press } = pressSetup(outcome);
+    await press();
+    expect(confirmed).toEqual([]);
+  });
 });

@@ -74,6 +74,11 @@ export interface BrowseDriver {
   /** Go one menu level back. */
   back(): Promise<void> | void;
   /**
+   * Whether a source's menu is open — opened through {@link open}; before that every step sends nothing. A driver
+   * without it is taken as open.
+   */
+  isOpen?(): boolean;
+  /**
    * The device's verdict on every step sent since the last call, for a driver whose steps go out without waiting for it
    * (YNCA): rejects when the device did not take one. A driver whose steps settle with their verdict has none.
    */

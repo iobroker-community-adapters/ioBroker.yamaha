@@ -112,8 +112,9 @@ export interface DeviceTreeDeps {
   /** The device's diagnostics trail — commands, connection history, owners and raw traffic, in memory only. */
   recorder?: TrafficRecorder;
   /**
-   * A button press was handled: the button falls back to `false`, confirmed — whatever became of the press (fleet
-   * suite D9: every button within 15 s); what the device made of it stands in the log and the diagnostics trail.
+   * The device answered a button press — it took it or said no: the button falls back to `false`, confirmed (fleet
+   * suite D9). A press nobody answered, or one that never went out, stays as written: only the device confirms
+   * (GV-13, fleet suite "a command nobody answers stays unconfirmed").
    */
   confirmPress?(id: string): void;
 }
@@ -707,7 +708,8 @@ export class MultiTransportHandle implements ConnectionHandle {
       this.deps.log.debug(`${this.deviceId}: write to ${canonicalId} failed (${errText(e)})`);
     } finally {
       this.deps.recorder?.command(canonicalId, value, attempts);
-      if (button) {
+      const last = attempts.at(-1)?.outcome;
+      if (button && (last === "sent" || last === "refused")) {
         this.deps.confirmPress?.(canonicalId);
       }
     }

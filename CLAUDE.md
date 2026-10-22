@@ -630,10 +630,12 @@ Die Suiten kamen mit dem Vorlage-Merge; der erste Lauf fand sechs Adapterfehler.
 - **D10:** eine Nachricht, die der Adapter nicht kennt, bekommt eine Fehlerantwort.
 - **DB-14:** ohne Live-Lesung nennt der Bericht den Grund als Schlüssel (`liveError`: `noAnswer`/`connectionLost`), und die
   Verlaufsereignisse sind Schlüssel (`transportDropped`, `transportBack` …), nie englische Sätze.
-- **D9:** jede Taste fällt nach ihrem Schreibvorgang auf false/ack zurück, was immer das Gerät daraus machte
-  (`routeWrite` → `confirmPress`; die Suite drückt alle 130 auf einmal, Frist 15 s, `press-all-buttons.test.ts`). Menüschritte
-  reihen sich ein statt verworfen zu werden (`BrowseEngine`, Antwort `sent` beim Einreihen); YNCA-Schritte holen das Urteil
-  des Receivers über `settled()` — ein nicht genommener Schritt ist eine `warn`-Zeile.
+- **D9 mit GV-13:** eine Taste fällt auf false/ack zurück, sobald das Gerät ihren Druck beantwortet hat — genommen
+  (`sent`) oder abgelehnt (`refused`); ein unbeantworteter (`unclear`) oder nie gesendeter Druck (`unavailable`) bleibt wie
+  geschrieben, denn nur das Gerät bestätigt (`routeWrite` → `confirmPress`; die Suite drückt alle auf einmal, Frist 15 s;
+  `press-all-buttons.test.ts` misst beides). Menüschritte reihen sich ein statt verworfen zu werden; die `BrowseEngine`
+  antwortet erst nach dem Lauf (`sent`, `unclear` bei einem Fehler), YNCA-Schritte holen das Urteil über `settled()`, und
+  ein Schritt ohne offenes Menü (`isOpen()` des Treibers) ist `unavailable` — jeder Treiber sendet dann nichts.
 - **D6/C26b (Y-01):** eine falsche MusicCast-Antwort schreibt nichts — ein fehlendes, `null`- oder falsch typisiertes Feld
   bleibt stehen (`yxc/values.ts` `reported`, `null` nur für das ausdrücklich leere Wort), und `clearIdle` leert den
   Wiedergabe-Block nur, wenn jede Medienquelle geantwortet hat und der Zoneneingang bekannt ist (`yxc/wrong-answers.test.ts`).

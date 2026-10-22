@@ -223,6 +223,11 @@ export class YncaBrowseDriver implements BrowseDriver {
     this.command("LISTSEL", `Line_${line}`);
   }
 
+  /** @returns whether a source's menu is open — every step before {@link open} sends nothing */
+  public isOpen(): boolean {
+    return this.active !== undefined;
+  }
+
   /** Show the previous 8 lines. */
   public pageUp(): void {
     this.command("LISTPAGE", "Up");

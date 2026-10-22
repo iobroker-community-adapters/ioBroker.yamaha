@@ -358,6 +358,11 @@ export class XmlBrowseDriver implements BrowseDriver {
     await this.control(`<Direct_Sel>Line_${line}</Direct_Sel>`);
   }
 
+  /** @returns whether a source's menu is open — every step before {@link open} sends nothing */
+  public isOpen(): boolean {
+    return this.active !== undefined;
+  }
+
   /** Show the previous 8 lines (jump the cursor back a page; the 2008 generation's `Page`). */
   public async pageUp(): Promise<void> {
     if (this.active?.list === "List_Info_2") {

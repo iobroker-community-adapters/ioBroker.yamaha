@@ -178,8 +178,8 @@ export class BrowseEngine {
    * Handle a user write to the on-screen remote (`remote.cursor`, `remote.menu`).
    *
    * Deliberately NOT through {@link start}: a remote key is a single press, not a menu
-   * operation. `start` serialises and DROPS a second write while one is in flight, which on a
-   * pad — where the user holds a direction — would swallow presses; and it would raise `busy`
+   * operation. `start` queues it behind the menu operations still running, which on a pad —
+   * where the user holds a direction — would hold presses back; and it would raise `busy`
    * on a surface nobody is browsing. Ordering and pacing on the wire are the command gate's
    * job, and it does that for every transport already.
    *
@@ -222,9 +222,10 @@ export class BrowseEngine {
    *
    * @param stateId the state id relative to the device (`player.browse.…`)
    * @param value the written value
-   * @returns `sent` when the operation is queued, `unavailable` for a value the menu cannot take (see {@link start})
+   * @returns `unavailable` at once for a value the menu cannot take; for an operation, what became of it once it ran
+   *   (see {@link start})
    */
-  public handleWrite(stateId: string, value: unknown): WriteOutcome {
+  public handleWrite(stateId: string, value: unknown): WriteOutcome | Promise<WriteOutcome> {
     if (this.closed) {
       return this.dropped(stateId, "the connection is closing");
     }
@@ -249,7 +250,7 @@ export class BrowseEngine {
         if (line === undefined) {
           return this.dropped(stateId, `${shown(value)} is no line of the window (1–${BROWSE_LINES})`);
         }
-        return this.start(`select line ${line}`, () => this.driver.select(line));
+        return this.step(`select line ${line}`, () => this.driver.select(line));
       }
       case "playLine": {
         const play = this.driver.playContainer?.bind(this.driver);
@@ -260,21 +261,21 @@ export class BrowseEngine {
         if (line === undefined) {
           return this.dropped(stateId, `${shown(value)} is no line of the window (1–${BROWSE_LINES})`);
         }
-        return this.start(`play line ${line}`, () => play(line));
+        return this.step(`play line ${line}`, () => play(line));
       }
       case "pageUp":
-        return this.start("page up", () => this.driver.pageUp());
+        return this.step("page up", () => this.driver.pageUp());
       case "pageDown":
-        return this.start("page down", () => this.driver.pageDown());
+        return this.step("page down", () => this.driver.pageDown());
       case "back":
-        return this.start("back", () => this.driver.back());
+        return this.step("back", () => this.driver.back());
       case "home":
-        return this.start("home", () => this.driver.home());
+        return this.step("home", () => this.driver.home());
       case "path":
         if (typeof value !== "string" || pathSegments(value).length === 0) {
           return this.dropped(stateId, `${shown(value)} names no menu entry`);
         }
-        return this.start(`path ${value}`, () => this.walkPath(value));
+        return this.step(`path ${value}`, () => this.walkPath(value));
       default:
         return this.dropped(stateId, "it is no control of the menu");
     }
@@ -293,19 +294,34 @@ export class BrowseEngine {
   }
 
   /**
-   * Queue one menu operation behind the ones still running (the busy state shows that some run). It is `sent`: it will
-   * run on this transport and never on another — that protocol's menu is not the one on screen, and the press would act
-   * there unseen. A step the device does not take ends in a warning (see {@link run}).
+   * Queue one menu operation behind the ones still running (the busy state shows that some run). It runs on this
+   * transport and never on another — that protocol's menu is not the one on screen, and the press would act there
+   * unseen —, so a failure is `unclear`, never `refused` or `unavailable`, which would hand the press on. The verdict
+   * comes once the operation ran: a menu button falls back only after the device answered it (fleet suite D9 with GV-13).
    *
    * @param what the operation, for the log lines
    * @param op the operation
-   * @returns `sent`
+   * @returns `sent` once every step was taken, `unclear` when one failed, `unavailable` when the connection closed first
    */
-  private start(what: string, op: () => Promise<void> | void): WriteOutcome {
+  private start(what: string, op: () => Promise<void> | void | "unopened"): Promise<WriteOutcome> {
     this.pending++;
     this.deps.emit("player.browse.busy", true);
-    this.queue = this.queue.then(() => this.run(what, op));
-    return "sent";
+    const ran = this.queue.then(() => this.run(what, op));
+    this.queue = ran;
+    return ran;
+  }
+
+  /**
+   * Queue a step through the open menu (see {@link start}) — dropped when it runs while the driver has no source open:
+   * it would send nothing, and a press that sent nothing is no press (GV-13: confirmed with nothing sent, inventory run
+   * 2026-10-22).
+   *
+   * @param what the operation, for the log lines
+   * @param op the step
+   * @returns what became of it (see {@link start}), `unavailable` without an open menu
+   */
+  private step(what: string, op: () => Promise<void> | void): Promise<WriteOutcome> {
+    return this.start(what, () => (this.driver.isOpen?.() === false ? "unopened" : op()));
   }
 
   /**
@@ -314,17 +330,21 @@ export class BrowseEngine {
    *
    * @param what the operation, for the log line
    * @param op the operation to run
+   * @returns what became of the operation (see {@link start})
    */
-  private async run(what: string, op: () => Promise<void> | void): Promise<void> {
+  private async run(what: string, op: () => Promise<void> | void | "unopened"): Promise<WriteOutcome> {
     try {
       if (this.closed) {
-        this.dropped(`browse: ${what}`, "the connection is closing");
-        return;
+        return this.dropped(`browse: ${what}`, "the connection is closing");
       }
-      await op();
+      if ((await op()) === "unopened") {
+        return this.dropped(`browse: ${what}`, "no menu is open — player.browse.source opens one");
+      }
       await this.driver.settled?.();
+      return "sent";
     } catch (e) {
       this.deps.log.warn(`browse: ${what} failed: ${errText(e)}`);
+      return "unclear";
     } finally {
       this.pending--;
       if (!this.closed && this.pending === 0) {
