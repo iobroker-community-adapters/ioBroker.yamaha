@@ -720,7 +720,6 @@ describe("the player block's source and Play_Info (audit 2026-09-29, D3)", () =>
       album: "",
       track: "",
       albumArt: "",
-      albumArtId: "",
     });
     expect(parsePlayInfo(answer("rxv6a", "Deezer/Play_Info"))).toEqual({
       playback: MEDIA_STATE.stop,
@@ -730,11 +729,10 @@ describe("the player block's source and Play_Info (audit 2026-09-29, D3)", () =>
       repeat: 0,
       shuffle: false,
       albumArt: "",
-      albumArtId: "",
     });
   });
 
-  test("a playing source: its words decoded, the repeat and shuffle codes, the cover path and id", () => {
+  test("a playing source: its words decoded, the repeat and shuffle codes, the cover path", () => {
     const body =
       "<SERVER><Play_Info><Playback_Info>Pause</Playback_Info><Play_Mode><Repeat>All</Repeat><Shuffle>On</Shuffle></Play_Mode>" +
       "<Meta_Info><Artist>A &amp; B</Artist><Album>Live</Album><Song>Intro</Song></Meta_Info>" +
@@ -747,7 +745,6 @@ describe("the player block's source and Play_Info (audit 2026-09-29, D3)", () =>
       repeat: 2,
       shuffle: true,
       albumArt: "/YamahaRemoteControl/AlbumART/AlbumART.jpg",
-      albumArtId: "7",
     });
   });
 

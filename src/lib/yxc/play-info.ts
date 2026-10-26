@@ -3,7 +3,6 @@ import type { StateValue } from "../types";
 import type { I18nKey } from "../i18n";
 import { formatPlayTime } from "../catalog/play-time";
 import { musicCastInputName } from "../catalog/musiccast-vocabulary";
-import { withAlbumArtId } from "../catalog/device-url";
 
 /**
  * What a media source is playing: the network player's and the CD's getPlayInfo (the unified player block) and the
@@ -78,10 +77,11 @@ export function parseYxcPlayInfo(
   if (typeof info.playback === "string" && info.playback in playbackCode) {
     updates.push({ id: "player.playback", value: playbackCode[info.playback] });
   }
-  // Album art URL and the elapsed/total play time (renamed from the YXC field names).
+  // Album art URL and the elapsed/total play time (renamed from the YXC field names). The cover address is the one the
+  // receiver reports, nothing appended (Y-37).
   const albumArt = info.albumart_url;
   if (typeof albumArt === "string") {
-    updates.push({ id: "player.albumArt", value: withAlbumArtId(cover(albumArt), info.albumart_id) });
+    updates.push({ id: "player.albumArt", value: cover(albumArt) });
   }
   // Both forms of each time — see catalog/play-time.ts. MusicCast reports the seconds, so
   // the readable text is formatted from them here; the YNCA side parses its text into the

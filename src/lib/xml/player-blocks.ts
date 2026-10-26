@@ -1,4 +1,4 @@
-import { absoluteDeviceUrl, withAlbumArtId } from "../catalog/device-url";
+import { absoluteDeviceUrl } from "../catalog/device-url";
 import type { CommandPriority } from "../lifecycle/command-gate";
 import { PLAYER_CLEAR, PLAYER_DISPLAY_STATES, PLAYER_STATION_STATE, playerStateObject } from "../catalog/player-block";
 import { errText } from "../err-text";
@@ -98,8 +98,9 @@ export class XmlPlayerBlocks {
         continue;
       }
       const values: Record<string, boolean | number | string> = { source: input ?? "", ...info };
+      // The cover address is the one the receiver reports, nothing appended (Y-37).
       if (typeof info.albumArt === "string") {
-        values.albumArt = withAlbumArtId(absoluteDeviceUrl(info.albumArt, ctx.deps.host), info.albumArtId);
+        values.albumArt = absoluteDeviceUrl(info.albumArt, ctx.deps.host);
       }
       // Another player source than the block showed: what the new one does not carry goes — the artist, the play
       // mode and the cover of the media server stood under a radio station (review 2026-10-05, A50). The 2008

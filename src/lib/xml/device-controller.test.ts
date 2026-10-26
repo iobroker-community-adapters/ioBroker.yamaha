@@ -1666,10 +1666,7 @@ describe("XmlDeviceController player block from the source's Play_Info (audit 20
         { id: "living.player.station", value: "Radio & Co" },
         { id: "living.player.track", value: "Blue" },
         { id: "living.player.album", value: "" },
-        {
-          id: "living.player.albumArt",
-          value: "http://192.0.2.10/YamahaRemoteControl/AlbumART/AlbumART.jpg?id=41",
-        },
+        { id: "living.player.albumArt", value: "http://192.0.2.10/YamahaRemoteControl/AlbumART/AlbumART.jpg" },
       ]),
     );
     // Claim with proof: NET_RADIO names no artist and reports no play mode, so none is built.

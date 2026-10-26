@@ -237,8 +237,6 @@ export interface XmlPlayInfo {
   shuffle?: boolean;
   /** The cover path the device serves, unless it is Yamaha's encrypted `YMF`. */
   albumArt?: string;
-  /** The cover's `ID` — it changes with the cover while the path may stay the same (see C36). */
-  albumArtId?: string;
 }
 
 /**
@@ -321,7 +319,6 @@ export function parsePlayInfo(xml: string): XmlPlayInfo {
     const field = (tag: string): string => decodeXmlText(new RegExp(`<${tag}>([^<]*)</${tag}>`).exec(art)?.[1] ?? "");
     // `YMF` is Yamaha's encrypted cover format no client can show (RX-V6A captures: every source).
     info.albumArt = field("Format") === "YMF" ? "" : field("URL");
-    info.albumArtId = field("ID");
   }
   for (const key of Object.keys(info) as Array<keyof XmlPlayInfo>) {
     if (info[key] === undefined) {

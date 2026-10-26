@@ -1,6 +1,7 @@
 // The cover addresses every transport shows — MusicCast and XML report covers the same way (a path on the device's own
-// web server, one fixed path whose content changes). They lived in the MusicCast write mapper, so XML imported
-// another transport's module for them (review 2026-10-05, X11).
+// web server). They lived in the MusicCast write mapper, so XML imported another transport's module for them
+// (review 2026-10-05, X11). The cover address is exactly the one the receiver reports — a path only gets the host in
+// front, nothing is appended (Y-37).
 
 /**
  * The address a device-relative path is fetched at: YXC answers the cover as a path on its own web
@@ -17,27 +18,4 @@ export function absoluteDeviceUrl(url: string, host: string | undefined): string
     return url;
   }
   return `http://${host}/${url.replace(/^\/+/, "")}`;
-}
-
-/**
- * A cover address that changes when the cover does. Several devices serve every cover under ONE fixed
- * path (`/YamahaRemoteControl/AlbumART/AlbumART.jpg`, YXC Basic Rev 1.10 §7.2) and say "the album art
- * changed" only by a new `albumart_id` — the datapoint stayed byte-identical and a widget kept showing the
- * previous track's cover (audit 2026-09-29, C36). The id rides along as a query, so the address changes.
- * A file name that already carries the id (`AlbumART5419.jpg` with id 5419 — RX-A2070, WX-030, RX-A1080)
- * changes with the cover by itself and stays exactly the device's address (issue #632).
- *
- * @param url the cover address ("" = none)
- * @param id the reported `albumart_id`
- * @returns the address, with the id appended where the file name does not already carry it
- */
-export function withAlbumArtId(url: string, id: unknown): string {
-  if (url === "" || (typeof id !== "number" && typeof id !== "string") || `${id}` === "") {
-    return url;
-  }
-  const fileName = url.split("?")[0].split("/").pop() ?? "";
-  if (fileName.match(/\d+/g)?.includes(`${id}`)) {
-    return url;
-  }
-  return `${url}${url.includes("?") ? "&" : "?"}id=${encodeURIComponent(`${id}`)}`;
 }
