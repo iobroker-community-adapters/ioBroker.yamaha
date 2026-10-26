@@ -619,6 +619,7 @@ krobi's decisions for this adapter. The register with his verbatim words lives i
 - **Y-34** A remote key the receiver lists as not assigned (desc.xml Assigned="No") is not offered.
 - **Y-35** Zone B is named like every other zone: power, mute, volume and the zone name with the same ids, names and roles as zones 2 to 4.
 - **Y-36** The diagnostics report has an Expert tab of its own, as in govee: pick a device, download the report. It only reads the device and changes nothing.
+- **Y-37** The cover address (player.albumArt) is exactly the address the receiver reports; only a path without a host (/YamahaRemoteControl/…) gets the receiver's IP in front, as the spec requires. The adapter never appends anything — no album art id, no query.
 
 <!-- core-decisions:end -->
 
