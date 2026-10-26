@@ -2701,6 +2701,28 @@ describe("YxcDeviceController cover address", () => {
       "http://10.0.0.5/YamahaRemoteControl/AlbumART/AlbumART.jpg?id=5708",
     );
   });
+
+  // The recorded RX-A2070 answer (test/fixtures/inventory/rxa2070.json): the file name already changes with
+  // the cover, so the address stays exactly the device's (issue #632, RX-A1080 `AlbumART4495.jpg` + id 4495).
+  test("a file name that already carries the album art id stays the device's address", async () => {
+    expect(await coverAfterPush(2.08, "/YamahaRemoteControl/AlbumART/AlbumART5419.jpg", 5419)).toBe(
+      "http://10.0.0.5/YamahaRemoteControl/AlbumART/AlbumART5419.jpg",
+    );
+  });
+
+  // The host's digits are no file name: id 5 on host 10.0.0.5 under the one fixed path still rides along.
+  test("a fixed path keeps the id even when the host carries the same number", async () => {
+    expect(await coverAfterPush(2.08, "/YamahaRemoteControl/AlbumART/AlbumART.jpg", 5)).toBe(
+      "http://10.0.0.5/YamahaRemoteControl/AlbumART/AlbumART.jpg?id=5",
+    );
+  });
+
+  // Only the whole number counts: id 54 is not the 5419 in the file name.
+  test("a file name with another number keeps the id", async () => {
+    expect(await coverAfterPush(2.08, "/YamahaRemoteControl/AlbumART/AlbumART5419.jpg", 54)).toBe(
+      "http://10.0.0.5/YamahaRemoteControl/AlbumART/AlbumART5419.jpg?id=54",
+    );
+  });
 });
 
 // A zone that declares its remote keys (`cursor_list`) takes those and no other; the shared vocabulary

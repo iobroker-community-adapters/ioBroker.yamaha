@@ -24,13 +24,19 @@ export function absoluteDeviceUrl(url: string, host: string | undefined): string
  * path (`/YamahaRemoteControl/AlbumART/AlbumART.jpg`, YXC Basic Rev 1.10 §7.2) and say "the album art
  * changed" only by a new `albumart_id` — the datapoint stayed byte-identical and a widget kept showing the
  * previous track's cover (audit 2026-09-29, C36). The id rides along as a query, so the address changes.
+ * A file name that already carries the id (`AlbumART5419.jpg` with id 5419 — RX-A2070, WX-030, RX-A1080)
+ * changes with the cover by itself and stays exactly the device's address (issue #632).
  *
  * @param url the cover address ("" = none)
  * @param id the reported `albumart_id`
- * @returns the address, with the id appended where there is one
+ * @returns the address, with the id appended where the file name does not already carry it
  */
 export function withAlbumArtId(url: string, id: unknown): string {
   if (url === "" || (typeof id !== "number" && typeof id !== "string") || `${id}` === "") {
+    return url;
+  }
+  const fileName = url.split("?")[0].split("/").pop() ?? "";
+  if (fileName.match(/\d+/g)?.includes(`${id}`)) {
     return url;
   }
   return `${url}${url.includes("?") ? "&" : "?"}id=${encodeURIComponent(`${id}`)}`;
