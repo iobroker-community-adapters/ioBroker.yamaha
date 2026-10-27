@@ -859,7 +859,7 @@ function clearInstanceData(harness) {
 
 /**
  * A device the user of the previous release deleted from its card: the delete writes it to `excluded.json` in the
- * instance data folder (id, address, identity — the 2.12.0 form), and it must stay deleted after the update. Not a
+ * instance data folder (id, address, identity — the 3.3.0 form), and it must stay deleted after the update. Not a
  * fixture device — nothing answers at its address.
  */
 const EXCLUDED_BEFORE = { id: "rx-v685-0a1b", ip: "127.0.0.250", identity: { serial: "0a1b2c3d" } };
