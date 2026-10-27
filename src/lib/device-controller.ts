@@ -880,14 +880,12 @@ export class YncaDeviceController {
         asked.add(source);
       }
     }
-    // A zone whose input was not known when its block was put up is seeded now that it is (see seedZone).
+    // A zone whose input was not known when its block was put up is seeded now that it is (see seedZone). Its source
+    // did not change with this input — a change is in the loop above — so it plays none and there is nothing to ask.
     for (const key of this.players.blockZones) {
       const zone = YNCA_ZONES.find(z => z.key === key);
       if (zone && !this.seeded.has(`${zone.prefix}player.source`)) {
-        const source = this.seedZone(zone);
-        if (source !== undefined) {
-          asked.add(source);
-        }
+        this.seedZone(zone);
       }
     }
     asked.forEach(source => this.askSource(source));

@@ -530,6 +530,15 @@ describe("BrowseEngine — every write has an outcome, a dropped one a trace", (
       "remote.cursor not written — the connection is closing",
     ]);
   });
+
+  it("drops a queued step whose turn comes after the connection closed", async () => {
+    const { engine, driver, debugged } = setup();
+    const outcome = engine.handleWrite("player.browse.back", true);
+    engine.close();
+    expect(await outcome).toBe("unavailable");
+    expect(driver.calls).toEqual([]);
+    expect(debugged).toEqual(["browse: back not written — the connection is closing"]);
+  });
 });
 
 describe("BrowseEngine remote pad", () => {
