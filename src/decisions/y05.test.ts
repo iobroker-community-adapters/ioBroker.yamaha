@@ -18,7 +18,8 @@ vi.mock("@iobroker/adapter-core", () => ({
   getAbsoluteInstanceDataDir: () => "/tmp/yamaha-data",
 }));
 
-import { Yamaha } from "../main";
+import * as mainModule from "../main";
+const { Yamaha } = mainModule as unknown as { Yamaha: new () => ioBroker.Adapter };
 import { mapYxcToObjects, rawVolumeFor, shownVolumeFor, volumeScaleOf } from "../lib/yxc/object-mapper";
 import { buildDeviceForm } from "../device-management-helpers";
 import type { ObjectDef } from "../lib/catalog/types";

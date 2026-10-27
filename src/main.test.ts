@@ -490,7 +490,7 @@ vi.mock("./lib/yxc/push-receiver", () => ({
   },
 }));
 
-import { Yamaha } from "./main";
+import * as mainModule from "./main";
 import { DISCOVERY_SCHEMA } from "./lib/lifecycle/discovery-schema";
 import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
 import { MAX_HTTP_BODY_BYTES } from "./lib/util";
@@ -517,6 +517,8 @@ function copyOf<T>(value: T | undefined): T | null {
 
 import { isExcluded, writeDiscovered } from "./lib/discovered-store";
 import type { ConnectionHandle } from "./lib/controller";
+
+const { Yamaha } = mainModule as unknown as { Yamaha: new () => ioBroker.Adapter };
 
 /** A live connection handle the fake attempt hands back. */
 interface FakeHandle extends ConnectionHandle {
@@ -546,7 +548,7 @@ function fakeHandle(): FakeHandle {
  *
  * @param adapter Adapter instance under test
  */
-function internalOf(adapter: Yamaha): {
+function internalOf(adapter: ioBroker.Adapter): {
   onReady(): Promise<void>;
   onUnload(cb: () => void): void;
   onStateChange(id: string, state: unknown): void;

@@ -34,7 +34,8 @@ vi.mock("../lib/discovered-store-deps", () => ({
   excludedStoreDeps: () => ({}),
 }));
 
-import { Yamaha } from "../main";
+import * as mainModule from "../main";
+const { Yamaha } = mainModule as unknown as { Yamaha: new () => ioBroker.Adapter };
 import { YamahaDeviceManagement } from "../device-management";
 import { buildDeviceForm } from "../device-management-helpers";
 import type { DeviceRecord } from "../lib/types";

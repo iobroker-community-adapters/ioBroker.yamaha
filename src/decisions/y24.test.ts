@@ -40,7 +40,8 @@ vi.mock("@iobroker/adapter-core", () => ({
   getAbsoluteInstanceDataDir: () => "/tmp/yamaha-data",
 }));
 
-import { Yamaha } from "../main";
+import * as mainModule from "../main";
+const { Yamaha } = mainModule as unknown as { Yamaha: new () => ioBroker.Adapter };
 import { PROFILE_KEY, type DeviceProfileStore } from "../lib/lifecycle/capability-profile";
 import { mapYxcToObjects } from "../lib/yxc/object-mapper";
 import { YNCA_CATALOG } from "../lib/ynca/catalog";

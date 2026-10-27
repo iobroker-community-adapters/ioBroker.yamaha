@@ -200,7 +200,7 @@ interface PendingDevicePatch {
  * by the best-fitting transport. All YXC devices share one UDP push receiver, keyed
  * by source IP.
  */
-export class Yamaha extends utils.Adapter {
+class Yamaha extends utils.Adapter {
   /** The network searches running now — each one's finish, which `onUnload` calls (E4). */
   private readonly searchesInFlight = new Set<() => void>();
   /** The description fetches running now, destroyed by `onUnload` (E4). */
@@ -3584,8 +3584,11 @@ export class Yamaha extends utils.Adapter {
 }
 
 if (require.main !== module) {
-  // Export the constructor in compact mode
-  module.exports = (options: Partial<utils.AdapterOptions> | undefined) => new Yamaha(options);
+  // Export the constructor in compact mode; the class rides on the factory for the tests (an `export` keyword next to
+  // `module.exports` makes esbuild warn commonjs-variable-in-esm)
+  module.exports = Object.assign((options: Partial<utils.AdapterOptions> | undefined) => new Yamaha(options), {
+    Yamaha,
+  });
 } else {
   // Start the instance directly
   (() => new Yamaha())();

@@ -186,7 +186,8 @@ vi.mock("../lib/yxc/push-receiver", () => ({
   },
 }));
 
-import { Yamaha } from "../main";
+import * as mainModule from "../main";
+const { Yamaha } = mainModule as unknown as { Yamaha: new () => ioBroker.Adapter };
 import {
   MultiTransportHandle,
   type TransportConnection,
