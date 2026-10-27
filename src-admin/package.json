@@ -35,7 +35,8 @@
     "adm-zip": "^0.6.1",
     "js-yaml": "^4.3.2",
     "undici": "^7.29.0",
-    "zod": "^4.6.6"
+    "zod": "^4.6.6",
+    "node-forge": ">=1.4.1"
   },
   "browserslist": {
     "production": [
