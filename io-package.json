@@ -81,19 +81,6 @@
         "pl": "Amplitunery sprzed 2010 pokazują, co gra; każdy wpis listy to osobny punkt danych; listy wyboru w języku ioBroker; player.playback używa kodów ioBroker.",
         "uk": "Ресивери до 2010 року показують, що грає; кожен запис списку — окрема точка даних; списки вибору мовою ioBroker; player.playback використовує коди ioBroker.",
         "zh-cn": "2010 年前的功放可显示正在播放的内容；每个列表条目都是独立数据点；下拉列表以 ioBroker 语言显示名称；player.playback 使用 ioBroker 代码。"
-      },
-      "3.0.1": {
-        "en": "The notes the Admin shows before an update are short now: what changes, one example old → new, and a link to the details.",
-        "de": "Die Hinweise, die der Admin vor einem Update zeigt, sind jetzt kurz: was sich ändert, ein Beispiel alt → neu und ein Link zu den Details.",
-        "ru": "Уведомления, которые Admin показывает перед обновлением, теперь короткие: что меняется, пример старое → новое и ссылка на подробности.",
-        "pt": "As notas que o Admin mostra antes de uma atualização agora são curtas: o que muda, um exemplo antigo → novo e um link para os detalhes.",
-        "nl": "De meldingen die de Admin vóór een update toont, zijn nu kort: wat er verandert, één voorbeeld oud → nieuw en een link naar de details.",
-        "fr": "Les notes affichées par l'Admin avant une mise à jour sont courtes : ce qui change, un exemple ancien → nouveau et un lien vers les détails.",
-        "it": "Le note che l'Admin mostra prima di un aggiornamento ora sono brevi: cosa cambia, un esempio vecchio → nuovo e un link ai dettagli.",
-        "es": "Los avisos que muestra el Admin antes de una actualización ahora son breves: qué cambia, un ejemplo antiguo → nuevo y un enlace a los detalles.",
-        "pl": "Komunikaty, które Admin pokazuje przed aktualizacją, są teraz krótkie: co się zmienia, przykład stare → nowe i link do szczegółów.",
-        "uk": "Повідомлення, які Admin показує перед оновленням, тепер короткі: що змінюється, приклад старе → нове та посилання на подробиці.",
-        "zh-cn": "Admin 在更新前显示的提示现在很简短：变更内容、一个新旧对照示例和详情链接。"
       }
     },
     "titleLang": {
