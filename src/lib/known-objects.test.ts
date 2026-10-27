@@ -203,6 +203,24 @@ describe("KnownObjects — read once, write only on a difference", () => {
     expect(calls.filter(c => c[0] !== "list").map(c => `${c[0]} ${c[1]}`)).toEqual(["set demo.0.dev", "del dev"]);
   });
 
+  it("lists the known ids, all or below one id, so nobody reads the own tree a second time", async () => {
+    // fakeroku audit 2026-10-22: without a listing the adapter read its tree three times at start (load + two reads)
+    const { adapter, calls } = fakeAdapter([
+      { id: "demo.0.dev", value: { type: "device", common: { name: "Dev" } } },
+      { id: "demo.0.dev.on", value: { type: "state", common: { name: "On" } } },
+      { id: "demo.0.device", value: { type: "device", common: { name: "Other" } } },
+    ]);
+    const known = new KnownObjects(adapter);
+    await known.load();
+    expect(known.ids()).toEqual(["demo.0.dev", "demo.0.dev.on", "demo.0.device"]);
+    expect(known.ids("dev")).toEqual(["demo.0.dev.on"]);
+    expect(known.ids("demo.0.dev")).toEqual(["demo.0.dev.on"]);
+    await known.extend("dev.off", { type: "state", common: { name: "Off" } });
+    await known.remove("dev.on");
+    expect(known.ids("dev")).toEqual(["demo.0.dev.off"]);
+    expect(calls.filter(c => c[0] === "list")).toHaveLength(1);
+  });
+
   it("skips a row without an object, and a delete without recursive keeps the children known", async () => {
     const { adapter } = fakeAdapter([
       { id: "demo.0.gone", value: null },

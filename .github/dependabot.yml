@@ -19,11 +19,7 @@ updates:
         update-types:
           - 'version-update:semver-major'
 
-  # src-admin (Module-Federation admin component): hand-pinned compatibility matrix
-  # (React / MUI / @module-federation/vite — the versions the component was built against);
-  # npm-latest breaks the MF build. This entry exists ONLY to satisfy repochecker W8905
-  # (a non-root package.json must be covered by a dependabot npm directory). Ignoring all
-  # dependencies means it generates ZERO pull requests, so the pinned matrix is never moved.
+  # src-admin (Module-Federation admin component): its own package.json (repochecker W8905).
   - package-ecosystem: 'npm'
     directory: '/src-admin'
     schedule:
@@ -32,8 +28,6 @@ updates:
       cronjob: '55 3 20 * *'
     cooldown:
       default-days: 7
-    ignore:
-      - dependency-name: '*'
 
   - package-ecosystem: 'github-actions'
     directory: '/'

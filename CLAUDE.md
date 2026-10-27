@@ -1,7 +1,7 @@
 # CLAUDE.md — ioBroker.yamaha
 
 Adapter-spezifischer Kontext. Globale Dev-Standards: `../CLAUDE.md` + `../CLAUDE_*.md`.
-Recherche + Konzept + Plan: `../../Ressourcen/yamaha/` · Projekt-Memory: `project_yamaha_greenfield`.
+Recherche, Konzept und Plan: lokaler Recherche-Ordner des Adapters (nicht im Repo) · Projekt-Memory: `project_yamaha_greenfield`.
 
 ## Projekt
 
@@ -540,7 +540,7 @@ der Typ `I18nKey` macht einen Tippfehler zum Compile-Fehler.
   **Prüfung dafür: `python3 Entwicklung/scripts/check-live-tree.py yamaha` nach dem Server-Update** —
   das ist die Hälfte, die kein statisches Gate sehen kann.
 
-## Portierungs-Referenz (`../../Ressourcen/yamaha/legacy/`, NICHT im Adapter-Repo)
+## Portierungs-Referenz (lokaler Recherche-Ordner, NICHT im Adapter-Repo)
 
 Alt-Code der Übernahme als Portierungs-Quelle — 2026-08-01 aus dem publizierten Adapter ausgelagert
 (erzeugte sonst repochecker-Findings: fehlende Abhängigkeiten, altes `utils.adapter`-Muster, native Timer);
@@ -714,7 +714,7 @@ in ein öffentliches Repo.
 - **Datenordner der Instanz** (`discovered.json`, `excluded.json`, `ignored.json`) ist seit 3.1.3 als
   `common.dataFolder` deklariert, damit js-controller ihn sichert; die Inventar-Suiten leeren ihn vor jedem Start
   (`clearInstanceData`), die Aufstiegs-Suite legt eine Ausschlussliste des Vorgängers zurück (`seedInstanceData`).
-- **Mutationstabellen** (`../../Ressourcen/iobroker-entwicklung/mutation-testing/`, ROOT = dieser Adapter):
+- **Mutationstabellen** (lokales Nadel-Repo `mutation-testing`, nicht im Adapter-Repo; ROOT = dieser Adapter):
   JEDE Tabelle mit diesem `ROOT` zählt für D09 — die fünf Wellen-Originale `mutations_yamaha.py` … `…5.py` leben
   NEBEN der Sammeltabelle `mutations_yamaha_all.py` und tragen dieselben Regeln: eine Nadel wird in JEDER Tabelle
   nachgezogen, die sie führt, ebenso jeder `EQUIVALENT`-Vermerk. Nadeln sind exakte Quellzeilen — nach Prettier

@@ -53,8 +53,8 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 ## Requirements
 
 - Node.js >= 22
-- js-controller >= 7.2.2
-- admin >= 8.0.14
+- js-controller >= 7.2.5
+- admin >= 8.2.0
 
 ## Ports
 
@@ -81,12 +81,11 @@ an issue, attach the diagnostics report from the **Expert** tab of the instance 
 
 ### **WORK IN PROGRESS**
 
-- (krobipd) Fixed: The "Object tree updated" log line always names both counts, created and removed
-- (krobipd) Fixed: A message the adapter does not know gets an error answer instead of none
+- (krobipd) Fixed: Scripts that send the adapter an unknown command get an error back instead of no answer
 - (krobipd) Fixed: Buttons fall back to false once the receiver answered the press, and menu presses made at once all run
 - (krobipd) Fixed: A broken MusicCast answer no longer empties datapoints
-- (krobipd) Fixed: A receiver that answers 429 or keeps answering server errors is asked less often until it recovers
 - (krobipd) Fixed: The diagnostics report names why a receiver could not be read live
+- (krobipd) Fixed: The cover address is again exactly the one the receiver reports, nothing is appended to it anymore
 
 ### 3.3.0 (2026-10-14)
 

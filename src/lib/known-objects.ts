@@ -291,6 +291,21 @@ export class KnownObjects {
   }
 
   /**
+   * The full ids of the known objects — after `load()` the whole own tree, so nobody reads it a second time.
+   *
+   * @param below relative or full id; when given, only the ids below it (without the id itself)
+   * @returns the full ids in the order they were read or first written
+   */
+  public ids(below?: string): string[] {
+    const all = [...this.objects.keys()];
+    if (below === undefined) {
+      return all;
+    }
+    const root = `${this.full(below)}.`;
+    return all.filter(id => id.startsWith(root));
+  }
+
+  /**
    * `extendObject`, left out when the stored object already carries the patch.
    *
    * @param id relative or full id
