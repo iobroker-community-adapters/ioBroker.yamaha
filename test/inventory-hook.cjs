@@ -30,7 +30,9 @@ const YNCA_PORT = 50000;
  * @returns {Error} an ECONNREFUSED error
  */
 function refusal(target) {
-  const error = new Error(`connect ECONNREFUSED ${target} (no inventory fixture for this address)`);
+  const error = /** @type {NodeJS.ErrnoException} */ (
+    new Error(`connect ECONNREFUSED ${target} (no inventory fixture for this address)`)
+  );
   error.code = "ECONNREFUSED";
   return error;
 }
@@ -49,7 +51,7 @@ net.Socket.prototype.connect = function connect(...args) {
   const isDeviceCall =
     typeof options === "object" && options !== null && options.port === YNCA_PORT && typeof options.host === "string";
   if (!isDeviceCall) {
-    return realConnect.apply(this, args);
+    return Reflect.apply(realConnect, this, args);
   }
   const route = ROUTES[options.host];
   if (!route || !route.ynca) {
@@ -61,7 +63,7 @@ net.Socket.prototype.connect = function connect(...args) {
   // Rewrite IN PLACE. Node marks its normalised argument array with an internal symbol and
   // re-normalises anything that lacks it — a freshly built array is rejected with ERR_MISSING_ARGS.
   normalised[0] = { ...options, host: "127.0.0.1", port: route.ynca };
-  return realConnect.apply(this, args);
+  return Reflect.apply(realConnect, this, args);
 };
 
 /**
@@ -69,7 +71,7 @@ net.Socket.prototype.connect = function connect(...args) {
  * address one of the fixture devices.
  *
  * @param {unknown} first the first argument of http.request/http.get
- * @returns {{options: Record<string, unknown>, port: number}|undefined} the rewritten options and the fixture port
+ * @returns {{options: string | Record<string, unknown>, port: number}|undefined} the rewritten options and the fixture port
  */
 function deviceTarget(first) {
   // The MusicCast client addresses the device with a URL string, the XML client with an options
@@ -88,26 +90,27 @@ function deviceTarget(first) {
   if (typeof first !== "object" || first === null) {
     return undefined;
   }
-  const host = first.hostname || first.host;
+  const given = /** @type {Record<string, unknown>} */ (first);
+  const host = given.hostname || given.host;
   if (typeof host !== "string") {
     return undefined;
   }
   const route = ROUTES[host.replace(/:\d+$/, "")];
   return route
-    ? { options: { ...first, hostname: "127.0.0.1", host: "127.0.0.1", port: route.http }, port: route.http }
+    ? { options: { ...given, hostname: "127.0.0.1", host: "127.0.0.1", port: route.http }, port: route.http }
     : undefined;
 }
 
 const realRequest = http.request;
 http.request = function request(...args) {
   const target = deviceTarget(args[0]);
-  return target ? realRequest.call(http, target.options, ...args.slice(1)) : realRequest.apply(http, args);
+  return Reflect.apply(realRequest, http, target ? [target.options, ...args.slice(1)] : args);
 };
 
 const realGet = http.get;
 http.get = function get(...args) {
   const target = deviceTarget(args[0]);
-  return target ? realGet.call(http, target.options, ...args.slice(1)) : realGet.apply(http, args);
+  return Reflect.apply(realGet, http, target ? [target.options, ...args.slice(1)] : args);
 };
 
 // UDP stays inside the run (round 104, measured 2026-10-07: the network search sent its M-SEARCH into the real LAN and
@@ -133,7 +136,7 @@ dgram.Socket.prototype.send = function send(...args) {
   const withOffset = typeof args[1] === "number" && typeof args[2] === "number";
   const address = withOffset ? args[4] : args[2];
   if (typeof address !== "string" || insideTheRun(address)) {
-    return realSend.apply(this, args);
+    return Reflect.apply(realSend, this, args);
   }
   const callback = args.findLast(a => typeof a === "function");
   if (callback) {
@@ -147,5 +150,5 @@ dgram.Socket.prototype.emit = function emit(event, ...rest) {
   if (event === "message" && rest[1] && !insideTheRun(rest[1].address)) {
     return false;
   }
-  return realEmit.call(this, event, ...rest);
+  return Reflect.apply(realEmit, this, [event, ...rest]);
 };

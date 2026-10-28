@@ -27,7 +27,39 @@ const DROP_DEVICE_SWITCH = "INVENTORY_DROP_DEVICE";
 const DROPPED_FIXTURE = "wx030";
 
 /**
- * @param {unknown} fixture one device fixture
+ * One zone of a MusicCast `system/getFeatures` answer — the parts the fixture servers and the declared-value readers use.
+ *
+ * @typedef {object} YxcZone
+ * @property {string} id the zone (`main`, `zone2`, …)
+ * @property {string[]} [input_list] the inputs the zone declares
+ * @property {string[]} [sound_program_list] the sound programs
+ * @property {string[]} [surr_decoder_type_list] the surround decoders
+ * @property {string[]} [menu_list] the menu keys
+ * @property {string[]} [cursor_list] the cursor keys
+ * @property {Array<{ id: string, min: number, max: number, step: number }>} [range_step] the declared ranges
+ */
+
+/**
+ * One MusicCast answer as captured: the fields read here typed, every other one as the device sent it.
+ *
+ * @typedef {{ response_code?: number, zone?: YxcZone[], zone_list?: Array<{ text: string }>, [field: string]: unknown }} YxcAnswer
+ */
+
+/**
+ * One device fixture: the capture file plus the id and object id devices.json gives it.
+ *
+ * @typedef {object} Fixture
+ * @property {string} id the capture's own name
+ * @property {string} fixtureId the devices.json `id`
+ * @property {string} deviceId the object id (model and serial)
+ * @property {string} ip the address the device answers on
+ * @property {{ answers: Record<string, string> }} [ynca] the YNCA capture
+ * @property {{ model: string, answers: Record<string, YxcAnswer> }} [yxc] the MusicCast capture
+ * @property {{ descriptor?: string, answers: Record<string, string> }} [xml] the XML capture
+ */
+
+/**
+ * @param {Fixture} fixture one device fixture
  * @returns {boolean} true while this device is the one the fleet suite dropped
  */
 function dropped(fixture) {
@@ -37,8 +69,8 @@ function dropped(fixture) {
 /**
  * The MusicCast name answer as after a rename in the app: every zone carries a new name.
  *
- * @param {unknown} nameText the captured `system/getNameText` answer
- * @returns {unknown} the answer with renamed zones
+ * @param {YxcAnswer} nameText the captured `system/getNameText` answer
+ * @returns {YxcAnswer} the answer with renamed zones
  */
 function renamedNames(nameText) {
   return {
@@ -47,7 +79,7 @@ function renamedNames(nameText) {
   };
 }
 
-/** @returns {unknown[]} every device fixture, in the order devices.json lists them */
+/** @returns {Fixture[]} every device fixture, in the order devices.json lists them */
 function loadFixtures() {
   const manifest = JSON.parse(fs.readFileSync(path.join(DIR, "devices.json"), "utf8"));
   // The object id the manifest gives each device (3.0.0 rule: model and serial) rides along.
@@ -63,7 +95,7 @@ function loadFixtures() {
  * for everything else — the same rule the hardware-free test harness follows.
  *
  * @param {Record<string, string>} answers the capture's SUBUNIT:FUNC -> value table
- * @param {unknown} fixture the device fixture
+ * @param {Fixture} fixture the device fixture
  * @returns {Promise<{port: number, close: () => Promise<void>}>} the listening server
  */
 function startYnca(answers, fixture) {
@@ -110,10 +142,11 @@ const YXC_UNSUPPORTED = { response_code: 5 };
  * Build the answers a MusicCast device gives, filling the endpoints the capture does not carry
  * with ones derived from its own getFeatures — never with invented capabilities.
  *
- * @param {unknown} yxc the fixture's yxc block
- * @returns {Record<string, unknown>} endpoint -> response
+ * @param {NonNullable<Fixture["yxc"]>} yxc the fixture's yxc block
+ * @returns {Record<string, YxcAnswer>} endpoint -> response
  */
 function yxcAnswers(yxc) {
+  /** @type {Record<string, YxcAnswer>} */
   const answers = { ...yxc.answers };
   const features = answers["system/getFeatures"] ?? { response_code: 0 };
   const zones = (features.zone ?? []).map(zone => zone.id).filter(Boolean);
@@ -151,7 +184,7 @@ function yxcAnswers(yxc) {
  * common case for every 2015+ receiver) could not be expressed, and the description could not
  * be served at all — a plain GET fell through to the XML handler's `RC="2"`.
  *
- * @param {unknown} fixture the device fixture (its yxc and/or xml block)
+ * @param {Fixture} fixture the device fixture (its yxc and/or xml block)
  * @returns {Promise<{port: number, close: () => Promise<void>}>} the listening server
  */
 function startHttp(fixture) {
@@ -162,7 +195,7 @@ function startHttp(fixture) {
       req.socket.destroy();
       return;
     }
-    const url = new URL(req.url, "http://device");
+    const url = new URL(req.url ?? "/", "http://device");
     if (yxc && url.pathname.startsWith("/YamahaExtendedControl/")) {
       const endpoint = url.pathname.replace(/^\/YamahaExtendedControl\/v\d+\//, "");
       // A setter the device declares is accepted; the inventory only needs the object to exist,
@@ -221,10 +254,11 @@ function startHttp(fixture) {
  * surr_decoder_type_list, menu_list and cursor_list. A YNCA-only fixture declares nothing
  * (its dropdowns are candidates the device cannot confirm).
  *
- * @param {unknown} fixture one device fixture
+ * @param {Fixture} fixture one device fixture
  * @returns {Record<string, string[]>} state id → declared values (in the transport's own spelling)
  */
 function declaredListsOf(fixture) {
+  /** @type {Record<string, string[]>} */
   const lists = {};
   const zonePrefix = zone => (zone === "main" ? "" : `multiroom.${zone}.`);
   if (fixture.xml) {
@@ -279,15 +313,17 @@ function declaredListsOf(fixture) {
  * A fixture that speaks no MusicCast declares nothing here; its `volume` comes from the YNCA
  * or XML catalog instead and is not this reader's business.
  *
- * @param {unknown} fixture one device fixture
+ * @param {Fixture} fixture one device fixture
  * @returns {Record<string, {raw?: {min: number, max: number, step: number}, db?: {min: number, max: number, step: number}, numeric?: {min: number, max: number, step: number}}>}
  *   zone-prefixed `volume` id → the ranges that zone declares
  */
 function declaredVolumeRangesOf(fixture) {
+  /** @type {Record<string, {raw?: {min: number, max: number, step: number}, db?: {min: number, max: number, step: number}, numeric?: {min: number, max: number, step: number}}>} */
   const out = {};
   const features = fixture.yxc?.answers?.["system/getFeatures"];
   for (const zone of features?.zone ?? []) {
     const prefix = zone.id === "main" ? "" : `multiroom.${zone.id}.`;
+    /** @type {Record<string, {min: number, max: number, step: number}>} */
     const by = {};
     for (const entry of zone.range_step ?? []) {
       by[entry.id] = { min: entry.min, max: entry.max, step: entry.step };
@@ -301,7 +337,7 @@ function declaredVolumeRangesOf(fixture) {
 }
 
 /**
- * @param {unknown} server a net or http server
+ * @param {net.Server | http.Server} server a net or http server
  * @returns {Promise<{port: number, close: () => Promise<void>}>} resolved once it listens
  */
 function listen(server) {
@@ -309,12 +345,14 @@ function listen(server) {
     server.on("error", reject);
     server.listen(0, "127.0.0.1", () => {
       resolve({
-        port: server.address().port,
+        port: /** @type {net.AddressInfo} */ (server.address()).port,
         // The adapter holds its YNCA socket open for the whole run, so a plain close() would
         // wait for a connection that never ends on its own. Drop the live ones first.
         close: () =>
           new Promise(done => {
-            server.closeAllConnections?.();
+            if (server instanceof http.Server) {
+              server.closeAllConnections();
+            }
             server.close(() => done());
           }),
       });
@@ -335,7 +373,9 @@ const TYPED_ROW = { name: "Kueche", ip: "10.10.0.99" };
  */
 async function startFixtureDevices() {
   const fixtures = loadFixtures();
+  /** @type {Array<{port: number, close: () => Promise<void>} | undefined>} */
   const servers = [];
+  /** @type {Record<string, {http: number, ynca: number|null}>} */
   const routes = {};
   // The YNCA answer tables, kept to switch a receiver on and off (`MAIN:PWR`, what the adapter reads as "switched
   // on"). The captures of the RX-V6A and the RX-V473 were taken in standby.

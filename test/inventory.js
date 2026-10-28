@@ -174,8 +174,8 @@ const ADDRESS_KEY = (() => {
   return fs.existsSync(file) ? find(JSON.parse(fs.readFileSync(file, "utf8"))) : undefined;
 })();
 const CHOSEN_ADDRESS = Object.values(require("node:os").networkInterfaces())
-  .flat()
-  .find(i => (i.family === "IPv4" || i.family === 4) && !i.internal)?.address;
+  .flatMap(list => list ?? [])
+  .find(i => i.family === "IPv4" && !i.internal)?.address;
 const MISSING_ADDRESS = "192.0.2.1";
 // Round 97 (krobi 2026-10-06 19:07–19:14, page "Diagnosebericht — Flottenstandard"): an adapter with a diagnostics
 // report carries the fleet master src/lib/diagnostics/report-jobs.ts; the card asks every REPORT_POLL_MS whether a
@@ -187,6 +187,17 @@ const REPORT_DEADLINE_MS = 180000;
 const RESERVED_ROW = { name: "info", ip: "127.0.0.252" };
 
 /**
+ * @typedef {object} WriteWatch what watchObjectWrites returns
+ * @property {Map<string, number>} writes the adapter's object writes per id in this start
+ * @property {Map<string, number>} peak the most writes of one id in one start
+ * @property {string[]} unchanged the ids the adapter rewrote without a change
+ * @property {string[]} deleted the ids deleted
+ * @property {Array<[string, number]>} times every object write of the adapter with its time
+ * @property {string[]} unchangedStates the states the adapter rewrote without a change
+ * @property {() => void} newStart begins the per-start counts again (playControllerRestarts)
+ */
+
+/**
  * Every object write of the adapter in this suite, and which of them changed nothing (round 61). An unchanged
  * rewrite still goes to the database and to every subscriber — the adapter writes only what differs. The FIRST
  * write of an `instanceObjects` entry is js-controller's own (`_createInstancesObjects` extends every entry before
@@ -196,7 +207,21 @@ const RESERVED_ROW = { name: "info", ip: "127.0.0.252" };
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness
  */
 async function watchObjectWrites(harness) {
-  const watch = { writes: new Map(), peak: new Map(), unchanged: [], deleted: [], times: [], unchangedStates: [] };
+  /** @type {WriteWatch} */
+  const watch = {
+    writes: new Map(),
+    peak: new Map(),
+    unchanged: [],
+    deleted: [],
+    times: [],
+    unchangedStates: [],
+    // Round 64: a restart the harness plays (playControllerRestarts) is a new start — the per-start counts begin again,
+    // the known object content stays (it is the database's).
+    newStart: () => {
+      watch.writes.clear();
+      states.clear();
+    },
+  };
   const known = new Map();
   const roles = new Map();
   const states = new Map();
@@ -247,12 +272,6 @@ async function watchObjectWrites(harness) {
     }
     states.set(id, now);
   });
-  // Round 64: a restart the harness plays (playControllerRestarts) is a new start — the per-start counts begin again,
-  // the known object content stays (it is the database's).
-  watch.newStart = () => {
-    watch.writes.clear();
-    states.clear();
-  };
   const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
   for (const row of list.rows) {
     if (row.value) {
@@ -399,7 +418,7 @@ async function stopFixtures() {
  * stored), `typedRow` (the typed row whose id falls back to its room name, DB-04) and `rows` (further rows as they are,
  * e.g. RESERVED_ROW). Every other key of `extra` is an instance setting on top of the fixture config.
  *
- * @param {Record<string, unknown>} [extra] what this suite sets on top
+ * @param {{ legacyRows?: boolean, typedRow?: boolean, rows?: object[], [key: string]: unknown }} [extra] what this suite sets on top
  * @returns {Promise<Record<string, unknown>>} the native for resetInstanceNative
  */
 async function fixtureNative(extra = {}) {
@@ -595,7 +614,7 @@ async function dumpStates(harness) {
  * @param {...string} hooks the test hooks the suite starts the adapter with (as for adapterEnv)
  */
 function playControllerRestarts(harness, watch, ...hooks) {
-  const restarts = { count: 0, again: [], done: Promise.resolve() };
+  const restarts = { count: 0, again: /** @type {number[]} */ ([]), done: Promise.resolve() };
   harness.on("objectChange", (id, obj) => {
     if (
       id !== `system.adapter.${ADAPTER}.0` ||
@@ -659,7 +678,7 @@ async function restartAsTheHost(harness, watch, why, ...hooks) {
   await new Promise(resolve => setTimeout(resolve, RESTART_DELAY_MS));
   // @iobroker/testing refuses a second start of one harness ("already been used"); the host starts the same
   // instance again — reset the exit marker, and fail loudly should the harness no longer keep it there.
-  harness._adapterExit = undefined;
+  internals(harness)._adapterExit = undefined;
   assert.ok(!harness.didAdapterStop(), "@iobroker/testing changed its exit marker — the restart play needs a new form");
   await withinDeadline(
     harness.startAdapterAndWait(false, adapterEnv(...hooks)),
@@ -842,6 +861,15 @@ async function maskedSecretsLeft(harness) {
 }
 
 /**
+ * The harness fields `@iobroker/testing` keeps private: the test installation folder and the exit marker. Every use
+ * fails loudly when a version drops one (clearInstanceData, restartAsTheHost).
+ *
+ * @param {import("@iobroker/testing").IntegrationTestHarness} harness
+ * @returns {{ testDir: string, _adapterExit: unknown }} the same harness
+ */
+const internals = harness => /** @type {any} */ (harness);
+
+/**
  * Round 71: @iobroker/testing empties only the database and the log per suite — the instance data folder survives every
  * suite and every run. A fresh installation has no data folder, so each suite starts without one; the second start of
  * `playControllerRestarts` keeps it, as a real host does. Round 113: it marks the new installation (`<time>.install`) —
@@ -850,10 +878,10 @@ async function maskedSecretsLeft(harness) {
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness
  */
 function clearInstanceData(harness) {
-  if (typeof harness.testDir !== "string") {
+  if (typeof internals(harness).testDir !== "string") {
     throw new Error("the harness no longer carries testDir — clearInstanceData cannot find the instance data folder");
   }
-  fs.rmSync(path.join(harness.testDir, "iobroker-data", `${ADAPTER}.0`), { recursive: true, force: true });
+  fs.rmSync(path.join(internals(harness).testDir, "iobroker-data", `${ADAPTER}.0`), { recursive: true, force: true });
   fs.writeFileSync(path.join(RESOURCE_DIR, `${Date.now()}.install`), "");
 }
 
@@ -875,7 +903,7 @@ const EXCLUDED_BEFORE = { id: "rx-v685-0a1b", ip: "127.0.0.250", identity: { ser
  */
 async function seedInstanceData(harness, previous) {
   void previous;
-  const dir = path.join(harness.testDir, "iobroker-data", `${ADAPTER}.0`);
+  const dir = path.join(internals(harness).testDir, "iobroker-data", `${ADAPTER}.0`);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "excluded.json"), JSON.stringify([EXCLUDED_BEFORE]));
 }
@@ -920,6 +948,7 @@ async function waitForStates(harness, wanted, what) {
  */
 async function playOutage(harness, watch) {
   assert.ok(Object.keys(OUTAGE_SHOWN).length > 0, "OUTAGE_SHOWN names no state — nothing would show the outage");
+  /** @type {Record<string, unknown>} */
   const before = {};
   for (const [id, val] of Object.entries(OUTAGE_SHOWN)) {
     before[id] = (await harness.states.getStateAsync(`${NS}${id}`))?.val;
@@ -977,7 +1006,7 @@ async function playOutage(harness, watch) {
  * Round 97: one `diagnostics` message to the adapter and its answer, as the admin card sends it.
  *
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness
- * @param {{ action: string }} message the message
+ * @param {{ action: string, [key: string]: unknown }} message the message
  */
 function askDiagnostics(harness, message) {
   const answer = new Promise(resolve => harness.sendTo(`${ADAPTER}.0`, "diagnostics", message, resolve));
@@ -999,11 +1028,11 @@ function instanceFiles(harness) {
         walk(file);
       } else {
         const stat = fs.statSync(file);
-        files[path.relative(harness.testDir, file)] = `${stat.size} ${stat.mtimeMs}`;
+        files[path.relative(internals(harness).testDir, file)] = `${stat.size} ${stat.mtimeMs}`;
       }
     }
   };
-  const data = path.join(harness.testDir, "iobroker-data");
+  const data = path.join(internals(harness).testDir, "iobroker-data");
   walk(path.join(data, `${ADAPTER}.0`));
   walk(path.join(data, "files", `${ADAPTER}.0`));
   return files;
@@ -1141,6 +1170,7 @@ function channel(c) {
 function startHang() {
   const calls = readCalls().filter(c => !c.kind.startsWith("hang-"));
   const opened = new Map();
+  /** @type {Record<string, number>} */
   const usual = {};
   for (const c of calls) {
     opened.set(c.pid, opened.get(c.pid) ?? c.t);
@@ -1405,7 +1435,13 @@ function commandValue(common, now) {
 async function playCommands(harness) {
   const list = await harness.objects.getObjectListAsync({ startkey: NS, endkey: `${NS}香` });
   const writable = list.rows.map(r => r.value).filter(o => o?.type === "state" && o.common?.write !== false);
-  const run = { writes: [], acks: [], since: Date.now() };
+  const run = {
+    /** @type {Array<{ id: string, val: unknown, t: number, sole: boolean }>} */
+    writes: [],
+    /** @type {Array<[string, number]>} */
+    acks: [],
+    since: Date.now(),
+  };
   const acknowledged = (id, state) => {
     if (id.startsWith(NS) && state?.ack === true && state.from === `system.adapter.${ADAPTER}.0`) {
       run.acks.push([id, state.ts]);
@@ -1544,9 +1580,12 @@ async function takePorts(ports, address) {
     await new Promise((resolve, reject) => {
       holder.once("error", reject);
       if (protocol === "udp") {
-        holder.bind({ port, address: all ? "::" : address, exclusive: true }, resolve);
+        /** @type {import("node:dgram").Socket} */ (holder).bind(
+          { port, address: all ? "::" : address, exclusive: true },
+          () => resolve(undefined),
+        );
       } else {
-        holder.listen(port, all ? "::" : address, resolve);
+        /** @type {import("node:net").Server} */ (holder).listen(port, all ? "::" : address, () => resolve(undefined));
       }
     });
     held.push(holder);
@@ -1562,7 +1601,9 @@ async function takePorts(ports, address) {
  * @param {Array<{ close: (cb: () => void) => void }>} held the holders of takePorts
  */
 function releasePorts(held) {
-  const closed = Promise.all(held.map(h => new Promise(resolve => h.close(() => resolve()))));
+  const closed = Promise.all(
+    held.map(h => /** @type {Promise<void>} */ (new Promise(resolve => h.close(() => resolve())))),
+  );
   return Promise.race([closed, new Promise(resolve => setTimeout(resolve, 1000).unref())]);
 }
 
@@ -1970,7 +2011,7 @@ tests.integration(ADAPTER_DIR, {
         // Removal by attrition would leave them here on the FIRST start after the update, which
         // reads like a failure; they go through the explicit removal path instead.
         const objects = await dumpObjects(harness);
-        const leftovers = Object.keys(objects).filter(id => REMOVED_IN_2_8_0.includes(id.split(".").pop()));
+        const leftovers = Object.keys(objects).filter(id => REMOVED_IN_2_8_0.includes(id.split(".").pop() ?? ""));
         assert.deepStrictEqual(leftovers, [], `removed datapoints still in the tree:\n${leftovers.join("\n")}`);
       });
 
@@ -2224,7 +2265,7 @@ tests.integration(ADAPTER_DIR, {
           const role = String(obj?.common?.role ?? "");
           if (
             !roles.some(r => role === r || role.startsWith(`${r}.`)) &&
-            !/(online|connect|reach|alive)/i.test(id.split(".").at(-1))
+            !/(online|connect|reach|alive)/i.test(id.split(".").at(-1) ?? "")
           ) {
             other.push(`${id} (role ${role || "none"})`);
           }
@@ -2759,7 +2800,7 @@ tests.integration(ADAPTER_DIR, {
           await restarts.done;
           await waitForAdapterWork(harness);
           use = networkUse(seen);
-          strangers = await askFromAnotherNetwork(use, CHOSEN_ADDRESS);
+          strangers = await askFromAnotherNetwork(use, /** @type {string} */ (CHOSEN_ADDRESS));
         });
 
         after(async function () {
@@ -2773,7 +2814,7 @@ tests.integration(ADAPTER_DIR, {
             use.length > 0,
             "the network hook recorded nothing — a start without NETWORK_HOOK as its last hook",
           );
-          const wrong = offTheAddress(use, CHOSEN_ADDRESS);
+          const wrong = offTheAddress(use, /** @type {string} */ (CHOSEN_ADDRESS));
           assert.deepStrictEqual(wrong, [], `network use off ${CHOSEN_ADDRESS}:\n${wrong.join("\n")}`);
         });
 
@@ -3307,7 +3348,7 @@ tests.integration(ADAPTER_DIR, {
             ack: true,
             from: "system.host.testing",
           });
-          harness._adapterExit = undefined;
+          internals(harness)._adapterExit = undefined;
           restarts = playControllerRestarts(harness, watch);
           await harness.startAdapterAndWait(false, adapterEnv());
           await waitForAdapterWork(harness);
@@ -3376,6 +3417,10 @@ tests.integration(ADAPTER_DIR, {
             }
             const ip = id.slice(NS.length).replace(/_/g, ".");
             const now = live[id] ? id : liveIdByIp.get(ip);
+            if (now === undefined) {
+              lost.push(`${id}: no device answers to ${ip} after the update`);
+              continue;
+            }
             // No `source`: since Y-27 a device carries no marker of how it got into the list. An identity stores an
             // unknown field as `null` (both fields always present) — the same identity as one without the field.
             const known = (key, value) =>
@@ -3456,7 +3501,7 @@ tests.integration(ADAPTER_DIR, {
         });
 
         it("keeps a device the user deleted before the update deleted", function () {
-          const file = path.join(harness.testDir, "iobroker-data", `${ADAPTER}.0`, "excluded.json");
+          const file = path.join(internals(harness).testDir, "iobroker-data", `${ADAPTER}.0`, "excluded.json");
           const excluded = JSON.parse(fs.readFileSync(file, "utf8"));
           assert.ok(
             excluded.some(entry => entry.id === EXCLUDED_BEFORE.id),
