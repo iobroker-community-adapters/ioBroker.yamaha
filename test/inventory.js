@@ -610,7 +610,7 @@ async function dumpStates(harness) {
  * stopped a start midway. Each step has a deadline (withinDeadline).
  *
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness
- * @param {object | null} watch the suite's write watcher (watchObjectWrites), null in a suite without one
+ * @param {WriteWatch | null} watch the suite's write watcher (watchObjectWrites), null in a suite without one
  * @param {...string} hooks the test hooks the suite starts the adapter with (as for adapterEnv)
  */
 function playControllerRestarts(harness, watch, ...hooks) {
@@ -661,7 +661,7 @@ async function withinDeadline(promise, ms, what) {
  * on the adapter's own write; the suite "a restart right after the start" plays it on purpose.
  *
  * @param {import("@iobroker/testing").IntegrationTestHarness} harness
- * @param {{ newStart(): void } | undefined} watch what watchObjectWrites returned
+ * @param {WriteWatch | null} watch what watchObjectWrites returned, null in a suite without one (the form B02 demands)
  * @param {string} why when the restart comes, in the stop's failure message
  * @param {...string} hooks the test hooks of the start (as for adapterEnv)
  */
