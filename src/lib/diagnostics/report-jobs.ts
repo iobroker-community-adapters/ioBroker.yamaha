@@ -146,7 +146,6 @@ export interface ReportSource<L> {
 
 /** The adapter's report jobs: one per device at a time, held in memory until fetched. */
 export class ReportJobs<L> {
-  private readonly running = new Set<string>();
   private readonly finished = new Map<string, number>();
   private readonly jobs = new Map<string, { device: string; result?: Report | { error: string }; doneAt?: number }>();
   private jobCount = 0;
@@ -213,13 +212,14 @@ export class ReportJobs<L> {
         return { job: id };
       }
     }
-    if (!this.source.devices().some(d => d.id === deviceId)) {
+    const device = this.source.devices().find(d => d.id === deviceId);
+    if (!device) {
       return { error: `unknown device '${deviceId}'` };
     }
     const id = `${deviceId}#${++this.jobCount}`;
     const job: { device: string; result?: Report | { error: string }; doneAt?: number } = { device: deviceId };
     this.jobs.set(id, job);
-    void this.make(deviceId).then(result => {
+    void this.make(device).then(result => {
       job.result = result;
       job.doneAt = this.now();
     });
@@ -257,19 +257,17 @@ export class ReportJobs<L> {
   /**
    * Make one device's report: the live read only for a connected device, then the adapter's body inside the frame.
    *
-   * @param deviceId the device id
+   * Round 157 (master audit M7/M8): `start` hands over the device it found and never starts a second job for a device
+   * with an open one — the lookup and the "running" set here were branches no caller reached.
+   *
+   * @param device the device `start` found
    * @returns the report, or why there is none
    */
-  private async make(deviceId: string): Promise<Report | { error: string }> {
-    const device = this.source.devices().find(d => d.id === deviceId);
-    const now = this.now();
-    if (!device) {
-      return { error: `unknown device '${deviceId}'` };
-    }
-    if (this.running.has(deviceId) || now - (this.finished.get(deviceId) ?? -Infinity) < REPORT_COOLDOWN_MS) {
+  private async make(device: ReportSourceDevice): Promise<Report | { error: string }> {
+    const deviceId = device.id;
+    if (this.now() - (this.finished.get(deviceId) ?? -Infinity) < REPORT_COOLDOWN_MS) {
       return { error: "a report for this device is being made right now — try again in a moment" };
     }
-    this.running.add(deviceId);
     try {
       let live: L | undefined;
       let liveError: string | undefined;
@@ -301,7 +299,6 @@ export class ReportJobs<L> {
       this.source.log.warn(`${deviceId}: diagnostics report failed: ${reason}`);
       return { error: `report failed: ${reason}` };
     } finally {
-      this.running.delete(deviceId);
       this.finished.set(deviceId, this.now());
     }
   }

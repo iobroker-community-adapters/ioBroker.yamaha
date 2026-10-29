@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { isReport, makeDiagnosticsApi } from "../../../src-admin/src/diagnosticsApi";
 import {
   REPORT_COOLDOWN_MS,
   REPORT_KEEP_MS,
@@ -120,8 +121,8 @@ describe("ReportJobs", () => {
     });
     t = 10 * REPORT_COOLDOWN_MS;
     devices = [];
-    const gone = (jobs as unknown as { make(id: string): Promise<unknown> }).make("lamp");
-    expect(await gone).toEqual({ error: "unknown device 'lamp'" });
+    // round 157 (master audit M8): a device gone is refused at the start — make never looked it up again
+    expect(jobs.start("lamp")).toEqual({ error: "unknown device 'lamp'" });
   });
 
   it("starts a new job once the last one is finished, also for another device next to it", async () => {
@@ -135,12 +136,15 @@ describe("ReportJobs", () => {
     );
     const first = jobs.start("lamp") as { job: string };
     const plug = jobs.start("plug") as { job: string };
-    expect(plug.job).not.toBe(first.job);
     await settle();
+    // round 157 (master audit M9): two ids were always two (the id carries the device) — both reports must come
+    expect(jobs.result(first.job)).toHaveProperty("fileName");
+    expect(jobs.result(plug.job)).toHaveProperty("fileName");
     t = 10 * REPORT_COOLDOWN_MS;
     const again = jobs.start("lamp") as { job: string };
     expect(again.job).not.toBe(first.job);
     await settle();
+    expect(jobs.result(again.job)).toHaveProperty("fileName");
   });
 
   it("keeps every frame field when the body names the same key (DB-06)", async () => {
@@ -274,16 +278,37 @@ describe("ReportJobs", () => {
     expect(await jobs.handle({ action: "result", job })).toEqual({ gone: true });
   });
 
-  it("refuses a second report while one is still being made", async () => {
+  it("answers a second start while one is still being made with the same job", async () => {
+    // round 157 (master audit M7): the guard that works is the public one — before, a cast reached a private branch
+    // no caller could
     let release: (value: string) => void = () => undefined;
     const slow = new Promise<string>(resolve => {
       release = resolve;
     });
     const jobs = new ReportJobs(source([{ id: "lamp", connected: true }], { readLive: () => slow }));
-    jobs.start("lamp");
-    const busy = (jobs as unknown as { make(id: string): Promise<unknown> }).make("lamp");
-    expect(await busy).toEqual({ error: "a report for this device is being made right now — try again in a moment" });
+    const first = jobs.start("lamp") as { job: string };
+    expect(jobs.start("lamp")).toEqual(first);
+    expect(jobs.result(first.job)).toEqual({ pending: true });
     release("done");
     await settle();
+    expect(jobs.result(first.job)).toHaveProperty("fileName");
+  });
+});
+
+// Round 157 (master audit M44): each half of the report was tested against a hand-made stand-in of the other — the card's
+// API now talks to the real jobs, so a drift in the device list, `pending`, the report or an error is red here.
+describe("the card's API on the real jobs", () => {
+  it("lists the devices, makes a report and hands an error on", async () => {
+    const jobs = new ReportJobs(source([{ id: "lamp", label: "Lamp", connected: false }]));
+    const api = makeDiagnosticsApi({ sendTo: (_i, _c, data) => jobs.handle(data) }, "demo.0", {
+      listMs: 1_000,
+      exportMs: 5_000,
+      pollMs: 1,
+    });
+    expect(await api.listDevices()).toEqual(jobs.list());
+    expect(jobs.list()).toHaveLength(1);
+    const report = await api.exportReport("lamp");
+    expect(isReport(report) && report.fileName).toMatch(/^demo_lamp_v1\.0\.0_/);
+    expect(await api.exportReport("nope")).toEqual({ error: "unknown device 'nope'" });
   });
 });

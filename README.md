@@ -54,7 +54,7 @@ For details and how to disable it, see the [Sentry plugin documentation](https:/
 
 - Node.js >= 22
 - js-controller >= 7.2.5
-- admin >= 8.2.0
+- admin >= 8.3.5
 
 ## Ports
 
