@@ -378,8 +378,12 @@ describe("YxcDeviceController", () => {
     await s.controller.start();
     expect(s.acks).toContainEqual({ id: "living.info.model", value: "WX-010" });
     expect(s.acks).toContainEqual({ id: "living.info.firmware", value: "2.16" });
-    expect(s.defs.get("living.info.model")?.common).toMatchObject({ type: "string", role: "text", write: false });
-    expect(s.defs.get("living.info.firmware")?.common).toMatchObject({ type: "string", role: "text", write: false });
+    expect(s.defs.get("living.info.model")?.common).toMatchObject({ type: "string", role: "info.model", write: false });
+    expect(s.defs.get("living.info.firmware")?.common).toMatchObject({
+      type: "string",
+      role: "info.firmware",
+      write: false,
+    });
     expect(s.objects).toContain("living.info");
   });
 

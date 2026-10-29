@@ -85,6 +85,7 @@
   "clockFormat": "Clock format",
   "connect": "Connect",
   "connected": "Connected",
+  "bluetoothConnected": "Bluetooth connected",
   "descDeviceConnected": "The device answers on at least one of its protocols; a receiver in network standby answers too, so this is not the same as Power.",
   "contentsDisplay": "Contents display",
   "currentLine": "Current line",

@@ -24,7 +24,7 @@ describe("specToCommon", () => {
     const states = { HDMI1: "HDMI1", HDMI2: "HDMI2", AV1: "AV1" };
     const common = specToCommon({ kind: "enum", states }, { write: true });
     expect(common.type).toBe("string");
-    expect(common.role).toBe("state");
+    expect(common.role).toBe("text");
     expect(common.states).toEqual(states);
   });
 

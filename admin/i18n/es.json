@@ -85,6 +85,7 @@
   "clockFormat": "Formato de hora",
   "connect": "Conectar",
   "connected": "Conectado",
+  "bluetoothConnected": "Bluetooth conectado",
   "descDeviceConnected": "El aparato responde en al menos uno de sus protocolos; un receptor en espera de red también responde, así que no equivale a encendido.",
   "contentsDisplay": "Visualización del contenido",
   "currentLine": "Línea actual",

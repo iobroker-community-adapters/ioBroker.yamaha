@@ -30,6 +30,107 @@
       "fixed": 1900
     }
   ],
+  "_fixtureLimits": "Where a MusicCast fixture declares a datapoint's range (getFeatures range_step), the datapoint carries exactly that minimum, maximum and step (D16; Y-07). The YNCA and XML fixtures are text answers, not JSON, so only the MusicCast ranges can be pointed at; bass and treble are halved to decibels (Y-07) and so are not the device's raw steps.",
+  "fixtureLimits": [
+    {
+      "state": "cd-nt670d.volume",
+      "file": "test/fixtures/inventory/cdnt670d.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/0/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/0/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/0/step"
+    },
+    {
+      "state": "wx-030-7553.volume",
+      "file": "test/fixtures/inventory/wx030.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/0/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/0/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/0/step"
+    },
+    {
+      "state": "wx-030-7553.sound.equalizer.low",
+      "file": "test/fixtures/inventory/wx030.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/step"
+    },
+    {
+      "state": "wx-030-7553.sound.equalizer.mid",
+      "file": "test/fixtures/inventory/wx030.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/step"
+    },
+    {
+      "state": "wx-030-7553.sound.equalizer.high",
+      "file": "test/fixtures/inventory/wx030.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/step"
+    },
+    {
+      "state": "ysp-1600-7073.volume",
+      "file": "test/fixtures/inventory/ysp1600.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/0/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/0/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/0/step"
+    },
+    {
+      "state": "ysp-1600-7073.sound.subwooferTrim",
+      "file": "test/fixtures/inventory/ysp1600.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/1/step"
+    },
+    {
+      "state": "rx-a2a-e7d3.volume",
+      "file": "test/fixtures/inventory/rxa2070.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/3/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/3/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/3/step"
+    },
+    {
+      "state": "rx-a2a-e7d3.sound.dialogueLevel",
+      "file": "test/fixtures/inventory/rxa2070.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/2/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/2/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/2/step"
+    },
+    {
+      "state": "rx-v6a.volume",
+      "file": "test/fixtures/inventory/rxv6a.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/6/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/6/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/6/step"
+    },
+    {
+      "state": "rx-v6a.multiroom.zone2.volume",
+      "file": "test/fixtures/inventory/rxv6a.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/1/range_step/4/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/1/range_step/4/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/1/range_step/4/step"
+    },
+    {
+      "state": "rx-v6a.sound.dialogueLevel",
+      "file": "test/fixtures/inventory/rxv6a.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/2/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/2/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/2/step"
+    },
+    {
+      "state": "rx-v6a.sound.dialogueLift",
+      "file": "test/fixtures/inventory/rxv6a.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/3/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/3/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/3/step"
+    },
+    {
+      "state": "rx-v6a.sound.dtsDialogueControl",
+      "file": "test/fixtures/inventory/rxv6a.json",
+      "min": "/yxc/answers/system~1getFeatures/zone/0/range_step/7/min",
+      "max": "/yxc/answers/system~1getFeatures/zone/0/range_step/7/max",
+      "step": "/yxc/answers/system~1getFeatures/zone/0/range_step/7/step"
+    }
+  ],
   "serverTest": {
     "_why": "A release keeps every receiver found, its input read and its connection up, and still switches a real receiver on and off over the MusicCast or YXC path.",
     "_note": "Ids are relative to the instance; `*` is the device object (model + last four characters of the serial). `*.power` is the main zone's power switch, a boolean the receiver confirms with ack; `online` limits the command to a reachable receiver. Ran green on krobi's server 2026-10-15 09:56-09:59 against 3.3.0 (Werkbank round 117).",

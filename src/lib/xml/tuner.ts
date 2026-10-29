@@ -78,7 +78,7 @@ export class XmlTuner implements XmlWriteRoute {
     await state("band", {
       name: tName("band"),
       type: "string",
-      role: "state",
+      role: "text",
       read: true,
       write: true,
       states: { AM: "AM", FM: "FM" },
@@ -86,7 +86,7 @@ export class XmlTuner implements XmlWriteRoute {
     await state("frequency", {
       name: tName("frequency"),
       type: "number",
-      role: "level",
+      role: "level.frequency",
       unit: "kHz",
       read: true,
       write: true,

@@ -102,6 +102,32 @@ export function tName(key: I18nKey, ...args: Arg[]): ioBroker.StringOrTranslated
 }
 
 /**
+ * A name made of other names, language by language: each part in that language (a translation object's
+ * missing language reads its English text, a plain string or number stands as it is), joined by `join`.
+ * Rule D19 of the fleet: two datapoints of one device never share a name in any language — the zone or the
+ * list slot a datapoint belongs to goes into its name ("Zone 2 Mute", "Favourites 3: Name"), its id stays.
+ *
+ * @param parts the names to join, in order
+ * @param join how one language's texts make the name
+ * @returns the joined name as a translation object
+ */
+export function tJoin(
+  parts: readonly (ioBroker.StringOrTranslated | number)[],
+  join: (texts: string[]) => string,
+): ioBroker.StringOrTranslated {
+  const textIn = (language: string, part: ioBroker.StringOrTranslated | number): string => {
+    if (typeof part !== "object") {
+      return String(part);
+    }
+    const words = part as Partial<Record<string, string>>;
+    return words[language] ?? words.en ?? "";
+  };
+  return Object.fromEntries(
+    Object.keys(LANGUAGES).map(language => [language, join(parts.map(part => textIn(language, part)))]),
+  ) as ioBroker.StringOrTranslated;
+}
+
+/**
  * A text in ONE language — a value label (`common.states`), which the admin shows as it stands: a label is a
  * plain string in the system language (a translation object there crashes the object browser), resolved once
  * when the object is written. An unknown language reads English. Looked up directly — it built all eleven

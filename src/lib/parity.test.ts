@@ -1,4 +1,5 @@
 import { formDifferences, type FormDifference } from "./catalog/object-form";
+import { qualifiedName } from "./catalog/qualified-name";
 import { withValueLabels } from "./catalog/state-labels";
 import type { Transport } from "./catalog/owner-policy";
 import type { ObjectDef } from "./catalog/types";
@@ -155,5 +156,38 @@ describe("parity of YNCA, MusicCast and XML over the inventory fixtures (krobi 2
     expect(
       found.filter(line => !EXCEPTIONS.some(e => e.id.test(line.split(":")[0]) && e.fields.includes("common.name"))),
     ).toEqual([]);
+  });
+
+  // Rule D19 of the fleet (package rule `same-name`): two datapoints of one device never share a name, in any language
+  // — compared as the rule does, case and spacing aside, a missing language read as English. The names are the ones
+  // main.ts writes (`qualifiedName`): a zone's datapoint names its zone, a list slot its list and slot, a source's
+  // preset its source (krobi 2026-10-29). Each receiver's tree is the union of what its protocols build.
+  it("names no two datapoints of one receiver alike, in any language", () => {
+    const languages = ["en", "de", "ru", "pt", "nl", "fr", "it", "es", "pl", "uk", "zh-cn"];
+    const found: string[] = [];
+    for (const [device, byTransport] of trees) {
+      const names = new Map<string, ioBroker.StringOrTranslated>();
+      for (const tree of byTransport.values()) {
+        for (const [id, def] of tree.objects) {
+          if (def.type === "state" && !names.has(id)) {
+            names.set(id, qualifiedName(id, def.common.name));
+          }
+        }
+      }
+      for (const language of languages) {
+        const holders = new Map<string, string[]>();
+        for (const [id, name] of names) {
+          const words = typeof name === "string" ? name : (name[language as keyof typeof name] ?? name.en);
+          const key = words.split(/\s+/).filter(Boolean).join(" ").toLowerCase();
+          holders.set(key, [...(holders.get(key) ?? []), id]);
+        }
+        for (const [key, ids] of holders) {
+          if (ids.length > 1) {
+            found.push(`${device} ${language} "${key}": ${ids.join(", ")}`);
+          }
+        }
+      }
+    }
+    expect(found).toEqual([]);
   });
 });

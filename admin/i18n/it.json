@@ -85,6 +85,7 @@
   "clockFormat": "Formato ora",
   "connect": "Connetti",
   "connected": "Connesso",
+  "bluetoothConnected": "Bluetooth connesso",
   "descDeviceConnected": "L'apparecchio risponde su almeno uno dei suoi protocolli; anche un ricevitore in standby di rete risponde, quindi non equivale ad acceso.",
   "contentsDisplay": "Visualizzazione contenuti",
   "currentLine": "Riga corrente",

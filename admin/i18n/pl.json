@@ -85,6 +85,7 @@
   "clockFormat": "Format zegara",
   "connect": "Połącz",
   "connected": "Połączono",
+  "bluetoothConnected": "Bluetooth połączony",
   "descDeviceConnected": "Urządzenie odpowiada na co najmniej jednym ze swoich protokołów; amplituner w czuwaniu sieciowym też odpowiada, więc to nie to samo co włączony.",
   "contentsDisplay": "Wyświetlanie zawartości",
   "currentLine": "Bieżący wiersz",

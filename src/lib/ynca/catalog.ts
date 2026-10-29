@@ -543,7 +543,7 @@ const AMP_FUNCS: FuncDef[] = [
     descKey: "descMuteLevel",
     spec: { kind: "enum", states: selfMap(["Off", "On", "Att -20 dB", "Att -40 dB"]) },
     write: true,
-    role: "state",
+    role: "text",
     derived: true,
     derive: wire => wire,
   },
@@ -586,7 +586,7 @@ const AMP_FUNCS: FuncDef[] = [
     descKey: "descSoundProgram",
     spec: { kind: "enum", states: SOUNDPRG_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "STRAIGHT",
@@ -622,7 +622,7 @@ const AMP_FUNCS: FuncDef[] = [
     descKey: "descSleepTimer",
     spec: { kind: "enum", states: SLEEP_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "SPBASS",
@@ -677,7 +677,7 @@ const AMP_FUNCS: FuncDef[] = [
     // `state`, not `text`: it is a mode out of a fixed set, and MusicCast even declares the
     // list for it. Both transports feed this one id, so the role must not depend on which of
     // them happens to own it.
-    role: "state",
+    role: "text",
   },
   // Dialogue level: PUT and GET in the 2012 lists (0…3, step 1; the RX-A850 list 0…2) — the envelope
   // of the declared ranges; a value the device does not take is refused and read back (audit
@@ -718,7 +718,7 @@ const AMP_FUNCS: FuncDef[] = [
     descKey: "descHdmiOutput",
     spec: { kind: "enum", states: HDMIOUT_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "ADAPTIVEDRC",
@@ -756,7 +756,7 @@ const AMP_FUNCS: FuncDef[] = [
     descKey: "descSurroundDecoder",
     spec: { kind: "enum", states: DECODER_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "HPBASS",
@@ -947,7 +947,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     descKey: "descHdmiVideoResolution",
     spec: { kind: "enum", states: HDMIRESOL_CLASSIC_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "HDMIASPECT",
@@ -956,7 +956,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     descKey: "descHdmiVideoAspect",
     spec: { kind: "enum", states: HDMIASPECT_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "HDMIPROCESSING",
@@ -974,7 +974,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     descKey: "descLipSyncMode",
     spec: { kind: "enum", states: selfMap(["Auto", "Manual"]) },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "LIPSYNCANLGOUT",
@@ -1015,7 +1015,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     descKey: "descLipSyncActiveOutput",
     spec: { kind: "enum", states: selfMap(["Analog", "HDMI1 Auto", "HDMI1 Manual", "HDMI2 Auto", "HDMI2 Manual"]) },
     write: false,
-    role: "state",
+    role: "text",
   },
   {
     func: "LIPSYNCOFFSETINFO",
@@ -1034,7 +1034,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     // `Unavailable` is GET Only in every list (audit 2026-09-29, B7).
     spec: { kind: "enum", states: selfMap(["Auto", "DTS", "Unavailable"]), readOnly: ["Unavailable"] },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "EXSURDECODER",
@@ -1046,7 +1046,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
       states: selfMap(["Off", "Auto", "Dolby PLIIx Movie", "Dolby PLIIx Music", "EX/ES"]),
     },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "TVAUDIN1",
@@ -1055,7 +1055,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     descKey: "descTvAudioReturnInput",
     spec: { kind: "enum", states: TVAUDIN_MAIN_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   // The second return input (11 of the 21 official lists: the models with two HDMI outputs).
   {
@@ -1065,7 +1065,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     descKey: "descTvAudioReturnInput2",
     spec: { kind: "enum", states: TVAUDIN_MAIN_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   // Audio select (9 lists): which terminal's sound the current input uses. `Unavailable` is
   // GET-only: it reaches the dropdown as an observed value and is never written.
@@ -1076,7 +1076,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     descKey: "descAudioSelect",
     spec: { kind: "enum", states: selfMap(["Auto", "HDMI", "Coax/Opt", "Analog"]), readOnly: ["Unavailable"] },
     write: true,
-    role: "state",
+    role: "text",
   },
   // The A/B toggles belong with the other speaker settings (v2.0.0).
   {
@@ -1116,7 +1116,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     descKey: "descZoneBAvailability",
     spec: { kind: "enum", states: ZONEB_AVAIL_STATES },
     write: false,
-    role: "state",
+    role: "text",
   },
   {
     func: "ZONEBMUTE",
@@ -1153,7 +1153,7 @@ const MAIN_ONLY_FUNCS: FuncDef[] = [
     descKey: "descAdaptiveDSP",
     spec: { kind: "enum", states: ADAPTIVEDRC_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
 ];
 
@@ -1195,7 +1195,7 @@ const ZONE_ONLY_FUNCS: FuncDef[] = [
     descKey: "descVolumeOutputMode",
     spec: { kind: "enum", states: selfMap(["Variable", "Fixed"]) },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "BASS",
@@ -1249,7 +1249,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     nameKey: "band",
     spec: { kind: "enum", states: BAND_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   // The stored-station surface (#613): PRESET is readable AND writable on TUN
   // (fixtures answer "1" / "No Preset"; the ynca spec's EnumOrInt preset), so the
@@ -1327,7 +1327,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     nameKey: "frequency",
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
-    role: "level",
+    role: "level.frequency",
   },
   {
     subunit: "TUN",
@@ -1336,7 +1336,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     nameKey: "frequency",
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
-    role: "level",
+    role: "level.frequency",
     wireDecode: fmFrequencyKhz,
   },
   {
@@ -1367,7 +1367,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     descKey: "descSearchMode",
     spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   // FM playback mode (official RX-V671 command list): Auto mutes without stereo
   // reception, Mono forces monaural for weak stations.
@@ -1379,7 +1379,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     descKey: "descFmMode",
     spec: { kind: "enum", states: selfMap(["Auto", "Mono"]) },
     write: true,
-    role: "state",
+    role: "text",
   },
   // Tuning/stereo indicators (official list; both push auto-feedback).
   {
@@ -1433,7 +1433,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     descKey: "descHdmiVideoResolution",
     spec: { kind: "enum", states: HDMIRESOL_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     subunit: "SYS",
@@ -1443,7 +1443,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     descKey: "descHdmiVideoAspect",
     spec: { kind: "enum", states: HDMIASPECT_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   // TVAUDIN1 made the same move; the RX-A850 list is the one that declares it on SYS.
   {
@@ -1454,7 +1454,7 @@ const GLOBAL_FUNCS: Array<FuncDef & { subunit: string }> = [
     descKey: "descTvAudioReturnInput",
     spec: { kind: "enum", states: TVAUDIN_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
 ];
 
@@ -1469,14 +1469,21 @@ const SWFR_CNFG_STATES = selfMap(["None", "Use"]);
 const SYS_FUNCS: FuncDef[] = [
   // Device metadata lives under the info channel (like govee's info.model/info.firmware),
   // not in the system grab-bag. Renamed from system.model/system.version (audit F7).
-  { func: "MODELNAME", state: "info.model", nameKey: "model", spec: { kind: "text" }, write: false, role: "text" },
+  {
+    func: "MODELNAME",
+    state: "info.model",
+    nameKey: "model",
+    spec: { kind: "text" },
+    write: false,
+    role: "info.model",
+  },
   {
     func: "VERSION",
     state: "info.firmware",
     nameKey: "firmwareVersion",
     spec: { kind: "text" },
     write: false,
-    role: "text",
+    role: "info.firmware",
   },
   {
     func: "PWR",
@@ -1530,7 +1537,7 @@ const SYS_FUNCS: FuncDef[] = [
     descKey: "descSpeakerPattern",
     spec: { kind: "enum", states: SPPATTERN_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   // --- Setup surface of the 2010 generation and later (audit 2026-09-06). Measured against the
   // 15 bundled device protocols: these functions are ANSWERED by real receivers and had no
@@ -1597,7 +1604,7 @@ const SYS_FUNCS: FuncDef[] = [
     descKey: "descHdmiVideoMode",
     spec: { kind: "enum", states: selfMap(["Direct", "Processing"]) },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "LIPSYNCMODE",
@@ -1606,7 +1613,7 @@ const SYS_FUNCS: FuncDef[] = [
     descKey: "descLipSyncMode",
     spec: { kind: "enum", states: selfMap(["Manual", "Auto"]) },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "LIPSYNCTOTALDELAY",
@@ -1636,7 +1643,7 @@ const SYS_FUNCS: FuncDef[] = [
       states: selfMap(["Disable", "Analog", "HDMI1 Auto", "HDMI1 Manual", "HDMI2 Auto", "HDMI2 Manual"]),
     },
     write: false,
-    role: "state",
+    role: "text",
   },
   // RS-232C standby (5 lists), the sales region and the tuner step it fixes (6 lists — GET
   // only, plain codes), the update notice switch (RX-A850).
@@ -1665,7 +1672,7 @@ const SYS_FUNCS: FuncDef[] = [
     descKey: "descTunerFrequencyStep",
     spec: { kind: "enum", states: selfMap(["FM50/AM9", "FM100/AM9", "FM100/AM10", "FM200/AM10"]) },
     write: false,
-    role: "state",
+    role: "text",
   },
   {
     func: "UPDTNOTICEMSG",
@@ -1895,7 +1902,7 @@ function triggerFuncs(n: 1 | 2): FuncDef[] {
       nameArgs: [n],
       spec: { kind: "enum", states: selfMap(["Manual", "Power", "Zone and Input"]) },
       write: true,
-      role: "state",
+      role: "text",
     },
     {
       func: `TRIG${n}ZONE`,
@@ -1906,7 +1913,7 @@ function triggerFuncs(n: 1 | 2): FuncDef[] {
       // The static maximum; the controller derives the real list from the zones the device has.
       spec: { kind: "enum", states: selfMap(["Main Zone", "Zone2", "Zone3", "Zone4", "All"]) },
       write: true,
-      role: "state",
+      role: "text",
     },
     {
       func: `TRIG${n}MANUAL`,
@@ -1916,7 +1923,7 @@ function triggerFuncs(n: 1 | 2): FuncDef[] {
       nameArgs: [n],
       spec: { kind: "enum", states: selfMap(["Lo", "Hi"]) },
       write: true,
-      role: "state",
+      role: "text",
     },
   ];
 }
@@ -2124,7 +2131,7 @@ function speakerPatternEntries(pattern: 1 | 2): YncaEntry[] {
     nameArgs: [pattern],
     spec: fn.spec,
     write: true,
-    role: fn.role ?? "state",
+    role: fn.role ?? "text",
     subunit: "SYS",
     func: `SPPATTERN${pattern}${fn.suffix}`,
   }));
@@ -2148,7 +2155,7 @@ const DAB_FUNCS: FuncDef[] = [
     nameKey: "band",
     spec: { kind: "enum", states: DAB_BAND_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "DABCHLABEL",
@@ -2255,7 +2262,7 @@ const DAB_FUNCS: FuncDef[] = [
     descKey: "descSearchMode",
     spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "FMFREQ",
@@ -2265,7 +2272,7 @@ const DAB_FUNCS: FuncDef[] = [
     // unified kHz state; the controller routes the band-dependent write.
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
-    role: "level",
+    role: "level.frequency",
     wireDecode: fmFrequencyKhz,
   },
   // DAB/FM detail answered by the RX-V6A full sweep (2026-09-01) — read-only status.
@@ -2279,7 +2286,7 @@ const DAB_FUNCS: FuncDef[] = [
     spec: { kind: "text" },
     write: false,
     // `state` like the MusicCast side — see sound.toneMode above.
-    role: "state",
+    role: "text",
   },
   {
     func: "DABBITRATE",
@@ -2362,7 +2369,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
     nameKey: "band",
     spec: { kind: "enum", states: BAND_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "AMFREQ",
@@ -2370,7 +2377,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
     nameKey: "frequency",
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
-    role: "level",
+    role: "level.frequency",
   },
   {
     func: "FMFREQ",
@@ -2378,7 +2385,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
     nameKey: "frequency",
     spec: { kind: "number", unit: "kHz", decimals: 0 },
     write: true,
-    role: "level",
+    role: "level.frequency",
     wireDecode: fmFrequencyKhz,
   },
   {
@@ -2428,7 +2435,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
     descKey: "descSearchMode",
     spec: { kind: "enum", states: TUN_SEARCHMODE_STATES },
     write: true,
-    role: "state",
+    role: "text",
   },
   {
     func: "TUNED",
@@ -2455,7 +2462,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
     descKey: "descHdRadioAudioMode",
     spec: { kind: "enum", states: selfMap(["Auto", "Mono"]) },
     write: true,
-    role: "state",
+    role: "text",
   },
   // PRGSEL selects and reports the programme; PRGNUM reports the same thing (GET only) — one
   // datapoint, both answers feed it.
@@ -2471,7 +2478,7 @@ const HDRADIO_FUNCS: FuncDef[] = [
       readOnly: ["---"],
     },
     write: true,
-    role: "state",
+    role: "text",
     readAliases: ["PRGNUM"],
   },
   // Step through the station's programmes (`PRGSEL=Up/Down`, seven lists; audit 2026-09-29, B9).
@@ -3067,7 +3074,7 @@ export function buildYncaCatalog(): YncaEntry[] {
         nameArgs: [n, INPUT_NAME_LABELS[key] ?? key.toUpperCase()],
         spec: { kind: "enum", states: selfMap(["Lo", "Hi"]) },
         write: true,
-        role: "state",
+        role: "text",
         subunit: "SYS",
         func: `TRIG${n}INP${key.toUpperCase()}`,
       });
@@ -3179,7 +3186,7 @@ export function buildYncaCatalog(): YncaEntry[] {
       descKey: "descIpodControlMode",
       spec: { kind: "enum", states: selfMap(["Normal", "Extended"]) },
       write: true,
-      role: "state",
+      role: "text",
       subunit: source === "ipod" ? "IPOD" : "IPODUSB",
       func: "MODE",
     });
@@ -3240,7 +3247,7 @@ export function buildYncaCatalog(): YncaEntry[] {
       descKey: "descSiriusSearchMode",
       spec: { kind: "enum", states: selfMap(["All Ch", "Category", "Preset"]) },
       write: true,
-      role: "state",
+      role: "text",
       subunit: "SIRIUS",
       func: "SEARCHMODE",
     },
@@ -3250,7 +3257,7 @@ export function buildYncaCatalog(): YncaEntry[] {
       descKey: "descSiriusAntennaLevel",
       spec: { kind: "enum", states: selfMap(["No Signal", "Weak", "Good", "Excellent"]) },
       write: false,
-      role: "state",
+      role: "text",
       subunit: "SIRIUS",
       func: "ANTLVL",
     },
@@ -3323,7 +3330,7 @@ export function buildYncaCatalog(): YncaEntry[] {
     descKey: "descTrackRating",
     spec: { kind: "enum", states: selfMap(["Thumb Up", "Thumb Down"]) },
     write: true,
-    role: "state",
+    role: "text",
     subunit: "PANDORA",
     func: "FEEDBACK",
   });
@@ -3333,7 +3340,7 @@ export function buildYncaCatalog(): YncaEntry[] {
   entries.push(
     {
       id: "player.bluetooth.connected",
-      nameKey: "connected",
+      nameKey: "bluetoothConnected",
       spec: { kind: "onoff", on: "Connected", off: "Disconnected" },
       write: false,
       role: "indicator",
@@ -3393,7 +3400,7 @@ export function buildYncaCatalog(): YncaEntry[] {
       descKey: "descVolumeInterlock",
       spec: { kind: "enum", states: selfMap(["Off", "Limited", "Full"]) },
       write: true,
-      role: "state",
+      role: "text",
       subunit: "AIRPLAY",
       func: "VOLINTERLOCK",
     },

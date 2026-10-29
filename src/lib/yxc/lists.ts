@@ -32,7 +32,14 @@ export const PLAYLIST_SLOT_FIELDS: readonly SlotField[] = [
 export const STATION_SLOT_FIELDS: readonly SlotField[] = [
   { key: "band", nameKey: "band", descKey: "descSlotBand", type: "string", role: "text" },
   { key: "name", nameKey: "entryName", descKey: "descSlotName", type: "string", role: "text" },
-  { key: "frequency", nameKey: "frequency", descKey: "descSlotFrequency", type: "number", role: "value", unit: "kHz" },
+  {
+    key: "frequency",
+    nameKey: "frequency",
+    descKey: "descSlotFrequency",
+    type: "number",
+    role: "value.frequency",
+    unit: "kHz",
+  },
 ];
 
 /** The field of a linked device: its address (Advanced §5.1 `client_list[].ip_address`). */

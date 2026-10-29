@@ -422,7 +422,7 @@ describe("mapYxcToObjects tree hygiene", () => {
   // Basic §5.1/§5.4: sleep takes 0/30/60/90/120 — the dropdown offers them (a hint, not a gate).
   test("the sleep timer offers the five values the specification declares, in the words YNCA and XML use", () => {
     const sleep = mapYxcToObjects(parseYxcFeatures(rxA2070)).find(o => o.id === "sleep");
-    expect(sleep?.common).toMatchObject({ type: "string", role: "state" });
+    expect(sleep?.common).toMatchObject({ type: "string", role: "text" });
     expect(sleep?.common.states).toEqual({
       Off: "Off",
       "30 min": "30 min",
@@ -831,7 +831,7 @@ describe("value lists for the words MusicCast reports (readable values, 2026-09-
       "tune_aid",
       "ready",
     ]);
-    expect(common(objs, "tuner.dab.status")?.role).toBe("state");
+    expect(common(objs, "tuner.dab.status")?.role).toBe("text");
     expect(Object.keys(common(objs, "tuner.dab.category")?.states as object)).toEqual(["primary", "secondary"]);
     // A text field of the same block stays a text without a list.
     expect(common(objs, "tuner.dab.serviceLabel")?.states).toBeUndefined();
@@ -850,7 +850,8 @@ describe("value lists for the words MusicCast reports (readable values, 2026-09-
       "zone3",
       "zone4",
     ]);
-    expect(common(objs, "multiroom.group.serverZone")?.role).toBe("state");
+    expect(common(objs, "multiroom.group.serverZone")?.role).toBe("text");
+    expect(common(objs, "multiroom.group.role")?.role).toBe("text");
     expect(common(objs, "multiroom.group.id")?.states).toBeUndefined();
   });
 

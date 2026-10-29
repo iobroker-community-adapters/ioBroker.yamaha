@@ -185,7 +185,7 @@ export const DAB_FIELDS: Array<{
     type: "string",
     nameKey: "dabStatus",
     descKey: "descDabStatus",
-    role: "state",
+    role: "text",
     states: ["not_ready", "initial_scan", "tune_aid", "ready"],
   },
   {
@@ -218,7 +218,7 @@ export const DAB_FIELDS: Array<{
     type: "string",
     nameKey: "serviceCategory",
     descKey: "descServiceCategory",
-    role: "state",
+    role: "text",
     states: ["primary", "secondary"],
   },
   {

@@ -86,6 +86,9 @@ an issue, attach the diagnostics report from the **Expert** tab of the instance 
 - (krobipd) Fixed: A broken MusicCast answer no longer empties datapoints
 - (krobipd) Fixed: The diagnostics report names why a receiver could not be read live
 - (krobipd) Fixed: The cover address is again exactly the one the receiver reports, nothing is appended to it anymore
+- (krobipd) Changed: Datapoints of zones 2 to 4, Zone B, list slots and source presets name their zone, slot or source ("Zone 2 Mute"); the ids stay
+- (krobipd) Changed: Text, model, firmware, tuner frequency and play time datapoints carry the standard roles; several translations are fixed
+- (krobipd) Changed: Requires admin 8.3.5 or newer
 
 ### 3.3.0 (2026-10-14)
 

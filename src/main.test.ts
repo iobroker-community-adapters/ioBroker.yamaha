@@ -3236,6 +3236,29 @@ describe("Yamaha volume as 0…100 % (the one switch)", () => {
     expect(common.unit).toBe("dB");
   });
 
+  // Rule D19 of the fleet (krobi 2026-10-29): the name is qualified where every definition is written, so a zone's
+  // datapoint never shares its name with the main zone's on any protocol. The id stays, a channel keeps its name.
+  it("writes a zone's datapoint with its zone in the name and leaves the main zone's and a channel's alone", async () => {
+    const ctx = setup();
+    await ctx.i.onReady();
+    await flush();
+    const upsert = ctx.calls[0].deps.upsertObject as (id: string, def: unknown) => Promise<void>;
+    const mute = { type: "boolean", role: "media.mute", read: true, write: true };
+
+    await upsert("Living_room.mute", { type: "state", common: { ...mute, name: { en: "Mute", de: "Stumm" } } });
+    await upsert("Living_room.multiroom.zone2", { type: "channel", common: { name: { en: "Zone 2", de: "Zone 2" } } });
+    await upsert("Living_room.multiroom.zone2.mute", {
+      type: "state",
+      common: { ...mute, name: { en: "Mute", de: "Stumm" } },
+    });
+
+    const nameOf = (id: string): Record<string, string> =>
+      (ctx.i.objects.get(id)?.common as { name: Record<string, string> }).name;
+    expect(nameOf("Living_room.mute")).toMatchObject({ en: "Mute", de: "Stumm" });
+    expect(nameOf("Living_room.multiroom.zone2.mute")).toMatchObject({ en: "Zone 2 Mute", de: "Zone 2 Stumm" });
+    expect(nameOf("Living_room.multiroom.zone2")).toMatchObject({ en: "Zone 2", de: "Zone 2" });
+  });
+
   it("converts a device report into percent and a user write back", async () => {
     const ctx = setup();
     ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { volumeAsPercent: true } });

@@ -526,6 +526,11 @@ der Typ `I18nKey` macht einen Tippfehler zum Compile-Fehler.
   **Verbindungszeit** gebaut wird, umschließt sein Literal direkt mit `tName(...)`.
 - **`io-package.json` instanceObjects** tragen das fertige Objekt; der zentrale
   `sync-iopackage-from-i18n.py` hält sie an `admin/i18n` (yamaha ist dort eingetragen).
+- **Kein Gerät trägt zwei gleichnamige Datenpunkte, in keiner Sprache** (Flottenregel D19, krobi 2026-10-29): `main.ts`
+  `upsertObject` schreibt jeden State-Namen durch `catalog/qualified-name.ts` (Zone vorn: „Zone 2 Stumm“, Quellen-Preset:
+  „Internetradio: Speicherplatz aufrufen“), Listenplätze nennen Liste und Platz selbst (`list-slots.ts`, „Favoriten 3: Name“); die Id
+  bleibt, eine bestehende Installation bekommt den Namen beim Einlesen nach dem Update. Bewacht von `parity.test.ts`
+  („names no two datapoints of one receiver alike“). Ein Text-Datenpunkt hat die Rolle `text`, nie `state`.
 - **Plain string bleibt, was vom GERÄT kommt:** die Id eines gefundenen Geräts, ein
   MusicCast-Wochentag-Weckkanal, der großgeschriebene Id-Rest eines nicht gelisteten Kanals. Da
   gibt es nichts zu übersetzen.

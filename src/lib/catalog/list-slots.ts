@@ -1,4 +1,4 @@
-import { tName, type I18nKey } from "../i18n";
+import { tJoin, tName, type I18nKey } from "../i18n";
 import type { StateValue } from "../types";
 import type { ObjectDef } from "./types";
 
@@ -45,12 +45,13 @@ export function slotListObjects(
   folderDesc?: I18nKey,
   folderArg?: string,
 ): ObjectDef[] {
+  const listName = folderArg !== undefined ? tName(folderName, folderArg) : tName(folderName);
   const objects: ObjectDef[] = [
     {
       id: folder,
       type: "channel",
       common: {
-        name: folderArg !== undefined ? tName(folderName, folderArg) : tName(folderName),
+        name: listName,
         ...(folderDesc ? { desc: tName(folderDesc) } : {}),
       },
     },
@@ -62,7 +63,8 @@ export function slotListObjects(
         id: `${folder}.${n}.${field.key}`,
         type: "state",
         common: {
-          name: tName(field.nameKey),
+          // The list and the slot are part of the name (rule D19): "Favourites 3: Name", never a twelfth "Name".
+          name: tJoin([listName, n, tName(field.nameKey)], ([list, slot, name]) => `${list} ${slot}: ${name}`),
           desc: tName(field.descKey),
           type: field.type,
           role: field.role,

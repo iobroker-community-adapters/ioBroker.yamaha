@@ -7,6 +7,7 @@ import { isIPv4, resolveIPv4, searchInterfaces } from "./lib/network-interfaces"
 import { chosenAddress } from "./lib/network-address";
 import { decideSourceAddress, sourceAddress } from "./lib/source-address";
 import { isGroupEnabled } from "./lib/catalog/groups";
+import { qualifiedName } from "./lib/catalog/qualified-name";
 import type { ObjectDef } from "./lib/catalog/types";
 import { VolumePresentation } from "./lib/volume-presentation";
 import { DEVICE_TYPE_ICONS, iconForModel } from "./lib/device-type";
@@ -2230,7 +2231,7 @@ class Yamaha extends utils.Adapter {
     // offline device or a transport that does not report a model.
     await this.writeObject(`${deviceId}.info.model`, {
       type: "state",
-      common: { name: tName("model"), type: "string", role: "text", read: true, write: false, def: "" },
+      common: { name: tName("model"), type: "string", role: "info.model", read: true, write: false, def: "" },
       native: {},
     });
     // The device's address — for a discovered device it lived only in the adapter's
@@ -2865,6 +2866,12 @@ class Yamaha extends utils.Adapter {
           // "<deviceId>.<relativeId>"; groupOf reads the relative part.
           if (!isGroupEnabled(id.slice(id.indexOf(".") + 1), this.config)) {
             return;
+          }
+          if (def.type === "state") {
+            def = {
+              ...def,
+              common: { ...def.common, name: qualifiedName(id.slice(id.indexOf(".") + 1), def.common.name) },
+            };
           }
           // A device whose object could not be read runs a read-in only because nothing was read — it never shrinks
           // what is stored (review 2026-10-05, A9).

@@ -530,7 +530,7 @@ function netusbObjects(capabilities: YxcCapabilities): ObjectDef[] {
   objects.push(actionState("player.netPlayer.presetSave", "storeFavourite", "descStoreFavourite", favourites));
   objects.push(actionState("player.netPlayer.presetClear", "clearFavourite", "descClearFavourite", favourites));
   const jump = actionState("player.netPlayer.playPosition", "jumpToPosition", "descJumpToPosition", { min: 0 });
-  objects.push({ ...jump, common: { ...jump.common, unit: "s" } });
+  objects.push({ ...jump, common: { ...jump.common, unit: "s", role: "media.elapsed" } });
   objects.push({
     id: "player.netPlayer.recallRecent",
     type: "state",
@@ -698,7 +698,7 @@ function cdObjects(capabilities: YxcCapabilities): ObjectDef[] {
       desc: tName("descDiscTime"),
       type: "number",
       unit: "s",
-      role: "value",
+      role: "media.duration",
       read: true,
       write: false,
     },
@@ -710,7 +710,7 @@ function cdObjects(capabilities: YxcCapabilities): ObjectDef[] {
       name: tName("driveStatus"),
       desc: tName("descDriveStatus"),
       type: "string",
-      role: "state",
+      role: "text",
       read: true,
       write: false,
     },
@@ -733,7 +733,7 @@ function tunerObjects(capabilities: YxcCapabilities): ObjectDef[] {
   const bandCommon: ObjectDef["common"] = {
     name: tName("band"),
     type: "string",
-    role: "state",
+    role: "text",
     read: true,
     write: true,
   };
@@ -760,7 +760,7 @@ function tunerObjects(capabilities: YxcCapabilities): ObjectDef[] {
     name: tName("frequency"),
     type: "number",
     unit: "kHz",
-    role: "level",
+    role: "level.frequency",
     read: true,
     write: true,
   };
@@ -857,7 +857,7 @@ function tunerObjects(capabilities: YxcCapabilities): ObjectDef[] {
       name: tName("audioMode"),
       desc: tName("descAudioMode"),
       type: "string",
-      role: "state",
+      role: "text",
       read: true,
       write: false,
       // YXC Basic §6.2 `audio_mode`; none on AM.
@@ -940,7 +940,7 @@ function clockObjects(capabilities: YxcCapabilities): ObjectDef[] {
         name: tName("clockFormat"),
         desc: tName("descClockFormat"),
         type: "string",
-        role: "state",
+        role: "text",
         read: true,
         write: true,
         states: { "12h": "12h", "24h": "24h" },
@@ -997,7 +997,7 @@ function clockObjects(capabilities: YxcCapabilities): ObjectDef[] {
     common: {
       name: tName("alarmMode"),
       type: "string",
-      role: "state",
+      role: "text",
       read: true,
       write: true,
       states: selfMap(capabilities.clock.alarmModes),
@@ -1117,7 +1117,7 @@ function groupObjects(capabilities: YxcCapabilities): ObjectDef[] {
     });
   };
   // YXC Advanced §5.1: `role` server / client / none, `server_zone` main to zone4.
-  distState("role", tName("roleServerClient"), "state", tName("descRoleServerClient"), ["server", "client", "none"]);
+  distState("role", tName("roleServerClient"), "text", tName("descRoleServerClient"), ["server", "client", "none"]);
   distState("id", tName("groupID"), "text", tName("descGroupID"));
   // YXC Advanced §5.1 — reported by the server from API 2.00 on; building a group can take up to
   // three minutes (§9.1.8-3), and this is how long (audit 2026-09-24, C7).
@@ -1128,7 +1128,7 @@ function groupObjects(capabilities: YxcCapabilities): ObjectDef[] {
       name: tName("groupStatus"),
       desc: tName("descGroupStatus"),
       type: "string",
-      role: "state",
+      role: "text",
       read: true,
       write: false,
       states: { building: "building", working: "working", deleting: "deleting" },
@@ -1147,7 +1147,7 @@ function groupObjects(capabilities: YxcCapabilities): ObjectDef[] {
       write: true,
     },
   });
-  distState("serverZone", tName("serverZoneFeedsTheGroup"), "state", undefined, ["main", "zone2", "zone3", "zone4"]);
+  distState("serverZone", tName("serverZoneFeedsTheGroup"), "text", undefined, ["main", "zone2", "zone3", "zone4"]);
   distState("linkedDevices", tName("linkedDevices"), "json", tName("descLinkedDevices"));
   objects.push({
     id: "multiroom.group.leave",

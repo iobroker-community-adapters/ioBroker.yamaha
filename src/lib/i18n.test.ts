@@ -1,4 +1,4 @@
-import { tIn, tName } from "./i18n";
+import { tIn, tJoin, tName } from "./i18n";
 import en from "../../admin/i18n/en.json";
 import de from "../../admin/i18n/de.json";
 
@@ -76,5 +76,19 @@ describe("tIn — one language, looked up directly (review 2026-10-05, F)", () =
     expect(tIn("xx", "labelZoneNumber", 2)).toBe("Zone 2");
     expect(tIn("constructor", "labelZoneNumber", 2)).toBe("Zone 2");
     expect(tIn("__proto__", "labelZoneNumber", 2)).toBe("Zone 2");
+  });
+
+  // A name made of other names (rule D19, krobi 2026-10-29): each part in each language, a number as it stands, a
+  // language a part lacks read in English — never an empty part.
+  test("joins names language by language, a number as it stands and a missing language in English", () => {
+    const joined = tJoin(
+      [tName("zone2"), 3, { en: "Mute", de: "Stumm" }],
+      ([zone, slot, text]) => `${zone} ${slot} ${text}`,
+    );
+    const words = joined as Record<string, string>;
+    expect(Object.keys(words).sort()).toEqual(["de", "en", "es", "fr", "it", "nl", "pl", "pt", "ru", "uk", "zh-cn"]);
+    expect(words.en).toBe("Zone 2 3 Mute");
+    expect(words.de).toBe(`${de.zone2} 3 Stumm`);
+    expect(words.fr).toBe(`${(tName("zone2") as Record<string, string>).fr} 3 Mute`);
   });
 });

@@ -42,10 +42,14 @@ describe("the model and the firmware reach the tree over XML (review 2026-10-05,
     const built = xml.buildObjects();
     expect(built.find(object => object.id === "info.model")?.common).toMatchObject({
       type: "string",
-      role: "text",
+      role: "info.model",
       write: false,
     });
-    expect(built.find(object => object.id === "info.firmware")?.common).toMatchObject({ type: "string", write: false });
+    expect(built.find(object => object.id === "info.firmware")?.common).toMatchObject({
+      type: "string",
+      role: "info.firmware",
+      write: false,
+    });
     const store: { tree: LearnedTree } = { tree: { shared: {}, transports: [], firmware: {} } };
     const handle = new MultiTransportHandle("living", [xml], {
       upsertObject: () => Promise.resolve(),

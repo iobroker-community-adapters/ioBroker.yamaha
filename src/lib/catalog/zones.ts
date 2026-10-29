@@ -1,3 +1,5 @@
+import { tJoin, tName } from "../i18n";
+
 /** A zone key as every transport and the object tree name it. */
 export type ZoneKey = "main" | "zone2" | "zone3" | "zone4";
 
@@ -68,6 +70,25 @@ export function zonePrefix(key: string): string {
 export function splitZone(stateId: string): { zone: ZoneKey; name: string } {
   const zone = ZONED.find(candidate => stateId.startsWith(candidate.prefix));
   return zone ? { zone: zone.key, name: stateId.slice(zone.prefix.length) } : { zone: "main", name: stateId };
+}
+
+/**
+ * A datapoint's name with its zone in front — "Zone 2 Mute" beside the main zone's "Mute" (rule D19 of the fleet: two
+ * datapoints of one device never share a name; krobi 2026-10-29). Zones 2 to 4 and Zone B alike, on every protocol: the
+ * name is set where every definition is written, so no transport can differ. The id stays; a main-zone datapoint keeps
+ * its name.
+ *
+ * @param stateId the state id relative to the device
+ * @param name the name the transport built
+ * @returns the name to write
+ */
+export function zonedName(stateId: string, name: ioBroker.StringOrTranslated): ioBroker.StringOrTranslated {
+  const folder = ZONE_FOLDERS.find(prefix => stateId.startsWith(prefix));
+  if (folder === undefined) {
+    return name;
+  }
+  const zone = folder.slice("multiroom.".length, -1) as "zone2" | "zone3" | "zone4" | "zoneB";
+  return tJoin([tName(zone), name], ([label, text]) => `${label} ${text}`);
 }
 
 /**

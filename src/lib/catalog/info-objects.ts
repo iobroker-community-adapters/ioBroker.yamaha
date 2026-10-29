@@ -10,6 +10,6 @@ import type { CatalogEntry } from "./types";
  * so the form is the same whichever protocol serves them, and the coordinator picks one owner.
  */
 export const INFO_ENTRIES: readonly CatalogEntry[] = [
-  { id: "info.model", nameKey: "model", spec: { kind: "text" }, write: false, role: "text" },
-  { id: "info.firmware", nameKey: "firmwareVersion", spec: { kind: "text" }, write: false, role: "text" },
+  { id: "info.model", nameKey: "model", spec: { kind: "text" }, write: false, role: "info.model" },
+  { id: "info.firmware", nameKey: "firmwareVersion", spec: { kind: "text" }, write: false, role: "info.firmware" },
 ];
