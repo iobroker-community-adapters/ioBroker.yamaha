@@ -32,14 +32,9 @@ export const PLAYLIST_SLOT_FIELDS: readonly SlotField[] = [
 export const STATION_SLOT_FIELDS: readonly SlotField[] = [
   { key: "band", nameKey: "band", descKey: "descSlotBand", type: "string", role: "text" },
   { key: "name", nameKey: "entryName", descKey: "descSlotName", type: "string", role: "text" },
-  {
-    key: "frequency",
-    nameKey: "frequency",
-    descKey: "descSlotFrequency",
-    type: "number",
-    role: "value.frequency",
-    unit: "kHz",
-  },
+  // kHz like `tuner.frequency` (krobi 2026-10-30): `value.frequency` is Hz in the role catalog, and `level.frequency`
+  // is a writable setpoint (E1011) — test/datapoint-form.json names why.
+  { key: "frequency", nameKey: "frequency", descKey: "descSlotFrequency", type: "number", role: "value", unit: "kHz" },
 ];
 
 /** The field of a linked device: its address (Advanced §5.1 `client_list[].ip_address`). */

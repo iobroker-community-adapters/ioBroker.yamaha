@@ -1,0 +1,5 @@
+{
+  "*.tuner.storedStations.*.*.frequency": {
+    "quantity-role": "A stored station's frequency is kHz like tuner.frequency, the unit radio is tuned in; the catalog gives value.frequency Hz, and level.frequency is a writable setpoint (E1011) while a stored station is only read."
+  }
+}
