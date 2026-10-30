@@ -467,6 +467,8 @@ export const RENAMED_STATE_IDS = [
   "hdmi.lipSyncSource",
   // 3.3.0: Zone B's name sits under `zoneName` like every zone's (krobi 2026-10-05 23:15, Y-35).
   "multiroom.zoneB.name",
+  // The YNCA control port only ever showed the port the adapter connects on (krobi 2026-10-31).
+  "advanced.yncaPort",
 ];
 
 /**

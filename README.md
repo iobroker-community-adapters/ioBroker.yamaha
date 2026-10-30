@@ -88,6 +88,7 @@ an issue, attach the diagnostics report from the **Expert** tab of the instance 
 - (krobipd) Fixed: The cover address is again exactly the one the receiver reports, nothing is appended to it anymore
 - (krobipd) Changed: Datapoints of zones 2 to 4, Zone B, list slots and source presets name their zone, slot or source ("Zone 2 Mute"); the ids stay
 - (krobipd) Changed: Text, model, firmware, tuner frequency and play time datapoints carry the standard roles; several translations are fixed
+- (krobipd) Changed: The YNCA control port datapoint is gone; it could only ever show the port the adapter connects on
 - (krobipd) Changed: Requires admin 8.3.5 or newer
 
 ### 3.3.0 (2026-10-14)

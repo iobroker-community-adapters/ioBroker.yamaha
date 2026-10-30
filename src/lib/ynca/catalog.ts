@@ -1685,18 +1685,8 @@ const SYS_FUNCS: FuncDef[] = [
   },
   // REMOTECODE (PUT-only IR code, every list) has no datapoint: nothing readable proves it on
   // a device, and a blind claim is what #615 taught us not to make.
-  // The control port itself (official list: PUT 50000-65535). Deliberately READ-ONLY:
-  // writing it from ioBroker would cut this very connection and strand the adapter on
-  // the old port until a rediscovery — a foot-gun, not a feature.
-  {
-    func: "YNCAPORT",
-    state: "advanced.yncaPort",
-    nameKey: "yncaControlPort",
-    descKey: "descYncaControlPort",
-    spec: { kind: "number", decimals: 0 },
-    write: false,
-    role: "value",
-  },
+  // YNCAPORT (the control port, 50000-65535) has no datapoint (krobi 2026-10-31): the adapter
+  // always connects on YNCA_PORT, so a receiver that answers it can only ever report that port.
 ];
 
 // The 29 assignable input names (SYS INPNAME<KEY>, read-only text). The wire

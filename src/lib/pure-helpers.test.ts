@@ -545,6 +545,15 @@ describe("renamedObjectIds", () => {
     ]);
   });
 
+  it("removes the YNCA control port datapoint; the rest of advanced stays", () => {
+    const existing = [
+      "yamaha.0.living.advanced.yncaPort",
+      "yamaha.0.living.advanced.speakers.speakerA",
+      "yamaha.0.living.advanced.updateNotice",
+    ];
+    expect(renamedObjectIds(existing, new Set(["living"]), "yamaha.0")).toEqual(["yamaha.0.living.advanced.yncaPort"]);
+  });
+
   it("removes the YNCA input names under advanced.inputNames, the folder included (C2, Y-25)", () => {
     const existing = [
       "yamaha.0.living.advanced.inputNames",

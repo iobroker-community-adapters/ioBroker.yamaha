@@ -867,12 +867,8 @@ describe("official-command-list additions (2026-08-25)", () => {
       id: "tuner.dab.offAir",
       value: false,
     });
-    expect(yncaStateUpdate({ subunit: "SYS", func: "YNCAPORT", value: "50000" }, funcs)).toEqual({
-      id: "advanced.yncaPort",
-      value: 50000,
-    });
-    // The port is deliberately read-only — writing it would cut this very connection.
-    expect(yncaCommand("advanced.yncaPort", 50001, idToEntry(buildYncaCatalog()))).toBeUndefined();
+    // The control port gets no datapoint: the adapter connects on YNCA_PORT, so it could only show that port.
+    expect(yncaStateUpdate({ subunit: "SYS", func: "YNCAPORT", value: "50000" }, funcs)).toBeUndefined();
     // Speaker-pattern amp assign and the trigger level write with their documented enums.
     expect(yncaCommand("advanced.speakers.pattern1Amp", "5ch BI-AMP", idToEntry(buildYncaCatalog()))).toEqual({
       subunit: "SYS",
@@ -1515,6 +1511,10 @@ describe("the catalog answers every readable function the official lists declare
     {
       pattern: /^SYS:INPNAME$/,
       why: "the generic spelling of the per-input names; the catalog builds INPNAME<KEY> per input",
+    },
+    {
+      pattern: /^SYS:YNCAPORT$/,
+      why: "the control port — ynca-client connects on YNCA_PORT, a datapoint could only show that port (krobi 2026-10-31)",
     },
   ];
 
