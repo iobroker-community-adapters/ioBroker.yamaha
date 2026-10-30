@@ -1023,6 +1023,26 @@ describe("Yamaha onReady — configured devices", () => {
     expect((nameOf("Living_room.info.connection") as { de?: string }).de).toBe("Verbunden");
   });
 
+  it("refreshes only the name of a stored model datapoint, and creates a missing one with its info role", async () => {
+    // Y-01: an object changes its form only when the read-in completes — the header runs on every start, also with
+    // the receiver in standby (inventory suite "upgrade with the receivers switched off", 2026-10-30).
+    const ctx = setup();
+    ctx.i.objects.set("Living_room.info.model", {
+      type: "state",
+      common: { name: "Model", type: "string", role: "text", read: true, write: false },
+      native: {},
+    });
+    await ctx.i.onReady();
+    await flush();
+    const model = ctx.i.objects.get("Living_room.info.model")?.common as { name?: unknown; role?: unknown };
+    expect(model.role).toBe("text");
+    expect((model.name as { de?: string }).de).toBe("Modell");
+    const fresh = setup();
+    await fresh.i.onReady();
+    await flush();
+    expect((fresh.i.objects.get("Living_room.info.model")?.common as { role?: unknown }).role).toBe("info.model");
+  });
+
   it("gives every object a name in all eleven languages, never a plain string", async () => {
     // ioBroker resolves a translation object into the reader's language itself; a plain string
     // would freeze the tree in one language (core-team line, nut2 #15).

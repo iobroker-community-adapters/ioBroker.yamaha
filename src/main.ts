@@ -2228,12 +2228,18 @@ class Yamaha extends utils.Adapter {
     });
     // Model name shown on the device-manager card. Filled by whichever transport reports it
     // (YNCA MODELNAME, YXC/XML model); created here so the card's model line binds even for an
-    // offline device or a transport that does not report a model.
-    await this.writeObject(`${deviceId}.info.model`, {
-      type: "state",
-      common: { name: tName("model"), type: "string", role: "info.model", read: true, write: false, def: "" },
-      native: {},
-    });
+    // offline device or a transport that does not report a model. A stored one only gets its name: its form changes
+    // when the read-in completes (Y-01), and the header runs on every start, the receiver in standby too.
+    await this.writeObject(
+      `${deviceId}.info.model`,
+      this.known.get(`${deviceId}.info.model`)
+        ? { common: { name: tName("model") } }
+        : {
+            type: "state",
+            common: { name: tName("model"), type: "string", role: "info.model", read: true, write: false, def: "" },
+            native: {},
+          },
+    );
     // The device's address — for a discovered device it lived only in the adapter's
     // internals, so no diagnosis (log capture, browser access to the device's own pages)
     // could name it without a network search. Refreshed every start: DHCP may move it.
