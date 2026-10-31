@@ -107,7 +107,8 @@ löscht und leert nichts. Belege und Befund: `.claude/dev-history.md` 2026-10-02
   kein Protokoll baute, und leere Kanäle (`settleDeviceTree`); `info.*` gehört dem Adapter.
 - **Erst die Form, dann der Wert:** solange das Einlesen offen ist, bekommt ein Datenpunkt, dessen gespeichertes Objekt eine
   andere Form hat als die gebaute (Typ; bei Zahlen Einheit, Grenzen, Schritt — `formDiffers`), keinen Wert; der Abschluss
-  gibt ihm Form und Wert (Server-Test 2026-10-06: ein Wahrheitswert im Text-Datenpunkt `sound.adaptiveDrc`). Bewacht von der
+  gibt ihm Form und Wert (Server-Test 2026-10-06: ein Wahrheitswert im Text-Datenpunkt `sound.adaptiveDrc`). Auch der Gerätekopf
+  (`ensureDeviceHeader`) schreibt bei einem gespeicherten `info.model` nur den Namen, nie Rolle oder Typ (Vorlauf 2026-10-30). Bewacht von der
   Inventar-Suite „upgrade with the receivers switched off“ (`fixtures.power(false)`: Mitschnitt-Zustand). Sonst starten
   die Prüfgeräte eingeschaltet — das committete Inventar ist die vollständig eingelesene Neuinstallation (Werkbank
   2026-10-07: die Aufstiegs-Suite vergleicht in Vorlagenform gegen `INVENTORY`); eingeschaltet beweist der RX-V473 kein
@@ -206,7 +207,8 @@ typisiert (onoff→boolean, enum→Dropdown, number→unit/range). **Numerische 
 PFLICHT-Zahlenformat** (`NumberSpec.decimals` + Step-Raster in `encode`, Referenz ynca-python
 `number_to_string_with_stepsize`): ohne Dezimalpunkt liest die Receiver-Firmware die Ziffern als Zehntel —
 `VOL=-38` kam als −3,8 dB an (Issue #612; MAXVOL hat den 16.5-Sonderfall per `wireEncode`, FMFREQ ist auf dem DRAHT MHz mit
-zwei Nachkommastellen — der Datenpunkt `tuner.frequency` ist seit v2.0.0 einheitlich kHz). **Preset-/Favoriten-Oberfläche (#613, Parität zum alten musiccast-Adapter):** YNCA
+zwei Nachkommastellen — der Datenpunkt `tuner.frequency` ist seit v2.0.0 einheitlich kHz, die nur lesbaren gespeicherten Sender
+`tuner.storedStations.*.*.frequency` ebenso mit Rolle `value`, krobi 2026-10-30 „KHz ist der Weg!!“). **Preset-/Favoriten-Oberfläche (#613, Parität zum alten musiccast-Adapter):** YNCA
 `TUN.PRESET` lesbar+schreibbar (Sentinel „No Preset"→0 via `wireDecode`) + Up/Down-Buttons, DAB-/FM-Presets
 schreibbar, Quellen-Abruf `player.<src>.preset` nur auf den Preset-fähigen Subunits (`YNCA_PLAYER_SOURCES` mit `preset: true`, Spec
 ynca-python-Mixins; write-only, PLAYBACKINFO-gegated). YXC: Favoriten-/Zuletzt-/Senderlisten als Einzel-Datenpunkte je Platz
