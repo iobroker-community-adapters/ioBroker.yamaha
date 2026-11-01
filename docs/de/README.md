@@ -204,6 +204,13 @@ Schreibvorgang zurück und fragt alle fünf Minuten alles ab. YNCA-Geräte sind 
 betroffen. Gib den Port frei, dann kommen die sofortigen Meldungen zurück — das Log sagt es,
 sobald sie wieder ankommen.
 
+**Ein Receiver nimmt nur eine YNCA-Verbindung zur Zeit an.** Hält schon ein anderes Programm die
+YNCA-Verbindung (TCP-Port 50000) — ein anderes Smart-Home-System oder eine zweite
+Adapter-Instanz —, bekommt der Adapter kein YNCA: die `ready`-Zeile des Geräts im Log zeigt kein
+`YNCA ✓`, `info.transports.ynca` bleibt `false`, und was nur YNCA anbietet, fehlt oder wird nicht
+aktualisiert. MusicCast und XML laufen weiter. Beende die YNCA-Verbindung des anderen Programms
+und starte danach die Instanz neu.
+
 **Zone 2 ist eine vollwertige Zone.** Sie hat unter `multiroom.zone2` eine eigene Lautstärke,
 einen eigenen Eingang, einen eigenen Wiedergabeblock und eigene Szenen. Der Aufruf eines
 Favoriten schaltet die Zone um, die auf diese Quelle hört — nicht immer die Hauptzone.

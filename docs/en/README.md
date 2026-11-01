@@ -172,6 +172,12 @@ two of them it says so once in the log, reads every write back and asks for ever
 five minutes. YNCA devices are unaffected. Free or publish the port to get instant updates
 back — the log says so when they arrive again.
 
+**A receiver takes one YNCA connection at a time.** If another program already holds the YNCA
+connection (TCP port 50000) — another smart-home system or a second adapter instance — the
+adapter gets no YNCA: the device's `ready` line in the log shows no `YNCA ✓`,
+`info.transports.ynca` stays `false`, and what only YNCA offers is missing or does not update.
+MusicCast and XML carry on. End the other program's YNCA connection, then restart the instance.
+
 **Zone 2 is a full zone.** It has its own volume, input, player block and scenes under
 `multiroom.zone2`. Recalling a favourite switches the zone that is listening to that source,
 not always the main zone.
