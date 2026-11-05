@@ -3043,6 +3043,9 @@ class Yamaha extends utils.Adapter {
   private onUnload(callback: () => void): void {
     try {
       this.unloading = true;
+      // A report still running ends here instead of working through the stop until the host kills the process after
+      // stopTimeout (round 165, govee 2026-10-31).
+      this.diagnostics.stop();
       this.clearTimeout(this.balanceTimer);
       this.clearTimeout(this.rediscoverTimer);
       // A search in flight is ended here: js-controller clears the adapter's timers on stop, so
