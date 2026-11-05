@@ -5,6 +5,7 @@ import {
   REPORT_KEEP_MS,
   ReportJobs,
   onceEach,
+  type ReportBody,
   type ReportSource,
   type ReportSourceDevice,
 } from "./report-jobs";
@@ -276,6 +277,52 @@ describe("ReportJobs", () => {
     await settle();
     t = REPORT_KEEP_MS + 1;
     expect(await jobs.handle({ action: "result", job })).toEqual({ gone: true });
+  });
+
+  it("stops: no message starts a job, and a report being made ends without its file and log line", async () => {
+    // round 165 (govee 2026-10-31): four reports were finished through TERMINATE, then the host killed the process
+    const later = <T>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void } => {
+      let resolve!: (v: T) => void;
+      let reject!: (e: unknown) => void;
+      const promise = new Promise<T>((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+    // stopped during the live read: the body is never built
+    const read = later<string>();
+    const src = source([{ id: "lamp", connected: true }], { readLive: () => read.promise });
+    let jobs = new ReportJobs(src);
+    const { job } = jobs.start("lamp") as { job: string };
+    jobs.stop();
+    read.resolve("live answer");
+    await settle();
+    expect(src.build).not.toHaveBeenCalled();
+    expect(jobs.result(job)).toEqual({ gone: true });
+    expect(await jobs.handle({ action: "list" })).toEqual({ error: "the adapter is stopping — no report" });
+    expect(await jobs.handle({ action: "start", device: "lamp" })).toEqual({
+      error: "the adapter is stopping — no report",
+    });
+    expect(jobs.start("lamp")).toEqual({ error: "the adapter is stopping — no report" });
+    // stopped while the body is built: no file, no "ready" line
+    const built = later<ReportBody>();
+    const src2 = source([{ id: "lamp", connected: false }], { build: () => built.promise });
+    jobs = new ReportJobs(src2);
+    jobs.start("lamp");
+    jobs.stop();
+    built.resolve({ fileId: "lamp", content: { environment: {}, objectTree: [], logs: [] } });
+    await settle();
+    expect(src2.log.info).not.toHaveBeenCalled();
+    // a body that fails after the stop is no warning either
+    const broken = later<never>();
+    const src3 = source([{ id: "lamp", connected: false }], { build: () => broken.promise });
+    jobs = new ReportJobs(src3);
+    jobs.start("lamp");
+    jobs.stop();
+    broken.reject(new Error("closed"));
+    await settle();
+    expect(src3.log.warn).not.toHaveBeenCalled();
   });
 
   it("answers a second start while one is still being made with the same job", async () => {

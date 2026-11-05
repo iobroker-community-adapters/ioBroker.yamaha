@@ -26,6 +26,9 @@ export const REPORT_COOLDOWN_MS = 2_000;
 /** How long a finished report waits for the card to fetch it. */
 export const REPORT_KEEP_MS = 10 * 60_000;
 
+/** The answer of every message and every report after `stop` (round 165). */
+const STOPPING = { error: "the adapter is stopping — no report" } as const;
+
 /** One device as the card lists it. */
 export interface ReportDevice {
   /** The device id. */
@@ -149,6 +152,7 @@ export class ReportJobs<L> {
   private readonly finished = new Map<string, number>();
   private readonly jobs = new Map<string, { device: string; result?: Report | { error: string }; doneAt?: number }>();
   private jobCount = 0;
+  private stopped = false;
 
   /**
    * @param source the adapter's side
@@ -166,6 +170,9 @@ export class ReportJobs<L> {
    * @returns the answer for the card
    */
   public handle(payload: unknown): Promise<unknown> {
+    if (this.stopped) {
+      return Promise.resolve(STOPPING);
+    }
     const { action, device, job } = (typeof payload === "object" && payload !== null ? payload : {}) as {
       action?: unknown;
       device?: unknown;
@@ -207,6 +214,9 @@ export class ReportJobs<L> {
    * @returns the job, or why there is none
    */
   public start(deviceId: string): { job: string } | { error: string } {
+    if (this.stopped) {
+      return STOPPING;
+    }
     for (const [id, job] of this.jobs) {
       if (job.device === deviceId && !job.result) {
         return { job: id };
@@ -244,6 +254,17 @@ export class ReportJobs<L> {
     return job.result;
   }
 
+  /**
+   * Stop for the adapter's `onUnload`, before its `callback`: every job is dropped, no message starts a new one, and a
+   * report still being made ends after the step it is in, without its file and without its log line. Round 165 (govee
+   * 2026-10-31, server log): four reports were finished through TERMINATE, and the host killed the process after
+   * stopTimeout; the same instance without a job stopped in 0.7 s.
+   */
+  public stop(): void {
+    this.stopped = true;
+    this.jobs.clear();
+  }
+
   /** Drop the finished reports nobody fetched within REPORT_KEEP_MS. */
   private dropUnfetched(): void {
     const now = this.now();
@@ -278,7 +299,13 @@ export class ReportJobs<L> {
           liveError = errText(e);
         }
       }
+      if (this.stopped) {
+        return STOPPING;
+      }
       const body = await this.source.build(deviceId, live, liveError);
+      if (this.stopped) {
+        return STOPPING;
+      }
       const made = new Date(this.now());
       const frame: ReportFrame = reportFrame(this.source.adapter, this.source.version, made, device.connected);
       const liveRead: LiveRead = !device.connected
@@ -295,6 +322,9 @@ export class ReportJobs<L> {
       const head = { ...frame, liveRead };
       return { fileName, content: JSON.stringify(onceEach({ ...head, ...body.content, ...head }), null, 2) };
     } catch (e) {
+      if (this.stopped) {
+        return STOPPING;
+      }
       const reason = errText(e);
       this.source.log.warn(`${deviceId}: diagnostics report failed: ${reason}`);
       return { error: `report failed: ${reason}` };
