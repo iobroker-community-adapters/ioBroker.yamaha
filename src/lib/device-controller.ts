@@ -370,6 +370,9 @@ export class YncaDeviceController {
       return this.refreshing;
     }
     const run = async (): Promise<void> => {
+      // One bracket per refresh, closed on every way out (a drop, a failure, the stop): the diagnostics report shows
+      // whether a refresh ran and ended, and the inventory run waits for its end instead of a fixed time (round 165).
+      this.deps.log.debug(`${this.deviceId}: background value refresh started (YNCA)`);
       try {
         do {
           this.refreshAgain = false;
@@ -377,6 +380,7 @@ export class YncaDeviceController {
         } while (this.refreshAgain && !this.ended());
       } finally {
         this.refreshing = undefined;
+        this.deps.log.debug(`${this.deviceId}: background value refresh ended (YNCA)`);
       }
     };
     this.refreshing = run();
