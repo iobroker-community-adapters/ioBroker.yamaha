@@ -36,7 +36,11 @@
     "js-yaml": "^4.3.2",
     "undici": "^7.29.0",
     "zod": "^4.6.6",
-    "node-forge": ">=1.4.1"
+    "node-forge": ">=1.4.1",
+    "follow-redirects": ">=1.16.2",
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": ">=11.0.1"
+    }
   },
   "browserslist": {
     "production": [
