@@ -90,6 +90,7 @@ an issue, attach the diagnostics report from the **Expert** tab of the instance 
 - (krobipd) Changed: Text, model, firmware, tuner frequency and play time datapoints carry the standard roles; several translations are fixed
 - (krobipd) Changed: The YNCA control port datapoint is removed
 - (krobipd) Changed: Requires admin 8.3.5 or newer
+- (copilot) Changed: Requires Node.js 22.19.0 or newer
 
 ### 3.3.0 (2026-10-14)
 
