@@ -1172,8 +1172,10 @@ async function playReports(harness, watch) {
  * @param {number} [from] the earliest time of interest (ms)
  */
 function readCalls(from = 0) {
+  const answered = new Map(recordLines(RESOURCE_DIR, ".answered", from).map(a => [`${a.pid} ${a.n}`, a.t]));
   return recordLines(RESOURCE_DIR, ".calls", from)
     .filter(c => c.t >= from)
+    .map(c => (answered.has(`${c.pid} ${c.n}`) ? { ...c, answered: answered.get(`${c.pid} ${c.n}`) } : c))
     .sort((a, b) => a.t - b.t);
 }
 
@@ -2529,16 +2531,19 @@ tests.integration(ADAPTER_DIR, {
             const lanes = new Map();
             for (const c of calls.filter(c => fits(c, d.match))) {
               const lane = `${limit.per === "host" ? c.host : "account"}, installation ${c.install}`;
-              lanes.set(lane, [...(lanes.get(lane) ?? []), c.t]);
+              lanes.set(lane, [...(lanes.get(lane) ?? []), c]);
             }
-            for (const [lane, times] of lanes) {
-              for (let i = 0, j = 0; j < times.length; j++) {
-                while (times[j] - times[i] >= limit.seconds * 1000) {
-                  i++;
+            for (const [lane, sent] of lanes) {
+              for (let j = 0; j < sent.length; j++) {
+                let held = 1;
+                for (let i = 0; i < j; i++) {
+                  if (sent[j].t - (sent[i].answered ?? sent[i].t) < limit.seconds * 1000) {
+                    held++;
+                  }
                 }
-                if (j - i + 1 > limit.max) {
+                if (held > limit.max) {
                   over.push(
-                    `${d.name} (${lane}): ${j - i + 1} calls within ${limit.seconds} s, at most ${limit.max} (${limit.source})`,
+                    `${d.name} (${lane}): ${held} calls within ${limit.seconds} s, at most ${limit.max} (${limit.source})`,
                   );
                   break;
                 }
@@ -3750,7 +3755,11 @@ after(function () {
           ),
         ]
       : [];
-  fs.rmSync(RESOURCE_DIR, { recursive: true, force: true });
+  // Round 170 (R170-64): in a run folder the probe stays with the run (its retention removes it) — the lab run of
+  // round 170 had to run again to read its answer stamps; elsewhere (CI, the tmpdir) it goes
+  if (!process.env.KROBI_RUN_DIR) {
+    fs.rmSync(RESOURCE_DIR, { recursive: true, force: true });
+  }
   assert.ok(starts.length > 0, "no adapter start loaded the resource probe — a start without adapterEnv()");
   assert.deepStrictEqual(silent, [], "adapter processes that never reached their exit (killed or crashed)");
   assert.deepStrictEqual(left, [], `left open after onUnload:\n${left.join("\n")}`);

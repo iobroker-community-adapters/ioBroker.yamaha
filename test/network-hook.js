@@ -113,15 +113,44 @@ function causeEmit(event, ...args) {
 }
 EventEmitter.prototype.emit = causeEmit;
 let nested = 0;
+// each counted call carries its number `n` in its process — section 9 pairs an answer with it
+let counted = 0;
 const count = (kind, host, port, hook = byHook()) => {
   if (nested > 0 || keep.has(Number(port)) || hook) {
-    return;
+    return undefined;
   }
   const cause = command.getStore();
+  const n = ++counted;
   fs.appendFileSync(
     calls,
-    `${JSON.stringify(cause === undefined ? { t: Date.now(), kind, host, port } : { t: Date.now(), kind, host, port, cause })}\n`,
+    `${JSON.stringify(cause === undefined ? { t: Date.now(), kind, host, port, n } : { t: Date.now(), kind, host, port, cause, n })}\n`,
   );
+  return n;
+};
+// 9. It stamps when an HTTP answer reaches the adapter — `{ t, n }` in RESOURCE_PROBE_DIR/<pid>.answered, `n` the call's
+//    number in <pid>.calls (round 170, homeconnect 2026-11-05: a tester's 50th call of a minute drew a 429 at the window's
+//    edge — the server counts a call at the latest when it answers it, so a place in a window frees `seconds · 1000`
+//    after the answer, not after the send). In the installations the limit tests judge (INVENTORY_COUNTED=1) every
+//    answer reaches the adapter ANSWER_DELAY_MS late: a fixture answers within milliseconds, and a limiter that frees its
+//    place after the send would hold one call too many unseen. 20 ms lies above a timer's lateness (0–3 ms, 20 timers
+//    of 150 ms on the development Mac, 2026-11-05).
+const answeredLog = path.join(dir, `${process.pid}.answered`);
+const ANSWER_DELAY_MS = process.env.INVENTORY_COUNTED === "1" ? 20 : 0;
+const answered = n => {
+  if (n !== undefined) {
+    fs.appendFileSync(answeredLog, `${JSON.stringify({ t: Date.now(), n })}\n`);
+  }
+};
+// a fetch answer on its way to the adapter: stamped as it goes, late in the counted installations
+const handOver = (n, response) => {
+  if (ANSWER_DELAY_MS === 0) {
+    answered(n);
+    return response;
+  }
+  return new Promise(resolve => setTimeout(resolve, ANSWER_DELAY_MS)).then(() => {
+    answered(n);
+    return response;
+  });
 };
 // 6. It notes every answer a counterpart sends — data on a connection, a datagram, a fetch response — at most one line
 //    per counterpart and second in RESOURCE_PROBE_DIR/<pid>.answers (round 104, krobi 2026-10-03 12:01 for every
@@ -489,9 +518,7 @@ for (const mod of [require("node:http"), require("node:https")]) {
         pathname = first.path ?? first.pathname;
         method = first.method;
       }
-      if (host !== undefined) {
-        count("http", String(host).replace(/:\d+$/, ""), port);
-      }
+      const n = host === undefined ? undefined : count("http", String(host).replace(/:\d+$/, ""), port);
       // a fixture hook below that calls http.request again is the same call, not a second one
       const outermost = nested === 0;
       nested++;
@@ -517,6 +544,27 @@ for (const mod of [require("node:http"), require("node:https")]) {
             return event === "response"
               ? emit.call(this, event, faultResponse(mode, rest[0]))
               : emit.call(this, event, ...rest);
+          };
+        }
+        if (n !== undefined) {
+          // section 9: the response, stamped as it goes to the adapter — late in the counted installations
+          const deliver = req.emit;
+          req.emit = function answeredEmit(event, ...rest) {
+            if (event !== "response") {
+              return deliver.call(this, event, ...rest);
+            }
+            if (ANSWER_DELAY_MS === 0) {
+              answered(n);
+              return deliver.call(this, event, ...rest);
+            }
+            setTimeout(() => {
+              answered(n);
+              // nobody takes it: drained, as node does with a response no listener takes
+              if (!deliver.call(this, event, ...rest)) {
+                rest[0]?.resume?.();
+              }
+            }, ANSWER_DELAY_MS);
+            return true;
           };
         }
         return req;
@@ -610,9 +658,10 @@ net.Server.prototype.emit = cutServerEmit;
 /** @type {Native | undefined} */
 let current = globalThis.fetch;
 const cutFetch = (...args) => {
+  let n;
   try {
     const url = new URL(args[0] instanceof Request ? args[0].url : String(args[0]));
-    count("http", url.hostname, Number(url.port) || (url.protocol === "https:" ? 443 : 80));
+    n = count("http", url.hostname, Number(url.port) || (url.protocol === "https:" ? 443 : 80));
   } catch {
     // not a URL fetch would accept either — it rejects on its own
   }
@@ -666,24 +715,26 @@ const cutFetch = (...args) => {
     if (mode !== "drift") {
       return Promise.resolve(
         new Response(mode === "empty" ? "" : null, { status: faultStatus(mode), headers: faultHeaders(mode) }),
-      );
+      ).then(response => handOver(n, response));
     }
-    return /** @type {Native} */ (current)(...args).then(async response => {
-      const headers = new Headers(response.headers);
-      headers.delete("content-length");
-      headers.delete("content-encoding");
-      return new Response(driftText(await response.text()), {
-        status: response.status,
-        statusText: response.statusText,
-        headers,
-      });
-    });
+    return /** @type {Native} */ (current)(...args)
+      .then(async response => {
+        const headers = new Headers(response.headers);
+        headers.delete("content-length");
+        headers.delete("content-encoding");
+        return new Response(driftText(await response.text()), {
+          status: response.status,
+          statusText: response.statusText,
+          headers,
+        });
+      })
+      .then(response => handOver(n, response));
   }
   return /** @type {Native} */ (current)(...args).then(response => {
     if (target !== undefined) {
       answer("http", target, targetPort);
     }
-    return response;
+    return handOver(n, response);
   });
 };
 function getFetch() {
