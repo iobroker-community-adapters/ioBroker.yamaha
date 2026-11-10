@@ -50,7 +50,8 @@ describe("writeDataFile", () => {
 
   it("is readable for the owner only", () => {
     writeDataFile(dir, "secret.json", "token");
-    expect(statSync(join(dir, "secret.json")).mode & 0o777).toBe(0o600);
+    // Windows knows a file only as read-only (0o444) or writable (0o666) — Node.js docs fs, "File modes"
+    expect(statSync(join(dir, "secret.json")).mode & 0o777).toBe(process.platform === "win32" ? 0o666 : 0o600);
   });
 
   it("replaces the old content as a whole", () => {
