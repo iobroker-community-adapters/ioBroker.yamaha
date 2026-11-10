@@ -42,6 +42,7 @@ import { StateMirror } from "./lib/lifecycle/write-mirror";
 import { coveredBy, KnownObjects, mergedWith } from "./lib/known-objects";
 import { NetworkSearch } from "./lib/network-search";
 import { errText } from "./lib/err-text";
+import { readDataFile, writeDataFile } from "./lib/data-file";
 import { migrateNativeKeys, type NativeKeyMigration } from "./lib/native-key-migration";
 import { tName } from "./lib/i18n";
 import { withValueLabels } from "./lib/catalog/state-labels";
@@ -62,6 +63,7 @@ import type { ProbeMemory } from "./lib/lifecycle/probe-memory";
 import {
   DeviceProfileStore,
   identityOfDeviceObject,
+  isPlainObject,
   loadCapabilityProfile,
   modelFrom,
 } from "./lib/lifecycle/capability-profile";
@@ -81,23 +83,39 @@ const REMOVE_SETTLE_CAP_MS = 30000;
 /** The adapter's own object tree as `getAdapterObjectsAsync` lists it. */
 type AdapterObjects = Awaited<ReturnType<ioBroker.Adapter["getAdapterObjectsAsync"]>>;
 
+/** The profile file in the instance data directory: every device's capability profile by device id. */
+const PROFILE_FILE = "profiles.json";
+
 /** The pictograms THIS version draws — anything else in `common.icon` is an older adapter's drawing. */
 const CURRENT_PICTOGRAMS: ReadonlySet<string> = new Set(Object.values(DEVICE_TYPE_ICONS));
 
 /**
- * The model a device object's capability profile remembers, for a device that is off right now.
+ * The model a device's capability profile remembers, for a device that is off right now.
  * Any transport's identity will do — the model name is the same on all three.
  *
  * @param native the device object's native part (untrusted storage)
+ * @param profile the device's entry of the profile file (see {@link profileText})
  * @returns the remembered model name, or undefined
  */
-function rememberedModel(native: Record<string, unknown> | undefined): string | undefined {
+function rememberedModel(native: Record<string, unknown> | undefined, profile?: string): string | undefined {
   try {
     // The one resolver (A29); `native.model` outlives a discovery-schema bump (A22).
-    return modelFrom(loadCapabilityProfile(native).memory ?? {}, native?.model);
+    return modelFrom(loadCapabilityProfile(native, profile).memory ?? {}, native?.model);
   } catch {
     return undefined;
   }
+}
+
+/**
+ * A device's entry of the profile file as the profile text the loaders read.
+ *
+ * @param profiles the profile file's entries; undefined when it could not be read
+ * @param deviceId the id-safe device id
+ * @returns the profile text, or undefined when the file holds none for the device
+ */
+function profileText(profiles: Record<string, unknown> | undefined, deviceId: string): string | undefined {
+  const entry = profiles?.[deviceId];
+  return entry === undefined ? undefined : JSON.stringify(entry);
 }
 
 /**
@@ -187,6 +205,8 @@ interface PendingDevicePatch {
   common: Record<string, unknown>;
   /** The merged `native` fields (latest value per key wins). */
   native: Record<string, unknown>;
+  /** The capability profile for the profile file (latest wins), and the profile keys to delete from the object once it is written. */
+  profile?: { content: string; clearNative: readonly string[] };
   /** The window timer; undefined when the adapter refused one (shutdown) and the write ran at once. */
   timer?: ioBroker.Timeout;
 }
@@ -353,6 +373,11 @@ class Yamaha extends utils.Adapter {
   private readonly diagnostics = new ReportJobs(new YamahaReportSource(this.diagnosticsHost()));
   /** Per device, the last write to its device object — the next one waits for it (see writeDeviceObject). */
   private readonly deviceObjectWrites = this.perDevice.map<Promise<unknown>>();
+  /**
+   * The profile file as read once per run — every device's capability profile by device id; null when the run stores
+   * no profile, undefined until the first reader (see readProfiles).
+   */
+  private profileFile?: Record<string, unknown> | null;
   /** The devices whose id is final under the 3.0.0 rule (`native.idScheme`) — see checkIdDecision. */
   private readonly idDecided = this.perDevice.set();
   /** The devices whose id was already judged in this run — once per process is enough. */
@@ -502,6 +527,7 @@ class Yamaha extends utils.Adapter {
       getForeignStateAsync: id => this.getForeignStateAsync(id),
       getForeignStatesAsync: pattern => this.getForeignStatesAsync(pattern),
       getObjectViewAsync: (design, search, params) => this.getObjectViewAsync(design, search, params),
+      getProfile: deviceId => Promise.resolve(profileText(this.readProfiles(), deviceId)),
       // Read when a report is made: the handler is built in the constructor, before js-controller gives the adapter its
       // log — a copy taken there was undefined, and every export failed at its first line (server test 2026-10-06).
       get log() {
@@ -784,7 +810,7 @@ class Yamaha extends utils.Adapter {
     // the device never answers again.
     this.setTransports(device.id, []);
     // Held here, not in the controllers: those are rebuilt on every connection attempt;
-    // persisted at the device object (one capability profile), so a restart starts from the
+    // persisted in the profile file (one capability profile per device), so a restart starts from the
     // remembered answers.
     const profile = await this.loadDeviceProfile(device.id, stored);
     if (this.unloading || this.removed.has(device.id)) {
@@ -1649,11 +1675,14 @@ class Yamaha extends utils.Adapter {
   private async deleteObject(id: string, below = false): Promise<void> {
     this.stateMirror.deleted(id, below);
     await this.known.remove(id, { recursive: below });
+    if (!id.includes(".")) {
+      // A device object: what the adapter learned about the device goes with it.
+      this.handOnProfile(id);
+    }
   }
 
   /**
-   * Persist a device object's `native` part — observed like {@link writeState}. The two
-   * per-device caches (YNCA subunit probe, probe memory) persist through it.
+   * Persist a device object's `native` part — observed like {@link writeState}.
    *
    * @param deviceId the device object id
    * @param native the native fields to merge into the object
@@ -1663,19 +1692,36 @@ class Yamaha extends utils.Adapter {
   }
 
   /**
+   * Persist a device's capability profile — the two per-device caches (YNCA subunit probe, probe memory) and the learned
+   * tree — into the profile file, coalesced with the device object's patch (see {@link patchDevice}).
+   *
+   * @param deviceId the device object id
+   * @param content the profile
+   * @param clearNative the profile keys an earlier version left at the device object — deleted once the file is written
+   */
+  private persistDeviceProfile(deviceId: string, content: string, clearNative: readonly string[]): void {
+    this.patchDevice(deviceId, { profile: { content, clearNative } });
+  }
+
+  /**
    * Merge into an existing device object — coalesced per device: patches are held until the device's
    * first connect of this process has ended, then everything within {@link DEVICE_PATCH_WINDOW_MS}
    * goes out as ONE write (latest value per key wins). Writes that must stand at once (the header, the
    * id journal, the percent switch, the card dialogs) go through {@link writeDeviceObject} directly.
    *
    * @param deviceId the device object id
-   * @param patch the `common` and `native` fields to merge
+   * @param patch the `common` and `native` fields to merge, and the profile for the profile file
    * @param patch.common the `common` fields
    * @param patch.native the `native` fields
+   * @param patch.profile the capability profile (see {@link persistDeviceProfile})
    */
   private patchDevice(
     deviceId: string,
-    patch: { common?: Record<string, unknown>; native?: Record<string, unknown> },
+    patch: {
+      common?: Record<string, unknown>;
+      native?: Record<string, unknown>;
+      profile?: PendingDevicePatch["profile"];
+    },
   ): void {
     // A device that was removed has no object to patch any more — a late write from its last
     // attempt would recreate the device object as a bare orphan.
@@ -1686,9 +1732,18 @@ class Yamaha extends utils.Adapter {
     if (pending) {
       Object.assign(pending.common, patch.common);
       Object.assign(pending.native, patch.native);
+      if (patch.profile) {
+        // The newest profile wins; the keys to delete add up — a later persist names none.
+        const clearNative = [...new Set([...(pending.profile?.clearNative ?? []), ...patch.profile.clearNative])];
+        pending.profile = { content: patch.profile.content, clearNative };
+      }
       return;
     }
-    const entry: PendingDevicePatch = { common: { ...patch.common }, native: { ...patch.native } };
+    const entry: PendingDevicePatch = {
+      common: { ...patch.common },
+      native: { ...patch.native },
+      ...(patch.profile ? { profile: patch.profile } : {}),
+    };
     this.pendingDevicePatches.set(deviceId, entry);
     // Until the device's first connect of this process has ended (either way), nothing is written: a
     // first connect learns over tens of seconds — a YNCA sweep at the specification's pace — and each
@@ -1771,8 +1826,9 @@ class Yamaha extends utils.Adapter {
   }
 
   /**
-   * Write a device's pending native patch now (the coalescing window ended, or the adapter is
-   * unloading).
+   * Write a device's pending patch now (the coalescing window ended, or the adapter is unloading): its profile into
+   * the profile file first, then the device object — on the device's write chain. The profile keys an earlier version
+   * left at the object go only once the file holds the profile.
    *
    * @param deviceId the id-safe device id
    * @returns the write, for the unload path to wait on
@@ -1784,16 +1840,113 @@ class Yamaha extends utils.Adapter {
     }
     this.pendingDevicePatches.delete(deviceId);
     this.clearTimeout(pending.timer);
-    const patch: ioBroker.PartialObject = {
-      ...(Object.keys(pending.common).length > 0 ? { common: pending.common } : {}),
-      ...(Object.keys(pending.native).length > 0 ? { native: pending.native } : {}),
-    };
-    return this.writeDeviceObject(deviceId, patch).then(
+    const { common, profile } = pending;
+    const native = { ...pending.native };
+    let profileFailed = false;
+    return this.chainDeviceWrite(deviceId, async () => {
+      // A device removed meanwhile gets no profile — the entry would outlive it.
+      if (profile && this.deviceRecords.has(deviceId)) {
+        try {
+          if (this.storeProfile(deviceId, profile.content)) {
+            // `null` deletes a native key on extendObject — the same way a stale description is removed.
+            for (const key of profile.clearNative) {
+              native[key] = null;
+            }
+          }
+        } catch (e) {
+          profileFailed = true;
+          this.noteWriteFailure("the profile file", e);
+        }
+      }
+      const patch: ioBroker.PartialObject = {
+        ...(Object.keys(common).length > 0 ? { common } : {}),
+        ...(Object.keys(native).length > 0 ? { native } : {}),
+      };
+      if (Object.keys(patch).length > 0) {
+        await this.writeObject(deviceId, patch);
+      }
+    }).then(
       () => {
-        this.stateWritesFailing = false;
+        // Only a flush that went through whole ends an outage — a failed profile file keeps the repeats at debug.
+        if (!profileFailed) {
+          this.stateWritesFailing = false;
+        }
       },
       (e: unknown) => this.noteWriteFailure(`device object ${deviceId}`, e),
     );
+  }
+
+  /**
+   * Read the profile file — once per run; every later reader gets the same entries. Only a file that is not there reads
+   * as "no profile yet". One that cannot be read, holds no JSON or no profile map is never written over in this run —
+   * what it holds is kept, and the devices learn in memory only (the rule of the device lists, review 2026-10-05, A2/A9).
+   *
+   * @returns every device's profile by device id, or undefined when the run stores no profile
+   */
+  private readProfiles(): Record<string, unknown> | undefined {
+    if (this.profileFile === undefined) {
+      const { value, error } = readDataFile(utils.getAbsoluteInstanceDataDir(this), PROFILE_FILE);
+      if (error === undefined && (value === undefined || isPlainObject(value))) {
+        this.profileFile = value ?? {};
+      } else {
+        this.log.debug(
+          `${PROFILE_FILE}: not written — the file could not be read (${error ?? "it holds no profile map"}), and what it holds is kept`,
+        );
+        this.profileFile = null;
+      }
+    }
+    return this.profileFile ?? undefined;
+  }
+
+  /**
+   * Write the profile file whole.
+   *
+   * @param profiles the entries as {@link readProfiles} handed them out
+   */
+  private writeProfiles(profiles: Record<string, unknown>): void {
+    writeDataFile(utils.getAbsoluteInstanceDataDir(this), PROFILE_FILE, profiles);
+  }
+
+  /**
+   * Put a device's profile into the profile file.
+   *
+   * @param deviceId the id-safe device id
+   * @param content the profile as `serializeCapabilityProfile` wrote it
+   * @returns true when the file holds the profile; false when the run stores no profile (see {@link readProfiles})
+   */
+  private storeProfile(deviceId: string, content: string): boolean {
+    const profiles = this.readProfiles();
+    if (!profiles) {
+      return false;
+    }
+    profiles[deviceId] = JSON.parse(content) as unknown;
+    this.writeProfiles(profiles);
+    return true;
+  }
+
+  /**
+   * Hand a device's profile on in the profile file: to the id it moves to, or — without one — to nobody, the device is
+   * gone. A failed write is observed like every other; the entries in memory are already right, so the next write
+   * of the file carries the change.
+   *
+   * @param from the device id the profile belongs to
+   * @param to the device id it moves to; undefined drops it
+   */
+  private handOnProfile(from: string, to?: string): void {
+    const profiles = this.readProfiles();
+    if (!profiles || profiles[from] === undefined) {
+      return;
+    }
+    if (to === undefined) {
+      delete profiles[from];
+    } else {
+      profiles[to] = profiles[from];
+    }
+    try {
+      this.writeProfiles(profiles);
+    } catch (e) {
+      this.noteWriteFailure("the profile file", e);
+    }
   }
 
   /**
@@ -2191,7 +2344,7 @@ class Yamaha extends utils.Adapter {
     // In memory the device starts with the inherited percent switch; written down only below, from a read object.
     this.volumePercent.set(deviceId, this.legacyVolumePercent);
     if (stored.readable) {
-      const header = this.deviceHeader(deviceId, stored.object);
+      const header = this.deviceHeader(deviceId, stored.object, profileText(this.readProfiles(), deviceId));
       if (stored.object?.native && "source" in stored.object.native) {
         // A key leaves an object only by a write of the whole object without it (`extendObject` merges) — once, with
         // the header (fleet check object-rewrite).
@@ -2279,9 +2432,14 @@ class Yamaha extends utils.Adapter {
    *
    * @param deviceId the id-safe device id
    * @param existing the stored device object, undefined for a device that has none yet
+   * @param profile the device's entry of the profile file (the model of a device that is off)
    * @returns the patch to merge into the device object
    */
-  private deviceHeader(deviceId: string, existing: ioBroker.Object | undefined): ioBroker.PartialObject {
+  private deviceHeader(
+    deviceId: string,
+    existing: ioBroker.Object | undefined,
+    profile: string | undefined,
+  ): ioBroker.PartialObject {
     // statusStates.onlineId lets the admin paint a green/red reachability symbol on the
     // device object itself (as govee does), fed by the per-device connection state.
     // A device that has not reported its model yet would sit in the tree without any
@@ -2299,7 +2457,7 @@ class Yamaha extends utils.Adapter {
       // Remembered, so a later model report of the same class writes nothing.
       this.deviceIcons.set(deviceId, storedIcon);
     } else {
-      icon = iconForModel(rememberedModel(existing?.native));
+      icon = iconForModel(rememberedModel(existing?.native, profile));
       this.deviceIcons.set(deviceId, icon);
     }
     const native = existing?.native as
@@ -2594,6 +2752,7 @@ class Yamaha extends utils.Adapter {
       const listing = await this.getAdapterObjectsAsync();
       // A device the user deleted is not moved — its tree goes with the start cleanup (review 2026-10-05, A31).
       const discovered = rememberedDevices(await this.stores.read());
+      const profiles = this.readProfiles();
       const rows = Array.isArray(this.config.devices) ? this.config.devices : [];
       const known = new Set([...parseDevices(rows).map(device => device.id), ...discovered.map(device => device.id)]);
       const devices = new Map<string, ioBroker.Object>();
@@ -2631,8 +2790,8 @@ class Yamaha extends utils.Adapter {
         const record = discovered.find(device => device.id === id);
         candidates.push({
           id,
-          model: rememberedModel(native) ?? record?.model,
-          identity: identityOfDeviceObject(native, record?.identity),
+          model: rememberedModel(native, profileText(profiles, id)) ?? record?.model,
+          identity: identityOfDeviceObject(native, record?.identity, profileText(profiles, id)),
         });
       }
       // By serial, so two devices of one model whose serials end alike get the same ids on every
@@ -2671,6 +2830,8 @@ class Yamaha extends utils.Adapter {
             await this.extendObject(move.from, { native: { movingTo: move.to } });
           }
           const report = await copyDeviceTree(this.moveDeps(), move.from, move.to);
+          // The profile travels with the tree (the old id's entry goes with the old device object).
+          this.handOnProfile(move.from, move.to);
           report.enums = await this.moveBelow(move.from, move.to);
           done.push(move);
           if (!report.resumed) {
@@ -3374,14 +3535,15 @@ class Yamaha extends utils.Adapter {
 
   /**
    * Load a device's capability profile — the one persisted memory of what the device told us
-   * (probe memory, YNCA subunit snapshot, learned tree) — from its device object's native
-   * part, wrapped so every change persists back there through the coalescing writer. The
-   * device object is the right home: writing an instance object's native restarts the
-   * adapter, a device object's does not. Legacy keys of the releases before 2.7.0 are converted at load.
+   * (probe memory, YNCA subunit snapshot, learned tree) — from the profile file in the instance data
+   * directory, wrapped so every change persists back there through the coalescing writer. What the adapter
+   * learned is run state, not a property of the device, so it stays out of the device object (fleet standard
+   * „Inventar-Abzug“ point 4, krobi 2026-11-10 14:34). A profile an earlier version left at the device object is
+   * taken over while the file holds none for the device.
    *
-   * A profile whose device object could not be read is used in memory and never persisted: written, the empty profile
-   * would replace what the device was taught — the learned tree, the ownership, the settled version (review 2026-10-05,
-   * A9).
+   * A profile whose device object or file could not be read is used in memory and never persisted: written, the empty
+   * profile would replace what the device was taught — the learned tree, the ownership, the settled version (review
+   * 2026-10-05, A9).
    *
    * @param deviceId the id-safe device id
    * @param stored the device object as the setup read it; read here when not given
@@ -3392,15 +3554,23 @@ class Yamaha extends utils.Adapter {
     if (!readable) {
       this.unreadDevices.add(deviceId);
     }
-    const store = new DeviceProfileStore(deviceId, object?.native, {
-      adapterVersion: this.version ?? "",
-      now: () => new Date().toISOString(),
-      persist: patch =>
-        readable
-          ? this.persistDeviceNative(deviceId, patch)
-          : this.log.debug(`${deviceId}: profile not stored — its device object could not be read at the start`),
-      log: message => this.log.debug(message),
-    });
+    const profiles = this.readProfiles();
+    const store = new DeviceProfileStore(
+      deviceId,
+      object?.native,
+      {
+        adapterVersion: this.version ?? "",
+        now: () => new Date().toISOString(),
+        persist: (profile, clearNative) =>
+          readable && profiles
+            ? this.persistDeviceProfile(deviceId, profile, clearNative)
+            : this.log.debug(
+                `${deviceId}: profile not stored — its device object could not be read or the profile file is unusable`,
+              ),
+        log: message => this.log.debug(message),
+      },
+      profileText(profiles, deviceId),
+    );
     this.profiles.set(deviceId, store);
     return store;
   }

@@ -20,6 +20,7 @@ import { LogRing } from "./log-ring";
  * @param options.states the state values by id
  * @param options.bulk whether it offers the bulk state read
  * @param options.lc when a state last changed, by id
+ * @param options.profiles the entries of the profile file by device id; a device without one has none, `Error` fails its read
  */
 function makeHost(
   options: {
@@ -28,6 +29,7 @@ function makeHost(
     states?: Record<string, unknown>;
     bulk?: boolean;
     lc?: Record<string, number>;
+    profiles?: Record<string, string | Error>;
   } = {},
 ): DiagnosticsHost & { lines: string[]; reads: { one: string[]; bulk: Array<string | string[]> } } {
   const objects = options.objects ?? {};
@@ -81,6 +83,10 @@ function makeHost(
           .filter(([id]) => id >= params.startkey && id <= params.endkey)
           .map(([id, value]) => ({ id, value: structuredClone(value) })),
       }),
+    getProfile: id => {
+      const profile = options.profiles?.[id];
+      return profile instanceof Error ? Promise.reject(profile) : Promise.resolve(profile);
+    },
     log: { info: m => lines.push(m), warn: m => lines.push(m), debug: m => lines.push(m) },
   };
 }
@@ -243,6 +249,35 @@ describe("YamahaReportSource", () => {
     const report = JSON.parse(answer.content) as { liveRead: string; connection: unknown };
     expect(report.liveRead).toBe("not connected");
     expect(report.connection).toEqual({ liveError: null, ownersAtLastConnection: null });
+  });
+
+  // Fleet standard „Inventar-Abzug“ point 4 (krobi 2026-11-10 14:34): the profile lives in a file of the instance data
+  // directory since 3.4.0 — the report shows it where it always stood, beside what the device object remembers.
+  it("shows the device's entry of the profile file in the report, beside the device object's native part", async () => {
+    const profile = JSON.stringify({ schema: 7, memory: { yxcIdentity: "RX-V6A|1.81" } });
+    const host = makeHost({
+      devices: [device({ connected: false, capture: () => Promise.resolve(undefined) })],
+      objects: {
+        "yamaha.0.rx-v6a-2b3c": { type: "device", common: { name: "x" }, native: { model: "RX-V6A" } } as never,
+      },
+      profiles: { "rx-v6a-2b3c": profile },
+    });
+    const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
+    const report = JSON.parse(answer.content) as { profile: { model: string; capabilityProfile: { schema: number } } };
+    expect(report.profile.model).toBe("RX-V6A");
+    expect(report.profile.capabilityProfile.schema).toBe(7);
+  });
+
+  it("still hands back the report when the profile file cannot be read", async () => {
+    const host = makeHost({
+      devices: [device({ connected: false, capture: () => Promise.resolve(undefined) })],
+      objects: {
+        "yamaha.0.rx-v6a-2b3c": { type: "device", common: { name: "x" }, native: { model: "RX-V6A" } } as never,
+      },
+      profiles: { "rx-v6a-2b3c": new Error("EACCES") },
+    });
+    const answer = (await exportReport(host, "rx-v6a-2b3c")) as { content: string };
+    expect(JSON.parse(answer.content).profile).toEqual({ model: "RX-V6A" });
   });
 
   // Server test 2026-10-06: a receiver without power since the evening before, the adapter restarted in the morning —

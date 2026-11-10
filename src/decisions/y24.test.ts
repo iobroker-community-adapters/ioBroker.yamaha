@@ -1,8 +1,12 @@
-import { describe, expect, test, vi } from "vitest";
+import { afterAll, describe, expect, test, vi } from "vitest";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-// Y-24: what the adapter remembers about a device never becomes a datapoint. It is kept on the device object,
-// out of sight of the user's object list, and no protocol builds a state for it.
+// Y-24: what the adapter remembers about a device never becomes a datapoint. It is kept in a file in the instance
+// data directory — never a state, never the native part of an object — and no protocol builds a state for it.
 
+const dataDir = vi.hoisted(() => ({ path: "" }));
 vi.mock("@iobroker/adapter-core", () => ({
   Adapter: class {
     public log = { silly: vi.fn(), debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
@@ -37,7 +41,7 @@ vi.mock("@iobroker/adapter-core", () => ({
     constructor(_opts: unknown) {}
   },
   I18n: { init: vi.fn(() => Promise.resolve(undefined)) },
-  getAbsoluteInstanceDataDir: () => "/tmp/yamaha-data",
+  getAbsoluteInstanceDataDir: () => dataDir.path,
 }));
 
 import * as mainModule from "../main";
@@ -57,7 +61,10 @@ interface Internals {
 }
 
 describe("Y-24 what the adapter remembers is no datapoint", () => {
-  test("a learned profile is written into the device object's native part, never as a state", async () => {
+  afterAll(() => rmSync(dataDir.path, { recursive: true, force: true }));
+
+  test("a learned profile goes into a file in the instance data directory, never into a state or native", async () => {
+    dataDir.path = mkdtempSync(join(tmpdir(), "yamaha-y24-"));
     const adapter = new Yamaha() as unknown as Internals;
     adapter.deviceRecords.set("living", { id: "living", ip: "10.0.0.6" });
     adapter.readyDevices.add("living");
@@ -69,13 +76,14 @@ describe("Y-24 what the adapter remembers is no datapoint", () => {
       fire();
     }
     await new Promise(resolve => setTimeout(resolve, 0));
-    const profileWrites = adapter.objectWrites.filter(w => JSON.stringify(w.obj).includes(PROFILE_KEY));
-    expect(profileWrites.length).toBeGreaterThan(0);
-    for (const write of profileWrites) {
-      expect(write.id.replace("yamaha.0.", "")).toBe("living");
-      expect(Object.keys(write.obj)).toEqual(["native"]);
-      expect(typeof (write.obj.native as Record<string, unknown>)[PROFILE_KEY]).toBe("string");
-    }
+    const files = (): string[] => readdirSync(dataDir.path).map(name => readFileSync(join(dataDir.path, name), "utf8"));
+    await vi.waitFor(() => expect(files().some(text => text.includes("RX-V6A|1.0"))).toBe(true));
+    expect(adapter.objectWrites.filter(w => JSON.stringify(w.obj).includes("RX-V6A|1.0"))).toEqual([]);
+    expect(
+      adapter.objectWrites.filter(
+        w => typeof (w.obj.native as Record<string, unknown> | undefined)?.[PROFILE_KEY] === "string",
+      ),
+    ).toEqual([]);
     expect(adapter.stateWrites).toEqual([]);
   });
 

@@ -10,7 +10,11 @@ import {
 } from "../ynca/subunit-cache";
 import { MEMORY_KEY } from "./memory-keys";
 
-/** The device object's native key the profile lives under — a JSON STRING (see {@link serializeCapabilityProfile}). */
+/**
+ * The profile's name — the device object's native key it lived under up to 3.3.x (a JSON STRING, see
+ * {@link serializeCapabilityProfile}), and its key in the diagnostics report. Since 3.4.0 it lives in the profile file
+ * of the instance data directory (`profiles.json`, one entry per device).
+ */
 export const PROFILE_KEY = "capabilityProfile";
 
 /**
@@ -19,6 +23,9 @@ export const PROFILE_KEY = "capabilityProfile";
  * persist, so a device object does not carry both shapes forever.
  */
 export const LEGACY_PROFILE_KEYS = ["probeCache", "yncaAvail", "purgeVersion"] as const;
+
+/** Every profile key a device object of an earlier version may still carry — deleted once the profile file is written. */
+export const NATIVE_PROFILE_KEYS = [PROFILE_KEY, ...LEGACY_PROFILE_KEYS] as const;
 
 /** What each transport reads as the device's identity, derived from the memory entries at persist time. */
 export interface ProfileIdentity {
@@ -52,25 +59,27 @@ export interface LoadedProfile {
   learnedAt: string | undefined;
   /** The schema the stored memory was learned under (for the re-learn log line); undefined = no memory. */
   storedSchema: number | undefined;
-  /** True when any legacy key is present — the first persist deletes them. */
+  /** True when the device object still carries a profile key ({@link NATIVE_PROFILE_KEYS}) — the first persist deletes them. */
   legacy: boolean;
 }
 
 /**
  * One capability profile per device, replacing the three stores of 2.5.2/2.6.0 — the plan's
- * Task 14. Stored as a JSON STRING under `native.capabilityProfile` because `extendObject`
- * merges nested objects key by key (a dropped memory entry would rise from the dead) while a
- * string replaces. Nothing here decides validity: `ProbeMemory` discards a memory of another
+ * Task 14. A JSON STRING, written whole: the device's entry of the profile file since 3.4.0, under
+ * `native.capabilityProfile` before (where `extendObject` merged nested objects key by key — a
+ * dropped memory entry would rise from the dead — while a string replaced). The device object's
+ * copy is read only while the file holds none for the device. Nothing here decides validity: `ProbeMemory` discards a memory of another
  * discovery schema, `isAvailSnapshot` a snapshot of another schema, the controllers a memory of
  * another device identity — exactly as before the profile existed, so the migration re-probes
  * nothing and a device that is OFF during the update keeps its fast path.
  *
  * @param native the device object's native part (untrusted storage)
+ * @param file the device's entry of the profile file, undefined when there is none (untrusted storage)
  * @returns the loaded parts
  */
-export function loadCapabilityProfile(native: Record<string, unknown> | undefined): LoadedProfile {
-  const legacy = LEGACY_PROFILE_KEYS.some(key => native?.[key] !== undefined && native?.[key] !== null);
-  const profile = parseProfile(native?.[PROFILE_KEY]);
+export function loadCapabilityProfile(native: Record<string, unknown> | undefined, file?: string): LoadedProfile {
+  const legacy = NATIVE_PROFILE_KEYS.some(key => native?.[key] !== undefined && native?.[key] !== null);
+  const profile = parseProfile(file ?? native?.[PROFILE_KEY]);
   if (profile) {
     const memory = { [SCHEMA_KEY]: profile.schema, ...profile.memory };
     const snapshot = profile.yncaAvail ? { schema: profile.schema, ...profile.yncaAvail } : undefined;
@@ -206,7 +215,13 @@ function parseLegacyMemory(raw: unknown): Record<string, unknown> | undefined {
   }
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
+/**
+ * Whether stored JSON is an object with keys — no array, no null.
+ *
+ * @param value the parsed value (untrusted)
+ * @returns true for a plain object
+ */
+export function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
@@ -216,8 +231,11 @@ export interface DeviceProfileDeps {
   adapterVersion: string;
   /** The current time as an ISO string (for `learnedAt`). */
   now: () => string;
-  /** Write a native patch to the device object (the adapter coalesces these). */
-  persist: (patch: Record<string, unknown>) => void;
+  /**
+   * Write the profile into the profile file (the adapter coalesces these). `clearNative` names the profile keys
+   * the device object still carries — deleted from it once the file is written.
+   */
+  persist: (profile: string, clearNative: readonly string[]) => void;
   /** Debug log — the re-learn line when the stored schema differs from the current one. */
   log?: (message: string) => void;
 }
@@ -255,21 +273,24 @@ function identityOfMemory(memory: Record<string, unknown>): DeviceIdentity | und
 
 /**
  * Everything a device object says about the device's identity: its own `native.identity`, the
- * profile's (only a profile of the current discovery schema), and — where there is one — a record's.
+ * profile's (only a profile of the current discovery schema — from the profile file where given, else a copy an
+ * earlier version left at the object), and — where there is one — a record's.
  * One function for the move decision and the device card (audit 2026-09-29, A30); both built a
  * throwaway profile store for it.
  *
  * @param native the device object's native part (untrusted)
  * @param record an identity known besides (the discovery record)
+ * @param file the device's entry of the profile file
  * @returns the merged identity, or undefined
  */
 export function identityOfDeviceObject(
   native: Record<string, unknown> | undefined,
   record?: DeviceIdentity,
+  file?: string,
 ): DeviceIdentity | undefined {
   const stored =
     typeof native?.identity === "object" && native.identity !== null ? identityFrom(native.identity) : undefined;
-  const loaded = loadCapabilityProfile(native);
+  const loaded = loadCapabilityProfile(native, file);
   const kept = loaded.memory !== undefined && memorySchemaOf(loaded.memory) === DISCOVERY_SCHEMA;
   const profile = kept ? identityOfMemory(withoutSchema(loaded.memory!)) : undefined;
   return mergeIdentity(mergeIdentity(record, stored), profile);
@@ -278,10 +299,10 @@ export function identityOfDeviceObject(
 /**
  * One device's capability profile, held by the adapter across reconnect attempts (the
  * controllers are rebuilt per attempt): the {@link ProbeMemory} and the YNCA subunit cache
- * persist through it into ONE JSON string, together with the learned tree (who serves which
- * datapoint). Legacy keys found at load are converted at once — one
- * patch with the profile and the three deletions — so the migration needs no device traffic and
- * the object never carries both shapes.
+ * persist through it into ONE JSON string — the device's entry of the profile file —, together with the learned tree (who serves
+ * which datapoint). Profile keys still at the device object (the profile up to 3.3.x, the three keys before 2.7.0) are
+ * taken over at once — the profile goes into the file, the keys leave the object once it is written — so the migration
+ * needs no device traffic and the object does not keep a second copy.
  */
 export class DeviceProfileStore {
   /** The per-device memory of constant device answers. */
@@ -300,13 +321,15 @@ export class DeviceProfileStore {
    * @param deviceId the id-safe device id (for the log line)
    * @param native the device object's native part as stored (untrusted)
    * @param deps the adapter callbacks
+   * @param file the device's entry of the profile file, undefined when there is none (untrusted)
    */
   public constructor(
     deviceId: string,
     native: Record<string, unknown> | undefined,
     private readonly deps: DeviceProfileDeps,
+    file?: string,
   ) {
-    const loaded = loadCapabilityProfile(native);
+    const loaded = loadCapabilityProfile(native, file);
     this.nativeModel = native?.model;
     const kept = loaded.memory !== undefined && memorySchemaOf(loaded.memory) === DISCOVERY_SCHEMA;
     if (loaded.storedSchema !== undefined && !kept) {
@@ -383,24 +406,17 @@ export class DeviceProfileStore {
 
   /** Write the profile now (through the adapter's coalescing persist). */
   public persistNow(): void {
-    const patch: Record<string, unknown> = {
-      [PROFILE_KEY]: serializeCapabilityProfile(
-        {
-          memory: this.memory,
-          yncaAvail: this.yncaAvail,
-          tree: this.learnedTree,
-        },
-        { adapterVersion: this.deps.adapterVersion, learnedAt: this.learnedAt },
-      ),
-    };
-    if (this.legacy) {
-      // `null` deletes a native key on extendObject — the same way a stale description is removed.
-      for (const key of LEGACY_PROFILE_KEYS) {
-        patch[key] = null;
-      }
-      this.legacy = false;
-    }
-    this.deps.persist(patch);
+    const profile = serializeCapabilityProfile(
+      {
+        memory: this.memory,
+        yncaAvail: this.yncaAvail,
+        tree: this.learnedTree,
+      },
+      { adapterVersion: this.deps.adapterVersion, learnedAt: this.learnedAt },
+    );
+    const clearNative = this.legacy ? NATIVE_PROFILE_KEYS : [];
+    this.legacy = false;
+    this.deps.persist(profile, clearNative);
   }
 }
 

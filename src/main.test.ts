@@ -1,6 +1,12 @@
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { vi } from "vitest";
 import type * as OsModule from "node:os";
 import type * as DiscoveredStoreModule from "./lib/discovered-store";
+
+/** Each test's own instance data directory — the profile file is a real file there. */
+const dataDirs = vi.hoisted(() => ({ dir: "" }));
 
 /**
  * Orchestration tests for the adapter lifecycle. `@iobroker/adapter-core` is
@@ -223,7 +229,7 @@ vi.mock("@iobroker/adapter-core", () => {
   return {
     Adapter,
     I18n: { init: vi.fn(() => Promise.resolve(undefined)) },
-    getAbsoluteInstanceDataDir: () => "/tmp/yamaha-data",
+    getAbsoluteInstanceDataDir: () => dataDirs.dir,
   };
 });
 
@@ -637,6 +643,19 @@ function setup(config: Record<string, unknown> = {}, opts: { failIds?: string[];
 /** Let the supervisor's async attempt chain settle. */
 const flush = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 5));
 
+/** One device's entry of the profile file, as the tests read it. */
+type ProfileEntry = { schema: number; memory: Record<string, unknown> };
+
+/**
+ * The profile file of the test's instance data directory, parsed.
+ *
+ * @returns every device's profile by device id, or undefined while there is no file
+ */
+const profileFileOf = (): Record<string, ProfileEntry> | undefined => {
+  const path = join(dataDirs.dir, "profiles.json");
+  return existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as Record<string, ProfileEntry>) : undefined;
+};
+
 /**
  * End every device object's coalescing window now: name, icon and caches go out as one write per
  * window (`DEVICE_PATCH_WINDOW_MS`), whose timer the mocked adapter never fires by itself.
@@ -682,6 +701,7 @@ function nextStart(prev: Ctx, opts: { failIds?: string[]; hangIds?: string[] } =
 
 beforeEach(() => {
   vi.clearAllMocks();
+  dataDirs.dir = mkdtempSync(join(tmpdir(), "yamaha-main-"));
   mocks.discoveredStore.devices = [];
   mocks.discoveredStore.ignored = [];
   mocks.discoveredStore.excluded = [];
@@ -699,6 +719,10 @@ beforeEach(() => {
   net.http.body = "<root/>";
   net.http.error = null;
   net.http.lastReq = null;
+});
+
+afterEach(() => {
+  rmSync(dataDirs.dir, { recursive: true, force: true });
 });
 
 describe("Yamaha onReady — configured devices", () => {
@@ -945,6 +969,7 @@ describe("Yamaha onReady — configured devices", () => {
     await deps.settleTree(new Set());
     await flushPatches(ctx);
     expect(ctx.i.objects.get("Living_room")).toEqual(stored);
+    expect(profileFileOf()).toBeUndefined();
     const program = ctx.i.objects.get("Living_room.soundProgram") as { common: { states: Record<string, string> } };
     expect(Object.keys(program.common.states).sort()).toEqual(["Jazz", "Straight"]);
   });
@@ -2005,9 +2030,9 @@ describe("Yamaha auto-discovery", () => {
     await flush();
     expect(ctx.i.objects.has("RX-V685")).toBe(true);
 
-    // The capability profile persists through a coalescing window. Its timer would fire
+    // A device patch waits through a coalescing window. Its timer would fire
     // AFTER the delete and recreate the device object as a bare orphan nothing owns.
-    ctx.i.persistDeviceNative("RX-V685", { capabilityProfile: "{}" });
+    ctx.i.persistDeviceNative("RX-V685", { model: "RX-V685" });
     const timer = ctx.i.pendingDevicePatches.get("RX-V685")?.timer;
     expect(timer).toBeDefined();
 
@@ -2058,13 +2083,13 @@ describe("Yamaha auto-discovery", () => {
     await flush();
     const windows = (): unknown[] => ctx.i.setTimeout.mock.calls.filter(c => c[1] === 4500);
     ctx.i.persistDeviceNative("RX-V685", { model: "RX-V685" });
-    ctx.i.persistDeviceNative("RX-V685", { capabilityProfile: "{}" });
+    ctx.i.persistDeviceNative("RX-V685", { volumeAsPercent: true });
     expect(windows()).toHaveLength(0);
-    expect(ctx.i.pendingDevicePatches.get("RX-V685")?.native).toEqual({ model: "RX-V685", capabilityProfile: "{}" });
+    expect(ctx.i.pendingDevicePatches.get("RX-V685")?.native).toEqual({ model: "RX-V685", volumeAsPercent: true });
     ctx.i.reportConnection("RX-V685", true);
     expect(windows()).toHaveLength(1);
     await flushPatches(ctx);
-    expect(ctx.i.objects.get("RX-V685")?.native).toMatchObject({ model: "RX-V685", capabilityProfile: "{}" });
+    expect(ctx.i.objects.get("RX-V685")?.native).toMatchObject({ model: "RX-V685", volumeAsPercent: true });
   });
 
   it("drops a native patch that arrives after the device was removed", async () => {
@@ -2076,7 +2101,7 @@ describe("Yamaha auto-discovery", () => {
     const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
     extendObject.mockClear();
     ctx.i.setTimeout.mockClear();
-    ctx.i.persistDeviceNative("RX-V685", { capabilityProfile: "{}" });
+    ctx.i.persistDeviceNative("RX-V685", { model: "RX-V685" });
     expect(ctx.i.pendingDevicePatches.has("RX-V685")).toBe(false);
     expect(ctx.i.setTimeout).not.toHaveBeenCalled();
     await flush();
@@ -3598,6 +3623,26 @@ describe("Yamaha transport plumbing", () => {
     expect((ctx.i.objects.get("Living_room")?.common as { icon?: string }).icon).toBe(DEVICE_TYPE_ICONS.soundbar);
   });
 
+  it("draws an OFFLINE device with the pictogram of the model its profile file remembers", async () => {
+    const oldIcon = `data:image/svg+xml;base64,${Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="2" y="7"/></svg>',
+    ).toString("base64")}`;
+    const ctx = setup({}, { failIds: ["Living_room"] });
+    writeFileSync(
+      join(dataDirs.dir, "profiles.json"),
+      JSON.stringify({
+        Living_room: {
+          schema: DISCOVERY_SCHEMA,
+          memory: { yncaCapabilities: { model: "YSP-1600", firmware: "1.0", subunits: {} } },
+        },
+      }),
+    );
+    ctx.i.objects.set("Living_room", { type: "device", common: { name: "Living room", icon: oldIcon }, native: {} });
+    await ctx.i.onReady();
+    await flush();
+    expect((ctx.i.objects.get("Living_room")?.common as { icon?: string }).icon).toBe(DEVICE_TYPE_ICONS.soundbar);
+  });
+
   it("leaves a current pictogram alone at start and does not rewrite it on the model report", async () => {
     const ctx = setup();
     ctx.i.objects.set("Living_room", {
@@ -4269,22 +4314,31 @@ describe("Yamaha guarded database writes (audit 2026-09-02 — a hiccup must not
     expect(writeWarnings(ctx)).toHaveLength(1);
   });
 
-  it("observes the persistence writes of the per-device caches too", async () => {
+  it("observes the writes of the profile file too: one warning, the repeat at debug", async () => {
     const ctx = setup();
     await ctx.i.onReady();
     await flush();
-    ctx.i.extendObjectFail = new Error("Objects database not connected");
+    // The file was read at the start (there was none); now a directory sits where it would be replaced.
+    mkdirSync(join(dataDirs.dir, "profiles.json"));
     ctx.i.setTimeout.mockClear();
+    const windows = (): unknown[][] => ctx.i.setTimeout.mock.calls.filter(c => c[1] === 4500);
     const cache = ctx.calls[0].deps.yncaSubunitCache as unknown as { set(snapshot: unknown): void };
     cache.set({ subunits: ["MAIN"], model: "RX", firmware: "1.0" });
     const memory = ctx.calls[0].deps.probeMemory as unknown as { set(key: string, value: unknown): void };
     memory.set("features", { zones: [] });
     // Both changes sit in ONE coalescing window; its timer firing is the write that fails.
-    expect(ctx.i.setTimeout).toHaveBeenCalledTimes(1);
-    (ctx.i.setTimeout.mock.calls[0][0] as () => void)();
-    await flush();
+    expect(windows()).toHaveLength(1);
+    (windows()[0][0] as () => void)();
+    await vi.waitFor(() => expect(writeWarnings(ctx)).toHaveLength(1));
+    expect(writeWarnings(ctx)[0]).toContain("could not write the profile file");
+    // The next window fails as well — at debug: a failed profile file does not end the outage.
+    memory.set("features", { zones: ["MAIN"] });
+    expect(windows()).toHaveLength(2);
+    (windows()[1][0] as () => void)();
+    await vi.waitFor(() =>
+      expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("could not write the profile file")),
+    );
     expect(writeWarnings(ctx)).toHaveLength(1);
-    expect(writeWarnings(ctx)[0]).toContain("could not write device object Living_room");
   });
 
   it("stays silent about failed writes while unloading — the database goes down with the adapter", async () => {
@@ -4613,7 +4667,7 @@ describe("per-device memory and the discovery schema (2.6.0)", () => {
     expect(cache.get()).toBeUndefined();
   });
 
-  it("coalesces the native writes of one device: three changes within the window, one write", async () => {
+  it("coalesces the profile writes of one device: three changes within the window, one write of the file", async () => {
     const ctx = setup();
     await ctx.i.onReady();
     await flush();
@@ -4625,41 +4679,92 @@ describe("per-device memory and the discovery schema (2.6.0)", () => {
     memory.set("b", 2);
     memory.set("c", 3);
     // Nothing written yet — one timer armed for the device …
-    expect(extendObject).not.toHaveBeenCalled();
+    expect(profileFileOf()).toBeUndefined();
     expect(ctx.i.setTimeout).toHaveBeenCalledTimes(1);
-    // … and when it fires, ONE write carries the latest snapshot.
+    // … and when it fires, ONE write carries the latest snapshot — into the profile file, not the device object.
     (ctx.i.setTimeout.mock.calls[0][0] as () => void)();
-    await flush();
-    const writes = extendObject.mock.calls.filter(call => call[0] === "Living_room");
-    expect(writes).toHaveLength(1);
-    const stored = JSON.parse((writes[0][1] as { native: { capabilityProfile: string } }).native.capabilityProfile) as {
-      schema: number;
-      memory: Record<string, unknown>;
-    };
-    expect(stored.schema).toBe(DISCOVERY_SCHEMA);
-    expect(stored.memory).toMatchObject({ a: 1, b: 2, c: 3 });
+    await vi.waitFor(() => expect(profileFileOf()?.Living_room).toBeDefined());
+    const stored = profileFileOf()?.Living_room;
+    expect(stored?.schema).toBe(DISCOVERY_SCHEMA);
+    expect(stored?.memory).toMatchObject({ a: 1, b: 2, c: 3 });
+    expect(extendObject.mock.calls.filter(call => call[0] === "Living_room")).toEqual([]);
   });
 
-  it("flushes a pending native write on unload, before the callback", async () => {
+  it("flushes a pending profile write on unload, before the callback", async () => {
     const ctx = setup();
     await ctx.i.onReady();
     await flush();
-    const extendObject = (ctx.i as unknown as { extendObject: ReturnType<typeof vi.fn> }).extendObject;
-    extendObject.mockClear();
     const memory = ctx.calls[0].deps.probeMemory as unknown as { set(key: string, value: unknown): void };
     memory.set("late", true);
-    expect(extendObject).not.toHaveBeenCalled();
+    expect(profileFileOf()).toBeUndefined();
+    // The callback comes only after the write — the host tears the process down on it.
+    let atCallback: Record<string, ProfileEntry> | undefined;
     const cb = vi.fn(() => {
-      // The callback comes only after the write — the host tears the process down on it.
-      expect(extendObject.mock.calls.filter(call => call[0] === "Living_room")).toHaveLength(1);
+      atCallback = profileFileOf();
     });
     ctx.i.onUnload(cb);
-    // The pending snapshot is written now (behind the device object's write queue); its timer is
+    // The pending snapshot is written now (behind the device's write queue); its timer is
     // cleared, not left to fire on a dead adapter.
     expect(ctx.i.clearTimeout).toHaveBeenCalled();
+    await vi.waitFor(() => expect(cb).toHaveBeenCalledTimes(1));
+    expect(atCallback?.Living_room?.memory).toMatchObject({ late: true });
+  });
+
+  it("takes over a profile an earlier version left at the device object — the key goes once the file holds it", async () => {
+    const ctx = setup();
+    const profile = { schema: DISCOVERY_SCHEMA, learnedAt: "2026-11-01T10:00:00.000Z", memory: { xmlModel: "RX-V6A" } };
+    ctx.i.objects.set("Living_room", {
+      type: "device",
+      common: { name: "Living room" },
+      native: { [PROFILE_KEY]: JSON.stringify(profile) },
+    });
+    await ctx.i.onReady();
+    await flushPatches(ctx);
+    await vi.waitFor(() => expect(profileFileOf()?.Living_room?.memory).toMatchObject({ xmlModel: "RX-V6A" }));
+    await vi.waitFor(() => expect(ctx.i.objects.get("Living_room")?.native).toHaveProperty(PROFILE_KEY, null));
+  });
+
+  it.each([
+    ["no JSON", "{ half"],
+    ["no profile map", "[1]"],
+  ])("keeps a profile file that holds %s — the run learns in memory only", async (_what, content) => {
+    const ctx = setup();
+    writeFileSync(join(dataDirs.dir, "profiles.json"), content, "utf8");
+    await ctx.i.onReady();
     await flush();
-    expect(extendObject.mock.calls.filter(call => call[0] === "Living_room")).toHaveLength(1);
-    expect(cb).toHaveBeenCalledTimes(1);
+    const memory = ctx.calls[0].deps.probeMemory as unknown as { set(key: string, value: unknown): void };
+    memory.set("a", 1);
+    await flushPatches(ctx);
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("profiles.json: not written"));
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("Living_room: profile not stored"));
+    expect(readFileSync(join(dataDirs.dir, "profiles.json"), "utf8")).toBe(content);
+  });
+
+  it("writes nothing over a profile file it could not read", async () => {
+    const ctx = setup();
+    // Not a missing file: something the adapter cannot read sits in its place.
+    mkdirSync(join(dataDirs.dir, "profiles.json"));
+    await ctx.i.onReady();
+    await flush();
+    const memory = ctx.calls[0].deps.probeMemory as unknown as { set(key: string, value: unknown): void };
+    memory.set("a", 1);
+    await flushPatches(ctx);
+    expect(ctx.i.log.debug).toHaveBeenCalledWith(expect.stringContaining("Living_room: profile not stored"));
+    expect(readdirSync(join(dataDirs.dir, "profiles.json"))).toEqual([]);
+  });
+
+  it("removeDevice takes the device's profile out of the profile file — the others stay", async () => {
+    mocks.discoveredStore.devices = [{ id: "RX-V685", ip: "192.168.1.20" }];
+    const other = { schema: DISCOVERY_SCHEMA, memory: { xmlModel: "RX-V6A" } };
+    writeFileSync(
+      join(dataDirs.dir, "profiles.json"),
+      JSON.stringify({ "RX-V685": { schema: DISCOVERY_SCHEMA, memory: { xmlModel: "RX-V685" } }, Other: other }),
+    );
+    const ctx = setup({ devices: [] });
+    await ctx.i.onReady();
+    await flush();
+    await ctx.i.removeDevice("RX-V685");
+    await vi.waitFor(() => expect(profileFileOf()).toEqual({ Other: other }));
   });
 });
 
@@ -5283,6 +5388,14 @@ describe("device ids since 3.0.0 — the one-time move", () => {
     });
     return ctx;
   }
+
+  it("carries the device's profile to the new id", async () => {
+    const ctx = upgradedOffice();
+    const profile = { schema: DISCOVERY_SCHEMA, memory: { xmlModel: "WX-030" } };
+    writeFileSync(join(dataDirs.dir, "profiles.json"), JSON.stringify({ B_ro: profile }));
+    await ctx.i.onReady();
+    await vi.waitFor(() => expect(profileFileOf()?.[office]).toEqual(profile));
+  });
 
   it("moves an upgraded device to its model and serial id at the start, with everything that points at it", async () => {
     const ctx = upgradedOffice();

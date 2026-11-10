@@ -1,4 +1,5 @@
 import type { DeviceIdentity } from "../device-identity";
+import { PROFILE_KEY } from "../lifecycle/capability-profile";
 import type { HandleCapture, TransportCapture } from "./types";
 import type { LogRing } from "./log-ring";
 import type { TrafficSnapshot } from "./traffic-recorder";
@@ -75,6 +76,8 @@ export interface DiagnosticsHost {
     search: "state" | "instance",
     params: { startkey: string; endkey: string },
   ): Promise<{ rows: Array<{ id: string; value: ioBroker.Object | null }> } | null | undefined>;
+  /** A device's entry of the profile file; undefined when it has none. */
+  getProfile(deviceId: string): Promise<string | undefined>;
   /** The adapter log. */
   log: { info(message: string): void; warn(message: string): void; debug(message: string): void };
 }
@@ -143,11 +146,13 @@ export class YamahaReportSource implements ReportSource<HandleCapture | undefine
     const trail = this.trails.has(id) ? this.trails.get(id) : device.trail?.();
     this.trails.delete(id);
     const prefix = `${this.host.namespace}.${id}`;
-    const [environment, deviceObject, { objectTree, transports, offlineSince }] = await Promise.all([
+    const [environment, deviceObject, profileFile, { objectTree, transports, offlineSince }] = await Promise.all([
       this.environment(devices),
       this.host.getForeignObjectAsync(prefix).catch(() => null),
+      this.host.getProfile(id).catch(() => undefined),
       this.deviceTree(prefix),
     ]);
+    const native = (deviceObject?.native as Record<string, unknown> | undefined) ?? undefined;
     const others = devices.filter(d => d.id !== id).flatMap(d => [d.id, d.ip]);
     return buildReportBody({
       environment,
@@ -163,7 +168,8 @@ export class YamahaReportSource implements ReportSource<HandleCapture | undefine
         volumeAsPercent: device.volumeAsPercent,
         pushEvents: device.pushEvents,
       },
-      profile: (deviceObject?.native as Record<string, unknown> | undefined) ?? undefined,
+      // The profile file beside what the device object remembers, under the key the report has always shown it by.
+      profile: profileFile === undefined ? native : { ...native, [PROFILE_KEY]: profileFile },
       connection: live,
       liveError,
       trail,
