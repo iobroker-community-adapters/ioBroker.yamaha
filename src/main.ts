@@ -125,9 +125,12 @@ function profileText(profiles: Record<string, unknown> | undefined, deviceId: st
  * table row (`carryLegacyDevice`), `group_zones` folds into `group_multiroom`
  * (`foldGroupZones`), and the 2.8.0 `volumeAsPercent` switch is first written down at every existing
  * device object as its own answer (`handOverVolumePercent`) — while a known device has no object yet,
- * the key stays and is dropped on a later start.
+ * the key stays and is dropped on a later start. The chosen interface moves from `networkInterface` onto `bind`, the
+ * one interface the admin's port-conflict check reads (fleet standard "one interface", check listen-port-declaration R9);
+ * an empty one becomes "0.0.0.0", since the admin skips an instance whose `bind` is empty.
  */
 const NATIVE_KEY_MIGRATIONS: NativeKeyMigration[] = [
+  { from: "networkInterface", to: "bind", coerce: v => (typeof v === "string" && v.trim()) || "0.0.0.0" },
   { drop: "elapsedInterval" }, // 0.1.x — the play-time poll
   { drop: "webserverEnabled" }, // 0.1.x — the built-in web server
   { drop: "webserverPort" }, // 0.1.x — its port
@@ -547,7 +550,7 @@ class Yamaha extends utils.Adapter {
     const rows = Array.isArray(config.devices) ? config.devices : [];
     return {
       discovery: config.discovery,
-      networkInterfaceSet: chosenAddress(config.networkInterface) !== undefined,
+      bindSet: chosenAddress(config.bind) !== undefined,
       xmlPollInterval: config.xmlPollInterval,
       deviceTableRows: rows.length,
       groups: Object.fromEntries(Object.entries(config).filter(([key]) => key.startsWith("group_"))),
@@ -594,8 +597,10 @@ class Yamaha extends utils.Adapter {
       this.on("message", obj => void this.onMessage(obj));
       this.log.info('starting — a "ready" message will follow for each device');
       // The address picked in the settings is the only one this start listens, sends and connects on (round 87); one this
-      // host does not carry falls back to every address, said once.
-      const { missing } = decideSourceAddress(this.config.networkInterface);
+      // host does not carry falls back to every address, said once. On the first start after the move from
+      // `networkInterface` the choice still sits under the old key — that start ends at the settings write below, before
+      // anything opens a socket.
+      const { missing } = decideSourceAddress(this.config.bind);
       if (missing !== undefined) {
         this.log.warn(`network address ${missing} is not on this host — using every address`);
       }

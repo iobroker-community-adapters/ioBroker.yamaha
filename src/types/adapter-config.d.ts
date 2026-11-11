@@ -5,11 +5,13 @@ import type { DeviceRow } from "../lib/pure-helpers";
 declare global {
   namespace ioBroker {
     interface AdapterConfig {
-      /** IP of the network interface to bind discovery to; empty (or 0.0.0.0) = all interfaces. */
-      networkInterface: string;
       /** The MusicCast event port, declared for the admin's port-conflict check (fleet listen-port standard); the receiver always listens on 41100. */
       port: number;
-      /** The address declared for that port (0.0.0.0 = all); the receiver binds all addresses. */
+      /**
+       * The one network interface of this instance (fleet standard "one interface"): the address it listens, searches,
+       * sends and connects on, and the address the admin's port-conflict check reads beside `port`; empty or 0.0.0.0 =
+       * every address.
+       */
       bind: string;
       /** Configured Yamaha devices — the one row type (`DeviceRow`), the object id stored since 3.0.0. */
       devices: DeviceRow[];

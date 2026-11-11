@@ -1890,7 +1890,7 @@ describe("Yamaha auto-discovery", () => {
 
     it("starts the listener on the search's interfaces when the search is on, and closes it on unload", async () => {
       net.interfaces.value = { en0: [{ address: "10.0.0.5", family: "IPv4", internal: false, cidr: "10.0.0.5/24" }] };
-      const ctx = setup({ devices: [], networkInterface: "10.0.0.5" });
+      const ctx = setup({ devices: [], bind: "10.0.0.5" });
       await ctx.i.onReady();
       await flush();
       expect(mocks.listeners).toHaveLength(1);
@@ -1903,7 +1903,7 @@ describe("Yamaha auto-discovery", () => {
     // Round 87: an address the host does not carry falls back to every address, said in exactly one warning.
     it("an address the host does not carry: the listener takes every address, and one warning says so", async () => {
       net.interfaces.value = { en0: [{ address: "10.0.0.7", family: "IPv4", internal: false, cidr: "10.0.0.7/24" }] };
-      const ctx = setup({ devices: [], networkInterface: "10.0.0.5" });
+      const ctx = setup({ devices: [], bind: "10.0.0.5" });
       await ctx.i.onReady();
       await flush();
       expect(mocks.listeners[0].deps.interfaces).toEqual(["10.0.0.7"]);
@@ -2424,6 +2424,30 @@ describe("Yamaha migrations", () => {
         ctx.i as unknown as { extendForeignObjectAsync: ReturnType<typeof vi.fn> }
       ).extendForeignObjectAsync.mock.calls.filter(call => call[0] === "system.adapter.yamaha.0"),
     ).toEqual([]);
+  });
+
+  // Fleet standard "one interface" (check listen-port-declaration R9): the chosen interface lives in `bind`, the one key
+  // the admin's port-conflict check reads.
+  it("moves the chosen interface onto bind, in one write that ends the start", async () => {
+    const ctx = setup({ devices: [], networkInterface: "10.0.0.5", bind: "0.0.0.0" });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", {
+      native: { devices: [], networkInterface: "10.0.0.5", bind: "0.0.0.0" },
+    });
+    await ctx.i.onReady();
+    await flush();
+    expect(ctx.calls).toEqual([]);
+    const native = ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>;
+    expect(native.bind).toBe("10.0.0.5");
+    expect(native.networkInterface).toBeNull();
+  });
+
+  it("an empty interface becomes 0.0.0.0, never an empty bind the admin skips", async () => {
+    const ctx = setup({ devices: [], networkInterface: "", bind: "" });
+    ctx.i.foreignObjects.set("system.adapter.yamaha.0", { native: { devices: [], networkInterface: "", bind: "" } });
+    await ctx.i.onReady();
+    const native = ctx.i.foreignObjects.get("system.adapter.yamaha.0")?.native as Record<string, unknown>;
+    expect(native.bind).toBe("0.0.0.0");
+    expect(native.networkInterface).toBeNull();
   });
 });
 
@@ -4009,7 +4033,7 @@ describe("Yamaha SSDP search", () => {
       en0: [{ address: "192.168.1.5", family: "IPv4", internal: false }],
       en1: [{ address: "10.0.0.5", family: "IPv4", internal: false }],
     };
-    const { ctx, search } = await withRealSearch({ networkInterface: "10.0.0.5" });
+    const { ctx, search } = await withRealSearch({ bind: "10.0.0.5" });
     void search("x", 5000);
     expect(net.sockets.map(s => s.bindAddr)).toEqual(["10.0.0.5"]);
     void ctx;

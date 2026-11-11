@@ -2,7 +2,7 @@ import { carriesAddress, chosenAddress, localNets } from "./network-address";
 
 /**
  * The address this instance listens, sends and connects on — the one the user picked in the instance settings
- * (`networkInterface`, jsonConfig `type: "ip"`), or undefined for every address (krobi 2026-10-03, round 87 as the fleet
+ * (`bind`, jsonConfig `type: "ip"`), or undefined for every address (krobi 2026-10-03, round 87 as the fleet
  * rule). What "every address" is and whether the host carries one stands in the fleet master (`network-address.ts`);
  * this module only keeps the decision of this start for the clients that open connections deep in the protocol layers.
  */

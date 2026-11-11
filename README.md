@@ -89,6 +89,7 @@ an issue, attach the diagnostics report from the **Expert** tab of the instance 
 - (krobipd) Changed: Datapoints of zones 2 to 4, Zone B, list slots and source presets name their zone, slot or source ("Zone 2 Mute"); the ids stay
 - (krobipd) Changed: Text, model, firmware, tuner frequency and play time datapoints carry the standard roles; several translations are fixed
 - (krobipd) Changed: The YNCA control port datapoint is removed
+- (krobipd) Changed: The admin's port check now sees the network interface chosen in the settings; the instance restarts once after the update
 - (krobipd) Changed: Requires admin 8.3.5 or newer
 - (copilot) Changed: Requires Node.js 22.19.0 or newer
 

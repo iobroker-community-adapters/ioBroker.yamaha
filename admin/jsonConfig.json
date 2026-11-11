@@ -71,7 +71,7 @@
           "lg": 6,
           "xl": 6
         },
-        "networkInterface": {
+        "bind": {
           "newLine": true,
           "type": "ip",
           "label": "networkInterfaceLabel",
